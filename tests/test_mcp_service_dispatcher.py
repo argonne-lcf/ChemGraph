@@ -6,11 +6,16 @@ import os
 import signal
 import sqlite3
 import sys
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 import uuid
 
+import httpx
 from langchain_core.messages import ToolMessage
 import pytest
 
+from chemgraph.mcp.service import dispatcher as dispatcher_module
+from chemgraph.mcp.service.app import create_app
 from chemgraph.mcp.service.dispatcher import Dispatcher
 from chemgraph.mcp.service.files import QuotaExceeded
 from chemgraph.mcp.service.operations import Service
@@ -232,6 +237,227 @@ async def test_running_process_is_reaped_and_never_requeued(tmp_path, monkeypatc
         assert launched == [record["id"]]
     finally:
         await dispatcher.stop()
+
+
+@posix_only
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stop", ["cancel", "timeout", "shutdown", "normal", "crash"])
+async def test_worker_children_stop_before_publication_and_next_job(tmp_path, monkeypatch, stop):
+    service = Service(config(tmp_path, max_workers=1, shutdown_seconds=1,
+                             max_job_seconds=1 if stop == "timeout" else 60))
+    dispatcher = service.dispatcher = Dispatcher(service)
+    record, context = await job(service, "alice")
+    heartbeat = context.workspace / "heartbeat"
+    dispatchers = [dispatcher]
+    processes, observations = [], {}
+    child = """
+import signal, sys, time
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+with open(sys.argv[1], 'ab', buffering=0) as stream:
+    while True:
+        stream.write(b'x')
+        time.sleep(0.01)
+"""
+    worker = """
+import json, subprocess, sys, time
+from pathlib import Path
+root = Path(sys.argv[1])
+if sys.argv[2]:
+    child = subprocess.Popen([sys.executable, '-c', sys.argv[2], str(root / 'heartbeat')])
+    (root / 'child.pid').write_text(str(child.pid))
+    while not (root / 'release').exists():
+        time.sleep(0.01)
+(root / '.service-return.json').write_text(json.dumps({
+    'result': {'ok': True}, 'error': False, 'registered': []}))
+sys.exit(1 if sys.argv[3] == 'crash' else 0)
+"""
+
+    async def stopped_writing():
+        before = heartbeat.stat().st_size
+        await asyncio.sleep(0.15)
+        return heartbeat.stat().st_size == before
+
+    async def spawn(ctx, call, rec):
+        first = rec["id"] == record["id"]
+        if not first:
+            observations["next_job"] = await stopped_writing()
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, "-c", worker, str(ctx.workspace), child if first else "",
+            stop if first else "normal", start_new_session=True,
+            stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        processes.append(process)
+        return process
+
+    returned = service.returned
+    async def collect(ctx, call, rec, report):
+        if rec["id"] == record["id"]:
+            observations["publication"] = await stopped_writing()
+        return await returned(ctx, call, rec, report)
+
+    monkeypatch.setattr(dispatcher, "spawn", spawn)
+    monkeypatch.setattr(service, "returned", collect)
+    await dispatcher.start()
+    try:
+        async def child_started():
+            return heartbeat.exists() and heartbeat.stat().st_size > 0
+        await wait_for(child_started)
+        queued, _ = await job(service, "alice")
+        if stop == "cancel":
+            await dispatcher.cancel("alice", record["id"])
+        elif stop == "shutdown":
+            await dispatcher.stop()
+        elif stop in {"normal", "crash"}:
+            (context.workspace / "release").touch()
+
+        async def finished():
+            return record["id"] not in dispatcher.active
+        await wait_for(finished)
+        assert await stopped_writing(), "The worker exited but its child is still writing"
+        expected = "finalized" if stop == "normal" else "uncertain"
+        assert (await service.status("alice", record["id"]))["status"] == expected
+        if stop == "normal":
+            assert observations["publication"]
+            assert (await service.results("alice", record["id"]))["outcome"] == "success"
+        if stop == "shutdown":
+            assert (await service.status("alice", queued["id"]))["status"] == APPROVED
+            service = Service(service.config)
+            dispatcher = service.dispatcher = Dispatcher(service)
+            dispatchers.append(dispatcher)
+            monkeypatch.setattr(dispatcher, "spawn", spawn)
+            await dispatcher.start()
+        async def next_finished():
+            return (await service.status("alice", queued["id"]))["status"] == "finalized"
+        await wait_for(next_finished)
+        assert observations["next_job"]
+        assert len(processes) == 2  # The first operation was never retried.
+    finally:
+        for process in processes:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except OSError:
+                pass
+        child_pid = context.workspace / "child.pid"
+        if child_pid.exists():
+            try:
+                os.kill(int(child_pid.read_text()), signal.SIGKILL)
+            except OSError:
+                pass
+        for process in processes:
+            await process.wait()
+        await asyncio.gather(*(item.stop() for item in dispatchers), return_exceptions=True)
+        for item in dispatchers:
+            if item.lock_file:
+                item.lock_file.close()
+
+
+@posix_only
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["descendant", "transient_denial", "denial", "stuck", "leader"])
+async def test_termination_confirms_group_exit_and_bounds_failures(monkeypatch, case):
+    clock, signals = [0], []
+    process = SimpleNamespace(pid=123456, returncode=0, wait=AsyncMock(return_value=0))
+    if case == "leader":
+        async def never_reaped():
+            await asyncio.Future()
+        process.wait = AsyncMock(side_effect=never_reaped)
+
+    def killpg(pid, sig):
+        assert pid == process.pid
+        signals.append(sig)
+        if case == "denial" or (case == "transient_denial" and len(signals) < 3):
+            raise PermissionError("signal denied")
+        if (case in {"leader", "transient_denial"}
+                or (case == "descendant" and signals.count(signal.SIGKILL) == 3)):
+            raise ProcessLookupError
+
+    async def tick(seconds):
+        clock[0] += 1
+    monkeypatch.setattr(dispatcher_module, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(dispatcher_module, "asyncio", SimpleNamespace(sleep=tick, wait_for=asyncio.wait_for))
+    monkeypatch.setattr(dispatcher_module.os, "killpg", killpg, raising=False)
+    error = {"denial": PermissionError, "stuck": RuntimeError, "leader": TimeoutError}.get(case)
+    if error:
+        with pytest.raises(error):
+            await Dispatcher.terminate(process)
+    else:
+        await Dispatcher.terminate(process)
+        process.wait.assert_awaited_once()
+    if case == "descendant":
+        assert signals.count(signal.SIGKILL) == 3
+    elif case == "transient_denial":
+        assert len(signals) == 3
+
+
+@posix_only
+@pytest.mark.asyncio
+async def test_cleanup_denial_stays_unready_and_shutdown_cleans_other_jobs(tmp_path, monkeypatch, caplog):
+    app = create_app(config(tmp_path, max_workers=3, shutdown_seconds=1))
+    service, dispatcher = app.state.service, app.state.service.dispatcher
+    first, _ = await job(service, "alice")
+    other, _ = await job(service, "bob")
+    launched = fake_workers(dispatcher, monkeypatch, blocked=True)
+    killpg = os.killpg
+    processes = []
+    await dispatcher.start()
+    try:
+        async def started():
+            return all(identifier in dispatcher.active and dispatcher.active[identifier].process
+                       for identifier in (first["id"], other["id"]))
+        await wait_for(started)
+        processes = [dispatcher.active[item["id"]].process for item in (first, other)]
+        def denied(pid, sig):
+            if pid == processes[0].pid:
+                raise PermissionError("private operator diagnostic")
+            return killpg(pid, sig)
+        monkeypatch.setattr(os, "killpg", denied)
+        result = await dispatcher.cancel("alice", first["id"])
+        assert result["status"] == "uncertain" and result["cancel_requested"]
+        assert result["error"] == "Worker cleanup failed; ask the operator to restart the service."
+        saved = await service.journal("alice").get(first["id"])
+        assert saved["error"] == (
+            "Worker cleanup failed; surviving processes possible. Cancelled during invocation."
+        )
+        running = dispatcher.active[first["id"]]
+        assert running.cleanup_failed and running.task.done() and running.task.exception() is None
+        assert "job_cleanup_failed owner=alice job=" + first["id"] in caplog.text
+        assert "job_collection_failed owner=alice" not in caplog.text
+
+        # Simulate an operator approval after failure, with spare global capacity.
+        queued, _ = await job(service, "carol")
+        passed, dispatch = asyncio.Event(), dispatcher.dispatch
+        async def next_pass():
+            await dispatch()
+            passed.set()
+        monkeypatch.setattr(dispatcher, "dispatch", next_pass)
+        dispatcher.wake.set()
+        await asyncio.wait_for(passed.wait(), timeout=2)
+        assert not service.ready and queued["id"] not in launched
+        assert queued["id"] not in dispatcher.active
+        assert (await service.status("carol", queued["id"]))["status"] == APPROVED
+        with pytest.raises(ValueError, match="not ready"):
+            await service.call("carol", "run_ase", {})
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost") as client:
+            assert (await client.get("/readyz")).status_code == 503
+        with pytest.raises(RuntimeError, match="supervisor cleanup"):
+            await dispatcher.stop()
+        assert processes[1].returncode is not None
+        assert (await service.status("bob", other["id"]))["status"] == "uncertain"
+        assert dispatcher.lock_file is not None and not dispatcher.lock_file.closed
+        with pytest.raises(BlockingIOError):
+            await Dispatcher(Service(service.config)).start()
+    finally:
+        monkeypatch.setattr(os, "killpg", killpg)
+        for process in processes:
+            try:
+                killpg(process.pid, signal.SIGKILL)
+            except OSError:
+                pass
+            await process.wait()
+        await asyncio.gather(dispatcher.stop(), return_exceptions=True)
+        if dispatcher.lock_file:
+            dispatcher.lock_file.close()
 
 
 @pytest.mark.asyncio

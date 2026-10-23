@@ -26,6 +26,8 @@ class Running:
     task: asyncio.Task | None = None
     process: asyncio.subprocess.Process | None = None
     stop_reason: str | None = None
+    cleanup_task: asyncio.Task | None = None
+    cleanup_failed: bool = False
 
 
 class Dispatcher:
@@ -78,7 +80,7 @@ class Dispatcher:
                     self.service.ready = False
                     logger.exception("service_dispatch_iteration_failed")
                 else:
-                    self.service.ready = not self.service.stopping
+                    self.service.ready = not self.service.stopping and not self.cleanup_failed
                 try:
                     await asyncio.wait_for(self.wake.wait(), timeout=1)
                 except TimeoutError:
@@ -86,8 +88,14 @@ class Dispatcher:
         finally:
             self.service.ready = False
 
+    @property
+    def cleanup_failed(self):
+        return any(item.cleanup_failed for item in self.active.values())
+
     async def dispatch(self):
         pending = await self.service.store.records(state=APPROVED)
+        if self.cleanup_failed:
+            return
         grouped = defaultdict(list)
         for record in pending:
             if record["id"] not in self.active:
@@ -136,12 +144,24 @@ class Dispatcher:
                     await self.service.returned(context, call, record, report)
             logger.info("job_finished owner=%s job=%s", owner, identifier)
         except Exception:
-            # A failure after RETURNED must preserve the saved result for recovery.
-            await self.service.collection_failed(context, identifier)
+            if running.cleanup_failed:
+                reason = "Worker cleanup failed; surviving processes possible."
+                if running.stop_reason:
+                    reason += " " + running.stop_reason
+                try:
+                    await context.journal.uncertain(identifier, reason=reason)
+                except Exception:
+                    logger.exception("job_reconciliation_deferred owner=%s job=%s", owner, identifier)
+            else:
+                # A failure after RETURNED must preserve the saved result for recovery.
+                await self.service.collection_failed(context, identifier)
         finally:
-            if running.process is not None and running.process.returncode is None:
-                await self.terminate(running.process)
-            self.active.pop(identifier, None)
+            try:
+                await self.cleanup(running)
+            except Exception:
+                pass  # Cleanup logged the failure; retain this slot and refuse new work.
+            else:
+                self.active.pop(identifier, None)
             self.wake.set()
 
     async def spawn(self, context, call, record):
@@ -181,13 +201,16 @@ class Dispatcher:
                 except ValueError:
                     running.stop_reason = "Workspace storage quota exceeded."
                 if running.stop_reason:
-                    await self.terminate(process)
                     break
-            await waiter
         finally:
-            if not waiter.done():
-                await self.terminate(process)
-                await waiter
+            # A dead leader can leave children writing outputs. Stop the group
+            # before collecting its report or making the dispatch slot available.
+            try:
+                await self.cleanup(running)
+            finally:
+                if not waiter.done():
+                    waiter.cancel()
+                await asyncio.gather(waiter, return_exceptions=True)
         if running.stop_reason or process.returncode != 0:
             return None
         path = context.workspace / ".service-return.json"
@@ -203,31 +226,66 @@ class Dispatcher:
         except (OSError, ValueError):
             return None
 
+    async def cleanup(self, running):
+        if running.process is None:
+            return
+        if running.cleanup_task is None:
+            running.cleanup_task = asyncio.create_task(self.terminate(running.process))
+        # Cancellation and the watcher can reach cleanup concurrently.
+        try:
+            await asyncio.shield(running.cleanup_task)
+        except Exception:
+            if not running.cleanup_failed:
+                identifier = next((key for key, item in self.active.items() if item is running), "unknown")
+                logger.exception("job_cleanup_failed owner=%s job=%s", running.owner, identifier)
+            running.cleanup_failed = True
+            self.service.ready = False
+            self.wake.set()
+            raise
+
     @staticmethod
     def signal_group(process, sig):
         try:
             os.killpg(process.pid, sig)
         except ProcessLookupError:
-            pass
+            return False
         except PermissionError:
             # macOS refuses a group whose leader exited unreaped; signalling the
             # leader itself succeeds then and still fails for a live, denied child.
-            process.send_signal(sig)
+            if process.returncode is not None:
+                raise
+            try:
+                process.send_signal(sig)
+            except ProcessLookupError:
+                pass  # The child watcher may have reaped the leader meanwhile.
+        return True
 
     @classmethod
     async def terminate(cls, process):
-        if process.returncode is not None:
-            return
-        cls.signal_group(process, signal.SIGTERM)
-        try:
-            await asyncio.wait_for(process.wait(), timeout=2)
-        except TimeoutError:
-            cls.signal_group(process, signal.SIGKILL)
-            await process.wait()
+        # Recheck after signalling: leader exit alone cannot confirm child exit.
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            deadline, sent = time.monotonic() + 2, False
+            while True:
+                try:
+                    exists = cls.signal_group(process, 0 if sent and sig == signal.SIGTERM else sig)
+                except PermissionError:
+                    # Allow the event loop to reap a just-exited macOS leader.
+                    if time.monotonic() >= deadline:
+                        raise
+                else:
+                    sent = True
+                    if not exists:
+                        await asyncio.wait_for(process.wait(), timeout=2)
+                        return
+                    if time.monotonic() >= deadline:
+                        break
+                await asyncio.sleep(0.05)
+        raise RuntimeError("Worker process group did not exit after SIGKILL.")
 
     async def cancel(self, owner, identifier):
         journal = self.service.journal(owner)
         task = None
+        cleanup_failed = False
         async with self.service.locks[owner]:
             record = await journal.get(identifier)
             if record is None:
@@ -239,32 +297,40 @@ class Dispatcher:
                 running = self.active.get(identifier)
                 if running and running.process and running.process.returncode is None:
                     running.stop_reason = "Cancelled during invocation."
-                    await self.terminate(running.process)
                     task = running.task
+                    try:
+                        await self.cleanup(running)
+                    except Exception:
+                        cleanup_failed = True
                 else:
                     return {**self.service.summary(record), "cancel_requested": False}
         if task:
             await asyncio.shield(task)
-        return await self.service.status(owner, identifier)
+        result = await self.service.status(owner, identifier)
+        if cleanup_failed:
+            result.update(cancel_requested=True, error="Worker cleanup failed; ask the operator to restart the service.")
+        return result
 
     async def stop(self):
         self.service.ready = False
         self.service.stopping = True
         self.wake.set()
-        try:
-            if self.loop_task:
-                # A failed dispatcher still owns children that must be stopped.
-                await asyncio.gather(self.loop_task, return_exceptions=True)
-            tasks = [item.task for item in self.active.values()] + list(self.service.inline_tasks)
-            if tasks:
-                _, pending = await asyncio.wait(tasks, timeout=self.config.shutdown_seconds)
-                if pending:
-                    for running in list(self.active.values()):
-                        if running.process and running.process.returncode is None:
-                            running.stop_reason = "Service stopped during invocation."
-                            await self.terminate(running.process)
-                    await asyncio.gather(*tasks, return_exceptions=True)
-        finally:
-            if self.lock_file:
-                self.lock_file.close()
-                self.lock_file = None
+        if self.loop_task:
+            # A failed dispatcher still owns children that must be stopped.
+            await asyncio.gather(self.loop_task, return_exceptions=True)
+        tasks = [item.task for item in self.active.values()] + list(self.service.inline_tasks)
+        if tasks:
+            await asyncio.wait(tasks, timeout=self.config.shutdown_seconds)
+        running = list(self.active.values())
+        for item in running:
+            if item.process and item.process.returncode is None:
+                item.stop_reason = "Service stopped during invocation."
+        # One denied signal must not prevent cleanup attempts for other workers.
+        results = await asyncio.gather(*(self.cleanup(item) for item in running), return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
+        if any(isinstance(result, BaseException) for result in results):
+            # Keep the instance lock until process exit; supervisor cleanup is required.
+            raise RuntimeError("Worker cleanup failed; service restart requires supervisor cleanup.")
+        if self.lock_file:
+            self.lock_file.close()
+            self.lock_file = None

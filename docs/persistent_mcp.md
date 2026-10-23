@@ -196,6 +196,15 @@ allow the configured shutdown grace, then terminate remaining calculation groups
 The systemd stop timeout also bounds shutdown of a stuck native thread. Do not
 manually kill only the parent and launch a replacement while children remain.
 
+Deploy under an init that reaps orphaned children, such as the supplied systemd
+unit or a container init. Cleanup checks include the entire worker process group;
+unreaped zombies can prevent confirmation too. If cleanup fails, readiness stays
+false, dispatch pauses and the instance lock remains held. Inspect the logged job
+and restart through the supervisor so it removes remaining workers before recovery.
+Descendants that start a new session or process group escape application cleanup;
+calculators using detached launchers need supervisor containment, such as the
+supplied unit's `KillMode=control-group`.
+
 For a consistent backup, stop the service and copy the **entire data directory**,
 including SQLite files and any WAL sidecars, workspaces, job directories and
 artifact files. Restore the complete directory with private permissions, restore
