@@ -22,6 +22,7 @@ DEEPAGENT_ENV_ALLOWLIST: tuple[str, ...] = (
     "VIRTUAL_ENV",
     "CONDA_PREFIX",
     "TMPDIR",
+    "SYSTEMROOT",  # Windows uses this to locate the socket provider DLL.
     "CHEMGRAPH_LOG_DIR",
 )
 
