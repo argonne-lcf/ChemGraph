@@ -35,6 +35,10 @@ paths can differ from compute-node paths: on ALCF Eagle, collection
 
 ## Rules
 
+Use the Bash wrapper and fresh variable setup in every reference recipe. With
+DeepAgent, allow `timeout=660` for Globus wait. After exit 124, inspect the saved
+record/task and resume it; never generate a replacement submission ID.
+
 - Resume from saved evidence. With `STATE/<label>.id`, wait on that task. With only
   the record, submit again from the same record: Globus returns the original task
   (`"code": "Duplicate"`) instead of starting a second one. If that resubmission
@@ -44,7 +48,8 @@ paths can differ from compute-node paths: on ALCF Eagle, collection
   active-task listing in the recipes succeeds with an empty result. A failed listing
   leaves the outcome uncertain.
 - Stage only before job submission. Once the run directory has `submission.started`
-  or `job.id`, never transfer into its remote counterpart again.
+  or `job.id` or `submission.history`, never transfer into its remote counterpart
+  again, including after resolving a rejected submission.
 - Collect into a subdirectory such as `RUN_DIR/outputs/`, never into the run
   directory itself, so a transfer cannot overwrite job markers or inputs.
 - Report a failed or paused task with `globus task event-list`.

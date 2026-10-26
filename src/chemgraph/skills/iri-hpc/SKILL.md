@@ -20,15 +20,24 @@ selects resources.
 
 The user only describes the calculation; set up the rest. Run every command from
 the workspace that holds the run directories and `target.toml` (in Claude Code or
-Codex, start each command with `cd` to it). The recipes need bash: where the
-agent's shell is `sh` or `dash` (common on Linux), run each command as
-`bash -c '…'`. Skill files may be mounted at a virtual
+Codex, start each command with `cd` to it). Use the literal Bash wrapper in the
+recipes, including under DeepAgent's `/bin/sh`: Bash reads the script from fd 3
+and child commands receive closed stdin. This requires Bash and `/dev/fd` support;
+if either is unavailable, stop and report it. Skill files may be mounted at a virtual
 path such as `/chemgraph-skills/`, while shell commands run on the host, so resolve
 the installed skills directory and run bundled files from it; never retype them:
 
 ```bash
+exec bash /dev/fd/3 3<<'BASH' </dev/null
 SKILLS=$(python -c "import chemgraph.skills, pathlib; print(pathlib.Path(chemgraph.skills.__file__).parent)")
+# Put setup commands that use SKILLS here, in this same block.
+BASH
 ```
+
+Each execution starts fresh: include its own variables and setup inside the wrapper.
+For DeepAgent `execute`, use `timeout=180` for submission, `timeout=420` for IRI
+filesystem polling, and `timeout=660` for Globus wait. Exit 124 can leave a mutation
+in flight: inspect saved state and follow the resume rules below; never replay it blindly.
 
 At the start of each session:
 
@@ -78,8 +87,9 @@ function, as shown in [the v2 recipes](references/api-v2.md).
 4. **Submit once** with `python "$SKILLS/iri-hpc/scripts/iri_submit.py" "$RUN"`,
    as its own command after the stage-in task succeeded and you reviewed the staged
    listing; never chain it after staging.
-   It records `submission.started`, then `job.id` and `job.json`. Report the full
-   job ID.
+   The helper sends no `Idempotency-Key` (ALCF may have no idempotency store). It
+   records a local attempt marker and history, then `job.id` and `job.json`. Report
+   the full job ID. Without server deduplication, uncertain submissions cannot be retried.
 5. **Monitor** with the job status recipe until a terminal state.
 6. **Cancel** only a job the user asks to cancel, using its full ID.
 7. **Collect** `job.out`, `job.err`, and the result JSON with the IRI `view` or
@@ -91,21 +101,37 @@ function, as shown in [the v2 recipes](references/api-v2.md).
 
 ## Resume and uncertainty
 
-A later session starts from the saved evidence in the run directory:
+A later session starts from the saved evidence in the run directory. After an
+`iri_submit.py` timeout, inspect that evidence and rerun the normal helper: it
+checks the OS lock and saved outcome before doing anything. A busy exit 3 means
+wait before invoking it again. `.submission.lock` is permanent; its existence does
+not indicate an active process. Never delete it. Genuine uncertainty still blocks
+submission, and definite rejections still require correction and a separate submit.
 
-- `job.id` exists: monitor and collect that job. Never submit again.
-- `submission.started` exists without `job.id`: the outcome is uncertain. Stop and
-  report it. Inspect `submission.uncertain.json` and list all of the user's jobs
-  with the paged recipe; IRI returns no job names, so show the user each job's
-  account, queue, and state. If the user confirms none is this run and approves, run `iri_submit.py --retry-uncertain
-  "$RUN"` with the same script; it resends the identical request with its original idempotency key.
-- `submission.rejected.json` without a marker: the initial request was rejected.
-  Fix the cause (for a 401, ask the user to log in again) and submit again.
-- No submission marker, but a `.globus/$RUN-stage-in.json` record:
+- Valid `job.id`: monitor and collect that job. Never submit again.
+- `submission.started` without `job.id`: stop and inspect the saved evidence.
+  Running the helper may finish an interrupted accepted/rejected outcome from its
+  matching history without sending a request. Otherwise it stays blocked. The paged
+  listing is diagnostic only: an empty result cannot prove no job was submitted.
+  `--retry-uncertain` is deprecated and always refuses to resend.
+- Resolved legacy rejection in `submission.history`, with no active marker or
+  accepted job: ready for a **separate** normal submission. Never restage.
+- `submission.rejected.json` without a marker: the request was definitively
+  rejected. Fix the cause (for a 401, ask the user to log in) and submit separately.
+- No submission evidence, but a `.globus/$RUN-stage-in.json` record:
   resume that transfer with the `globus-transfer` skill; never start another.
 
-Never delete `submission.started`, edit a submitted `request.json`, or resubmit in
-another directory to work around uncertainty. Accepted jobs survive agent exit.
+Any `submission.started`, `job.id`, or `submission.history` prohibits stage-in.
+Never delete evidence, edit an uncertain request, or submit in another directory to
+work around uncertainty. Accepted jobs survive agent exit. Independently confirmed
+job IDs can be monitored read-only using the reference recipe; this does not reset
+local state.
+
+The only local recovery is for the old helper's exact missing-idempotency-store
+501, with evidence that **every** prior attempt was rejected before submission.
+Follow [the recovery recipe](references/api-v2.md#resolve-a-legacy-idempotency-rejection).
+Present the reviewed evidence and obtain the user's confirmation before running it.
+A latest 501 alone is insufficient because old retries overwrote earlier errors.
 
 For other operations, consult the [ALCF IRI guide](https://docs.alcf.anl.gov/services/iri-api/)
 and the [API reference](https://api.alcf.anl.gov/).

@@ -62,7 +62,10 @@ def server():
             if status == 302:
                 self.send_header("Location", "/elsewhere")
             self.end_headers()
-            self.wfile.write(json.dumps(reply).encode())
+            try:
+                self.wfile.write(json.dumps(reply).encode())
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
         def do_GET(self):
             posts.append({"path": self.path, "headers": dict(self.headers), "body": b""})
@@ -76,6 +79,7 @@ def server():
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{httpd.server_port}/api/v2", replies, posts
     httpd.shutdown()
+    httpd.server_close()
 
 
 @pytest.fixture
@@ -84,85 +88,398 @@ def run(tmp_path):
     return tmp_path
 
 
-def test_success_records_job_and_never_resubmits(guard, server, run):
+def test_success_records_job_and_never_resubmits(guard, server, run, capsys):
     url, replies, posts = server
-    replies.append((200, {"id": "123.polaris-pbs-01.hsn.cm.polaris.alcf.anl.gov"}))
+    job = "123.polaris-pbs-01.hsn.cm.polaris.alcf.anl.gov"
+    replies.append((200, {"id": job}))
     assert guard.submit(run, base_url=url) == 0
-    assert (run / "job.id").read_text().strip() == "123.polaris-pbs-01.hsn.cm.polaris.alcf.anl.gov"
-    assert json.loads((run / "job.json").read_text())["id"].startswith("123.")
+    assert capsys.readouterr().out == job + "\n"
+    assert (run / "job.id").read_text().strip() == job
+    assert json.loads((run / "job.json").read_text())["id"] == job
     assert posts[0]["path"] == "/api/v2/compute/job/polaris-id"
     assert json.loads(posts[0]["body"]) == REQUEST["job_spec"]
-    key = json.loads((run / "submission.started").read_text())["idempotency_key"]
-    assert posts[0]["headers"]["Idempotency-Key"] == key
+    assert not any(k.lower() == "idempotency-key" for k in posts[0]["headers"])
+    marker = json.loads((run / "submission.started").read_text())
+    assert marker["idempotency_header_sent"] is False and "idempotency_key" not in marker
     assert guard.submit(run, base_url=url) == 0 and len(posts) == 1
 
 
-@pytest.mark.parametrize(
-    "reply", [(500, {"title": "error"}), (200, "slow"), (200, {}), (302, {})]
-)
-def test_uncertain_outcome_keeps_marker_and_blocks_resubmission(guard, server, run, reply):
+@pytest.mark.parametrize("reply", [
+    (500, {"title": "error"}), (409, {}), (501, {}), (200, "slow"),
+    (200, {}), (200, {"id": " "}), (302, {}),
+])
+def test_uncertainty_and_deprecated_retry_never_resend(guard, server, run, reply):
     url, replies, posts = server
     replies.append(reply)
-    assert guard.submit(run, base_url=url) == guard.UNCERTAIN
-    assert (run / "submission.started").exists() and not (run / "job.id").exists()
+    assert guard.submit(run, base_url=url) == 3
+    marker = (run / "submission.started").read_bytes()
+    assert not (run / "job.id").exists()
     assert (run / "submission.uncertain.json").exists()
-    assert guard.submit(run, base_url=url) == guard.UNCERTAIN and len(posts) == 1
+    assert guard.submit(run, base_url=url) == 3
+    assert guard.submit(run, retry_uncertain=True, base_url=url) == 3
+    (run / "request.json").write_text(json.dumps({**REQUEST, "resource_id": "aurora-id"}))
+    assert guard.submit(run, retry_uncertain=True, base_url=url) == 3
+    assert (run / "submission.started").read_bytes() == marker and len(posts) == 1
 
 
-def test_retry_reuses_key_and_refuses_changed_request(guard, server, run):
+def test_initial_rejection_allows_fixed_resubmission(guard, server, run, capsys):
     url, replies, posts = server
-    replies += [(503, {}), (200, {"id": "7.polaris"})]
-    assert guard.submit(run, base_url=url) == guard.UNCERTAIN
-    assert guard.submit(run, retry_uncertain=True, base_url=url) == 0
-    first, second = posts
-    assert first["headers"]["Idempotency-Key"] == second["headers"]["Idempotency-Key"]
-    assert first["body"] == second["body"]
-
-    other = run / "other"
-    other.mkdir()
-    (other / "request.json").write_text(json.dumps(REQUEST))
-    replies.append((504, {}))
-    assert guard.submit(other, base_url=url) == guard.UNCERTAIN
-    (other / "request.json").write_text(json.dumps({**REQUEST, "resource_id": "aurora-id"}))
-    assert guard.submit(other, retry_uncertain=True, base_url=url) == 1
-    assert len(posts) == 3
-
-
-def test_rejected_retry_does_not_resolve_lost_acceptance(guard, server, run):
-    url, replies, posts = server
-    replies += [(200, "slow"), (401, {"title": "token expired"})]
-    assert guard.submit(run, base_url=url) == guard.UNCERTAIN
-    key = json.loads((run / "submission.started").read_text())["idempotency_key"]
-    assert guard.submit(run, retry_uncertain=True, base_url=url) == guard.UNCERTAIN
-    assert json.loads((run / "submission.started").read_text())["idempotency_key"] == key
-    assert not (run / "submission.rejected.json").exists()
-    assert guard.submit(run, base_url=url) == guard.UNCERTAIN and len(posts) == 2
-
-
-def test_initial_rejection_allows_fixed_resubmission(guard, server, run):
-    url, replies, posts = server
-    replies += [(422, {"title": "invalid queue"}), (200, {"id": "9.polaris"})]
+    replies += [(422, {"detail": "invalid queue"}), (200, {"id": "9.polaris"})]
     assert guard.submit(run, base_url=url) == 1
+    assert "422" in capsys.readouterr().err
     assert not (run / "submission.started").exists()
-    assert json.loads((run / "submission.rejected.json").read_text())["status"] == 422
+    archive = next((run / "submission.history").glob("*.json"))
+    original = archive.read_bytes()
+    assert json.loads(original)["response"]["detail"] == "invalid queue"
+    fixed = {**REQUEST, "job_spec": {**REQUEST["job_spec"], "attributes": {"queue_name": "debug"}}}
+    (run / "request.json").write_text(json.dumps(fixed))
     assert guard.submit(run, base_url=url) == 0
-    assert posts[0]["headers"]["Idempotency-Key"] != posts[1]["headers"]["Idempotency-Key"]
+    assert len(posts) == 2 and json.loads(posts[1]["body"]) == fixed["job_spec"]
+    assert archive.read_bytes() == original
 
 
 def test_concurrent_attempts_send_one_request(guard, server, run):
     url, replies, posts = server
-    replies += [(200, {"id": "5.polaris"})] * 4
+    replies.append((200, {"id": "5.polaris"}))
     codes = []
-    threads = [
-        threading.Thread(target=lambda: codes.append(guard.submit(run, base_url=url)))
-        for _ in range(4)
-    ]
+    threads = [threading.Thread(target=lambda: codes.append(guard.submit(run, base_url=url)))
+               for _ in range(4)]
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join()
-    assert len(posts) == 1 and 0 in codes
-    assert set(codes) <= {0, guard.UNCERTAIN}
+    assert len(posts) == 1 and 0 in codes and set(codes) <= {0, 3}
+
+
+@pytest.mark.parametrize("damage", ["token", "request", "resource", "dot-resource", "dotdot-resource", "url", "request-construction"])
+def test_preflight_does_not_claim_an_attempt(guard, run, monkeypatch, damage):
+    url = "http://unused.invalid"
+    if damage == "token":
+        monkeypatch.setattr(guard, "get_token", lambda: None)
+    elif damage == "request":
+        (run / "request.json").write_text("[]")
+    elif damage in {"resource", "dot-resource", "dotdot-resource"}:
+        resource = {"resource": "bad/path", "dot-resource": ".", "dotdot-resource": ".."}[damage]
+        (run / "request.json").write_text(json.dumps({**REQUEST, "resource_id": resource}))
+    elif damage == "url":
+        url = "http://host:bad"
+    else:
+        monkeypatch.setattr(guard.urllib.request, "Request", lambda *a, **k: fail())
+    monkeypatch.setattr(guard, "_post", lambda *a: pytest.fail("preflight must not POST"))
+    assert guard.submit(run, base_url=url) == 1
+    assert not (run / "submission.started").exists()
+
+
+def fail():
+    raise OSError("injected persistence failure")
+
+
+@pytest.mark.parametrize("name,content", [
+    ("job.id", ""), ("job.id", "two ids"), ("job.json", "{}"),
+    ("submission.started", ""), ("submission.started", "{}"),
+    ("submission.uncertain.json", "{}"), ("submission.rejected.json", "broken"),
+    ("submission.history", "broken"),
+    ("submission.history/bad.json", "{}"),
+])
+def test_corrupt_or_orphaned_state_blocks(guard, run, monkeypatch, name, content):
+    path = run / name
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(content)
+    monkeypatch.setattr(guard, "_post", lambda *a: pytest.fail("corrupt state must not POST"))
+    assert guard.submit(run) == 3
+
+
+@pytest.mark.parametrize("stage", ["temp", "file-sync", "directory-probe", "link", "published-sync"])
+def test_unpublished_or_unsent_marker_failure_can_be_retried(guard, run, server, monkeypatch, stage):
+    url, replies, posts = server
+    original_sync = guard._sync_dir
+    calls = 0
+
+    def sync(path):
+        nonlocal calls
+        calls += 1
+        if calls == {"directory-probe": 1, "published-sync": 2}.get(stage):
+            fail()
+        return original_sync(path)
+
+    with monkeypatch.context() as patch:
+        if stage == "temp":
+            patch.setattr(guard.tempfile, "mkstemp", lambda **kw: fail())
+        elif stage == "link":
+            patch.setattr(guard.os, "link", lambda *a: fail())
+        elif stage == "file-sync":
+            patch.setattr(guard.os, "fsync", lambda fd: fail())
+        else:
+            patch.setattr(guard, "_sync_dir", sync)
+        assert guard.submit(run, base_url=url) == 3
+    assert not posts and not (run / "submission.started").exists()
+    replies.append((200, {"id": "once"}))
+    assert guard.submit(run, base_url=url) == 0 and len(posts) == 1
+
+
+@pytest.mark.parametrize("target", ["history", "job.json", "job.id", "submission.rejected.json"])
+def test_post_persistence_failure_never_resends(guard, run, server, monkeypatch, capsys, target):
+    url, replies, posts = server
+    rejected = target == "submission.rejected.json"
+    replies.append((422, {"detail": "bad queue"}) if rejected else (200, {"id": "once"}))
+    original = guard._write
+
+    def write(path, text, **kwargs):
+        if path.name == target or (target == "history" and path.parent.name == "submission.history"):
+            fail()
+        return original(path, text, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(guard, "_write", write)
+        assert guard.submit(run, base_url=url) == 3
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert ("bad queue" if rejected else "once") in output.err
+    assert ("422" if rejected else "200") in output.err
+    assert (run / "submission.started").exists() and len(posts) == 1
+    expected = 3 if target == "history" else 1 if rejected else 0
+    assert guard.submit(run, base_url=url) == expected and len(posts) == 1
+    if rejected:
+        assert not (run / "submission.started").exists()
+
+
+def test_closed_output_does_not_interrupt_acceptance(guard, run, server, monkeypatch):
+    import io
+
+    class ClosedPipe(io.StringIO):
+        def write(self, value):
+            raise BrokenPipeError
+
+    url, replies, posts = server
+    replies.append((200, {"id": "saved"}))
+    with monkeypatch.context() as patch:
+        patch.setattr(sys, "stdout", ClosedPipe())
+        assert guard.submit(run, base_url=url) == 0
+    assert (run / "job.id").read_text() == "saved\n" and len(posts) == 1
+
+
+@pytest.fixture
+def legacy(guard, run):
+    marker = json.dumps({"idempotency_key": "old-key", "request_sha256": guard._sha(
+        (run / "request.json").read_text()), "started_at": "2026-10-23T00:00:00Z"}, indent=2)
+    (run / "submission.started").write_bytes(marker.replace("\n", "\r\n").encode())
+    outcome = {"status": 501, "response": {"status": 501, "detail": guard.CAPABILITY_ERROR}}
+    (run / "submission.uncertain.json").write_text(json.dumps(outcome))
+    note = run / "evidence.txt"
+    note.write_text("Reviewed session A attempts 1 and 2: both rejected before scheduler submission.")
+    return note
+
+
+def test_legacy_resolution_is_local_repeatable_and_preserves_evidence(guard, run, legacy, monkeypatch, capsys, server):
+    original = {p.name: p.read_bytes() for p in run.iterdir() if p.is_file()}
+    with monkeypatch.context() as patch:
+        patch.setattr(guard, "get_token", lambda: pytest.fail("recovery must not authenticate"))
+        patch.setattr(guard, "_post", lambda *a: pytest.fail("recovery must not POST"))
+        for _ in range(2):
+            assert guard.resolve_rejection(run, legacy, confirmed=True) == 0
+            output = capsys.readouterr()
+            assert output.out == "" and "No job submitted" in output.err
+    record = json.loads(next((run / "submission.history").glob("*.json")).read_text())
+    assert record["marker"].encode() == original["submission.started"]
+    assert record["snapshots"]["submission.uncertain.json"].encode() == original["submission.uncertain.json"]
+    assert record["evidence"] == legacy.read_text()
+    for name, content in original.items():
+        if name != "submission.started":
+            assert (run / name).read_bytes() == content
+    url, replies, posts = server
+    replies.append((200, {"id": "recovered"}))
+    assert guard.submit(run, base_url=url) == 0
+    assert guard.submit(run, base_url=url) == 0 and len(posts) == 1
+    assert guard.resolve_rejection(run, legacy, confirmed=True) == 3
+
+
+@pytest.mark.parametrize("damage", ["changed-request", "headerless", "generic-501", "problem-status",
+                                    "timeout", "job.id", "job.json", "corrupt-marker", "prior-timeout"])
+def test_legacy_recovery_refuses_unsafe_evidence(guard, run, legacy, monkeypatch, damage):
+    marker = run / "submission.started"
+    if damage == "changed-request":
+        (run / "request.json").write_text("{}")
+    elif damage == "headerless":
+        value = json.loads(marker.read_text())
+        value.pop("idempotency_key")
+        marker.write_text(json.dumps({**value, "attempt_id": "new", "idempotency_header_sent": False}))
+    elif damage in {"job.id", "job.json"}:
+        (run / damage).write_text("")
+    elif damage == "corrupt-marker":
+        marker.write_text("{}")
+    elif damage == "prior-timeout":
+        prior = marker.read_text().replace("old-key", "previous-key")
+        guard._archive(run, prior, "uncertain", {"error": "timeout"}, {})
+    else:
+        value = {"status": 501, "response": {"status": 501, "detail": guard.CAPABILITY_ERROR}}
+        if damage == "generic-501":
+            value["response"]["detail"] = "not implemented"
+        elif damage == "problem-status":
+            value["response"]["status"] = 500
+        else:
+            value = {"error": "timeout"}
+        (run / "submission.uncertain.json").write_text(json.dumps(value))
+    before = marker.read_bytes()
+    monkeypatch.setattr(guard, "get_token", lambda: pytest.fail("recovery must not authenticate"))
+    assert guard.resolve_rejection(run, legacy, confirmed=True) == 3
+    assert marker.read_bytes() == before
+
+
+def test_recovery_requires_evidence_and_attestation(guard, run, legacy):
+    assert guard.resolve_rejection(run / "absent", legacy, confirmed=True) == 1
+    assert guard.resolve_rejection(run, legacy) == 1
+    assert guard.resolve_rejection(run, run / "absent", confirmed=True) == 1
+    legacy.write_text(" ")
+    assert guard.resolve_rejection(run, legacy, confirmed=True) == 1
+    assert (run / "submission.started").exists()
+    assert guard.main([str(run), "--resolve-idempotency-rejection", str(legacy),
+                       "--confirm-all-attempts-rejected", "--base-url", "http://unused.invalid"]) == 1
+    assert guard.main([str(run), "--confirm-all-attempts-rejected"]) == 1
+    assert guard.main([str(run), "--retry-uncertain", "--resolve-idempotency-rejection", str(legacy)]) == 1
+
+
+@pytest.mark.parametrize("confirmed", [False, True])
+@pytest.mark.parametrize("resolved", [False, True])
+def test_empty_recovery_filename_never_submits(guard, run, legacy, monkeypatch, capsys, confirmed, resolved):
+    if resolved:
+        assert guard.resolve_rejection(run, legacy, confirmed=True) == 0
+    else:
+        (run / "submission.started").unlink()
+        (run / "submission.uncertain.json").unlink()
+    monkeypatch.setattr(guard, "get_token", lambda: pytest.fail("recovery must not authenticate"))
+    monkeypatch.setattr(guard, "_post", lambda *a: pytest.fail("recovery must not POST"))
+    args = [str(run), "--resolve-idempotency-rejection", ""]
+    if confirmed:
+        args.append("--confirm-all-attempts-rejected")
+    assert guard.main(args) == 1
+    assert capsys.readouterr().out == ""
+    assert not (run / "submission.started").exists() and not (run / "job.id").exists()
+
+
+@pytest.mark.parametrize("boundary", ["archive", "retire", "retired-sync"])
+def test_recovery_interruption_and_new_marker(guard, run, legacy, monkeypatch, boundary):
+    old = (run / "submission.started").read_bytes()
+    with monkeypatch.context() as patch:
+        if boundary == "archive":
+            patch.setattr(guard, "_archive", lambda *a, **kw: fail())
+        elif boundary == "retire":
+            patch.setattr(guard, "_retire", lambda *a: fail())
+        else:
+            retire = guard._retire
+
+            def retired(*args):
+                retire(*args)
+                fail()
+
+            patch.setattr(guard, "_retire", retired)
+        assert guard.resolve_rejection(run, legacy, confirmed=True) == 3
+    assert guard.resolve_rejection(run, legacy, confirmed=True) == 0
+    assert guard.resolve_rejection(run, legacy, confirmed=True) == 0
+    newer = old.replace(b"old-key", b"newer-key")
+    (run / "submission.started").write_bytes(newer)
+    # A new marker with stale legacy error cannot inherit an earlier resolution.
+    assert guard.resolve_rejection(run, legacy, confirmed=True) == 3
+    assert (run / "submission.started").read_bytes() == newer
+
+
+def test_legacy_definite_rejection_and_multiple_capability_rejections(guard, run, legacy):
+    rejected = json.dumps({"status": 422, "response": {"detail": "bad queue"}})
+    (run / "submission.rejected.json").write_text(rejected)
+    previous = (run / "submission.started").read_text().replace("old-key", "previous-key")
+    outcome = json.loads((run / "submission.uncertain.json").read_text())
+    guard._archive(run, previous, "uncertain", outcome, {})
+    assert guard.resolve_rejection(run, legacy, confirmed=True) == 0
+    assert (run / "submission.rejected.json").read_text() == rejected
+    guard._clear_history(guard._history(run), guard._snapshots(run))
+
+
+def test_resolution_preserves_snapshot_without_overriding_archive_identity(guard, run, legacy):
+    path = run / "submission.uncertain.json"
+    value = json.loads(path.read_text())
+    path.write_text(json.dumps({**value, "marker": "unrelated", "kind": "accepted"}))
+    original = (run / "submission.started").read_bytes()
+    assert guard.resolve_rejection(run, legacy, confirmed=True) == 0
+    records = guard._history(run)
+    record = next(iter(records.values()))
+    assert record["kind"] == "resolved" and record["marker"].encode() == original
+    assert record["snapshots"]["submission.uncertain.json"] == path.read_text()
+    assert guard.resolve_rejection(run, legacy, confirmed=True) == 0
+
+
+def test_headerless_capability_501_is_never_recoverable(guard, run, server):
+    url, replies, posts = server
+    replies.append((501, {"status": 501, "detail": guard.CAPABILITY_ERROR}))
+    assert guard.submit(run, base_url=url) == 3
+    note = run / "evidence.txt"
+    note.write_text("Operator reviewed this rejection.")
+    assert guard.resolve_rejection(run, note, confirmed=True) == 3
+    assert guard.submit(run, retry_uncertain=True, base_url=url) == 3 and len(posts) == 1
+
+
+def test_recovery_and_submission_share_lock(guard, run, legacy):
+    with guard._lock(run):
+        assert guard.resolve_rejection(run, legacy, confirmed=True) == 3
+        assert guard.submit(run) == 3
+    assert guard.resolve_rejection(run, legacy, confirmed=True) == 0
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process termination fixture")
+@pytest.mark.parametrize("publish", [False, True])
+def test_process_death_releases_lock_but_keeps_complete_attempt(guard, run, publish):
+    code = '''import importlib.util, pathlib, sys, time
+spec = importlib.util.spec_from_file_location("guard", sys.argv[1])
+g = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(g)
+run = pathlib.Path(sys.argv[2])
+with g._lock(run):
+    if sys.argv[3] == "True":
+        g._write(run / "submission.started", '{"attempt_id":"crashed","started_at":"now","idempotency_header_sent":false,"request_sha256":"' + 'a'*64 + '"}', exclusive=True)
+    print("locked", flush=True)
+    time.sleep(30)
+'''
+    process = subprocess.Popen([sys.executable, "-c", code, str(SCRIPT), str(run), str(publish)],
+                               stdout=subprocess.PIPE, text=True)
+    try:
+        assert process.stdout.readline().strip() == "locked"
+        assert guard.submit(run) == 3
+    finally:
+        process.kill()
+        process.wait(timeout=5)
+        process.stdout.close()
+    with guard._lock(run):
+        pass
+    if publish:
+        assert json.loads((run / "submission.started").read_text())["attempt_id"] == "crashed"
+        assert guard.submit(run) == 3
+    else:
+        assert not (run / "submission.started").exists()
+
+
+@pytest.mark.parametrize("backend", [False, True], ids=["shell", "deepagent"])
+def test_real_submission_cli(guard, run, server, monkeypatch, backend):
+    import shlex
+    from chemgraph.agent.deepagent_backend import create_host_shell_backend
+
+    url, replies, posts = server
+    replies.append((200, {"id": "cli.polaris"}))
+    package = run / "alcf_tokens"
+    package.mkdir()
+    (package / "__init__.py").touch()
+    (package / "auth.py").write_text('def get_access_token(service):\n    return "fake-token"\n')
+    monkeypatch.setenv("PYTHONPATH", str(run) + os.pathsep + os.environ.get("PYTHONPATH", ""))
+    argv = [sys.executable, str(SCRIPT), str(run), "--base-url", url]
+    command = subprocess.list2cmdline(argv) if sys.platform == "win32" else shlex.join(argv)
+    if backend:
+        shell = create_host_shell_backend(run)
+        for _ in range(2):
+            result = shell.execute(command, timeout=180)
+            assert result.exit_code == 0 and "cli.polaris" in result.output
+    else:
+        for _ in range(2):
+            result = subprocess.run(command, shell=True, cwd=run, stdin=subprocess.DEVNULL,
+                                    capture_output=True, text=True, timeout=10)
+            assert result.returncode == 0 and result.stdout == "cli.polaris\n"
+    assert len(posts) == 1 and (run / "job.id").read_text() == "cli.polaris\n"
 
 
 @pytest.fixture
@@ -220,23 +537,3 @@ def test_iri_sh_loads_target_and_keeps_overrides(tmp_path):
     broken = subprocess.run(["bash", "-c", f'source "{loader}" || echo stopped'], cwd=tmp_path,
                             env=env, capture_output=True, text=True)
     assert broken.stdout.strip() == "stopped" and "Could not read target.toml" in broken.stderr
-
-
-@pytest.mark.skipif(sys.platform == "win32" or not (shutil.which("bash") and shutil.which("jq")),
-                    reason="needs bash and jq")
-def test_globus_record_recipe_runs(tmp_path):
-    """The documented record recipe must run as written (jq reserves names like $label)."""
-    cli = (SCRIPT.parents[2] / "globus-transfer/references/cli.md").read_text()
-    recipe = cli.split("## Record and submit a transfer")[1].split("```bash\n")[1].split("```")[0]
-    (tmp_path / "bin").mkdir()
-    fake = tmp_path / "bin/globus"
-    fake.write_text("#!/bin/sh\necho sid-1\n")
-    fake.chmod(0o755)
-    values = 'STATE=.globus; LABEL=run-1-stage-in; SOURCE="L:/~/run-1/"; DESTINATION="E:/P/run-1/"\n'
-    recipe = values + "\n".join(line for line in recipe.splitlines() if "=..." not in line)
-    env = {**os.environ, "PATH": f"{tmp_path / 'bin'}{os.pathsep}{os.environ['PATH']}"}
-    subprocess.run(["bash", "-c", recipe], cwd=tmp_path, env=env, check=True)
-    record = json.loads((tmp_path / ".globus/run-1-stage-in.json").read_text())
-    assert record == {"submission_id": "sid-1", "source": "L:/~/run-1/",
-                      "destination": "E:/P/run-1/", "label": "run-1-stage-in",
-                      "options": ["--recursive"]}
