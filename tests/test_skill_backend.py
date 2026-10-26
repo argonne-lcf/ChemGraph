@@ -18,9 +18,11 @@ def test_bundled_file_protocol(asynchronous):
 
     assert {entry["path"] for entry in call("ls", "/").entries} == {
         "/chemgraph/",
+        "/globus-transfer/",
+        "/iri-hpc/",
         "/pbs-hpc/",
     }
-    assert len(call("glob", "**/SKILL.md").matches) == 2
+    assert len(call("glob", "**/SKILL.md").matches) == 4
     assert len(call("glob", "SKILL.md", "/chemgraph/").matches) == 1
     assert "Use ChemGraph" in call("read", "/chemgraph/SKILL.md").file_data["content"]
     assert call("grep", "PBS", "/pbs-hpc/", max_count=1).matches

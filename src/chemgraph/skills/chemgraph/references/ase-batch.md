@@ -40,37 +40,9 @@ temperature and pressure. Preserve these choices and stage model files before
 submission. Do not execute the calculation on a login node to download or
 initialize a model.
 
-Write `calculate.py` using this example. The PBS host check precedes chemistry
-imports and rejects accidental execution on a login node:
-
-```python
-import json
-import os
-from pathlib import Path
-import socket
-
-nodefile = os.environ.get("PBS_NODEFILE")
-if not os.environ.get("PBS_JOBID") or not nodefile:
-    raise RuntimeError("Submit this calculation through PBS.")
-nodes = {name.split(".")[0] for name in Path(nodefile).read_text().split()}
-if socket.gethostname().split(".")[0] not in nodes:
-    raise RuntimeError("This host is not in the PBS allocation.")
-
-from chemgraph.schemas.ase_input import ASEInputSchema, ASEOutputSchema
-from chemgraph.tools.ase_core import _resolve_existing_path, run_ase_core
-
-params = ASEInputSchema.model_validate_json(Path("input.json").read_text())
-result = run_ase_core(params)
-print(json.dumps(result, indent=2))
-if result.get("status") != "success":
-    raise SystemExit(1)
-output = ASEOutputSchema.model_validate_json(
-    Path(_resolve_existing_path(params.output_results_file)).read_text()
-)
-if not output.success:
-    raise SystemExit(1)
-raise SystemExit(0 if output.converged else 2)
-```
+Copy [calculate.py](../assets/calculate.py) into the run directory unchanged. Its
+PBS host check precedes chemistry imports and rejects accidental execution on a
+login node. It reads `input.json` from the working directory.
 
 Fill the existing PBS template with site resources and environment setup, export
 `CHEMGRAPH_LOG_DIR="$PWD"` after changing to the run directory, and launch
@@ -81,7 +53,7 @@ environment with nounset temporarily disabled if activation requires it, then
 restore it; retain the site's proxy settings and set `TMPDIR=/tmp` before Python.
 Validate script syntax without executing the calculation on the login node.
 
-The example exits 0 for success, 2 for nonconvergence, and 1 for failure. Inspect
+The script exits 0 for success, 2 for nonconvergence, and 1 for failure. Inspect
 PBS stdout/stderr and the existing result JSON (`success`, `converged`,
 `potential_energy`, and driver-specific data). Frequencies and trajectories use
 the run directory. Early failures may leave only stderr; missing results or

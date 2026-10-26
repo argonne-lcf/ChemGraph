@@ -26,7 +26,7 @@ def example(path, language):
 
 @pytest.fixture
 def job(tmp_path):
-    script = example("chemgraph/references/ase-batch.md", "python")
+    script = (SKILLS / "chemgraph/assets/calculate.py").read_text()
     (tmp_path / "calculate.py").write_text(script)
     (tmp_path / "hydrogen.xyz").write_text("2\nEMT test\nH 0 0 0\nH 0 0 1\n")
     payload = {
@@ -132,6 +132,7 @@ def test_agent_writes_submits_and_new_session_monitors(job, scheduler, tmp_path,
 
     responses = [call("read_file", file_path=f"/chemgraph-skills/{p}") for p in (
         "chemgraph/SKILL.md", "pbs-hpc/SKILL.md", "chemgraph/references/ase-batch.md",
+        "chemgraph/assets/calculate.py",
     )]
     # Scripted model writes the example files through the real file tools.
     files = {name: (tmp_path / name).read_text() for name in ("calculate.py", "job.pbs")}

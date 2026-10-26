@@ -264,6 +264,7 @@ def test_experimental_backend_requires_confirmation_and_filters_environment(
 ):
     monkeypatch.setattr(commands.Confirm, "ask", lambda *_args, **_kwargs: True)
     monkeypatch.setenv("PATH", "/test/bin")
+    monkeypatch.setenv("SYSTEMROOT", "C:\\Windows")
     monkeypatch.setenv("OPENAI_API_KEY", "must-not-leak")
 
     backend = commands._create_experimental_deepagent_backend(str(tmp_path))
@@ -274,6 +275,7 @@ def test_experimental_backend_requires_confirmation_and_filters_environment(
     assert backend.cwd == tmp_path.resolve()
     assert backend.virtual_mode is True
     assert backend._env["PATH"] == "/test/bin"
+    assert backend._env["SYSTEMROOT"] == "C:\\Windows"
     assert "OPENAI_API_KEY" not in backend._env
     assert cli_backend_descriptor(backend)["type"] == "cli-local-shell-v1"
     assert backend._env == create_host_shell_backend(tmp_path)._env
