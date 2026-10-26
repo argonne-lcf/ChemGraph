@@ -238,6 +238,116 @@ def test_review_feedback_preserves_text(monkeypatch):
     }
 
 
+@pytest.fixture
+def auto_mode():
+    holder = commands._AutoMode()
+    token = commands._review_auto_mode.set(holder)
+    yield holder
+    commands._review_auto_mode.reset(token)
+
+
+def _review_batch():
+    return {
+        "action_requests": [
+            {"name": "execute", "args": {"command": "rm -rf build"}},
+            {"name": "write_file", "args": {"file_path": "/workspace/a.txt", "content": "a"}},
+        ],
+        "review_configs": [
+            {"action_name": name, "allowed_decisions": ["approve", "reject"]}
+            for name in ("execute", "write_file")
+        ],
+    }
+
+
+def test_auto_mode_approves_batch_without_prompting(monkeypatch, auto_mode):
+    output = _review_terminal(monkeypatch, "")
+    monkeypatch.setattr(commands.Prompt, "ask", lambda *_a, **_k: pytest.fail("prompted"))
+    auto_mode.enabled = True
+    assert commands._prompt_for_interrupt(_review_batch()) == {
+        "decisions": [{"type": "approve"}, {"type": "approve"}]
+    }
+    assert output.getvalue().count("Auto-approved") == 2
+    assert "rm -rf build" in output.getvalue()
+
+
+def test_auto_approved_long_preview_does_not_offer_pager(monkeypatch, auto_mode):
+    output = _review_terminal(monkeypatch, "")
+    payload = _review(["approve", "reject"])
+    payload["action_requests"][0]["args"]["command"] = "\n".join(f"echo {i}" for i in range(200))
+    auto_mode.enabled = True
+    assert commands._prompt_for_interrupt(payload) == {"decisions": [{"type": "approve"}]}
+    assert "Preview shortened." in output.getvalue()
+    assert "Type v" not in output.getvalue()
+
+
+@pytest.mark.parametrize("answer", ["3", " AUTO "])
+def test_review_option_turns_on_auto_mode_for_rest_of_batch(monkeypatch, auto_mode, answer):
+    output = _review_terminal(monkeypatch, answer + "\n")
+    assert commands._prompt_for_interrupt(_review_batch()) == {
+        "decisions": [{"type": "approve"}, {"type": "approve"}]
+    }
+    assert auto_mode.enabled
+    assert output.getvalue().count("Auto-approved") == 1
+
+
+def test_auto_mode_still_reviews_restricted_policy(monkeypatch, auto_mode):
+    output = _review_terminal(monkeypatch, "\n")
+    auto_mode.enabled = True
+    assert commands._prompt_for_interrupt(_review(["reject"])) == {
+        "decisions": [{"type": "reject"}]
+    }
+    assert "Auto-approved" not in output.getvalue()
+    assert "3. Approve" not in output.getvalue()
+
+
+@pytest.fixture(params=["headless", "bypass"])
+def unavailable_auto_mode(request):
+    if request.param == "headless":
+        yield
+        return
+    # Stricter worker policies still review during bypass, which /auto cannot undo.
+    holder = commands._AutoMode()
+    holder.available = False
+    token = commands._review_auto_mode.set(holder)
+    yield
+    commands._review_auto_mode.reset(token)
+
+
+@pytest.mark.usefixtures("unavailable_auto_mode")
+def test_auto_option_is_not_offered_outside_reviewed_repl(monkeypatch):
+    output = _review_terminal(monkeypatch, "3\n")
+    assert commands._prompt_for_interrupt(_review(["approve", "reject"])) == {
+        "decisions": [{"type": "reject", "message": "3"}]
+    }
+    assert "3. Approve" not in output.getvalue()
+
+
+@pytest.mark.parametrize("approval_mode", ["review", "bypass"])
+def test_auto_command_toggles_session_state(monkeypatch, approval_mode):
+    prompts = iter(["/auto on", "/auto on", "/config", "/auto", "/auto off", "/config", "/quit"])
+    if approval_mode == "review":
+        prompts = iter(["initial-model", "deep_agent", *prompts])
+    labels, confirmations = [], iter([False, True])
+    monkeypatch.setattr(commands.Prompt, "ask", lambda label, **_k: labels.append(label) or next(prompts))
+    monkeypatch.setattr(commands.Confirm, "ask", lambda *_a, **_k: next(confirmations))
+    monkeypatch.setattr(commands, "create_banner", lambda: "")
+    monkeypatch.setattr(commands, "initialize_agent", lambda *_a, **_k: SimpleNamespace())
+    output = io.StringIO()
+    monkeypatch.setattr(commands, "console", Console(file=output, width=200))
+    commands.interactive_mode(workflow="deep_agent", approval_mode=approval_mode)
+    text = output.getvalue()
+    states = [line for line in text.splitlines() if line.startswith("Auto mode: ")]
+    assert commands._review_auto_mode.get() is None
+    if approval_mode == "bypass":
+        assert next(confirmations) is False  # Bypass never asks to confirm.
+        assert text.count("already bypassed") == 3
+        assert states == ["Auto mode: off", "Auto mode: off. Usage: /auto [on|off]", "Auto mode: off"]
+        return
+    assert "Auto mode stays off." in text
+    assert states == ["Auto mode: on", "Auto mode: on. Usage: /auto [on|off]", "Auto mode: off"]
+    assert ["[auto]" in label for label in labels[2:]] == [False, False, True, True, True, False, False]
+
+
 @pytest.mark.parametrize("answer", ["v", "VIEW"])
 def test_full_view_returns_to_same_action_without_approving(monkeypatch, answer):
     from contextlib import contextmanager
