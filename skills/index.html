@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../assets/chemgraph_logo.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -31,10 +31,10 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -1709,11 +1709,14 @@
 
 
 <h1 id="main-agent-and-deep-agent-skills">Main-agent and Deep Agent skills<a class="headerlink" href="#main-agent-and-deep-agent-skills" title="Permanent link">&para;</a></h1>
-<p>ChemGraph ships two Agent Skills: <strong>chemgraph</strong> for its Python, CLI, and chemistry
-MCP workflows, and <strong>pbs-hpc</strong> for PBS job preparation, monitoring, and facility
-guidance. They are available directly to <code>main_agent</code>, standalone Deep Agents,
+<p>ChemGraph ships four Agent Skills: <strong>chemgraph</strong> for its Python, CLI, and chemistry
+MCP workflows, <strong>pbs-hpc</strong> for PBS job preparation, monitoring, and facility
+guidance, <strong>iri-hpc</strong> for remote ALCF jobs through the IRI API v2, and
+<strong>globus-transfer</strong> for staging files with the Globus CLI. They are available directly to <code>main_agent</code>, standalone Deep Agents,
 registry-created Deep Agent workers, and the legacy main-agent workspace worker.</p>
 <p>For direct submission from a login-node shell, see <a href="../pbs_jobs_with_skills/">PBS jobs with skills</a>.
+For submission from a laptop through IRI, including with Claude Code or Codex, see
+<a href="https://github.com/argonne-lcf/ChemGraph/tree/main/examples/iri_polaris">the IRI Polaris example</a>.
 Deep Agent writes calculation and batch scripts using the skills and existing
 Python APIs; it does not need attached chemistry MCP tools for this route.</p>
 <p>Main-agent CLI paths use <code>--skill</code> and TOML <code>[general] skills</code>; they are host
@@ -2137,10 +2140,10 @@ mandatory scientific or operational requirements in tools or middleware.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.footer", "navigation.indexes", "navigation.sections", "navigation.tabs", "search.highlight", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.footer", "navigation.indexes", "navigation.sections", "navigation.tabs", "search.highlight", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
   </body>
