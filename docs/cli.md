@@ -192,7 +192,10 @@ The startup host-access confirmation is separate from these per-action reviews.
 later tool action without asking, including actions from main-agent workers.
 Each action's preview is still printed with an `Auto-approved` line, and the
 prompt shows `ChemGraph [auto]`. Questions from the agent are still asked, and
-actions whose policy does not allow approval are still reviewed. `/auto off`
+actions whose policy does not allow approval are still reviewed. After 50
+auto-approved actions in a row, the next action is reviewed, and your answer
+starts a new run. Actions that were already pending in a session restored with
+`/resume` are always reviewed. `/auto off`
 restores reviews; `/auto` and `/config` show the current state. Auto mode lasts
 until `/auto off` or exit, including across `/model`, `/workflow`, and
 `/resume`. It is never saved with a session, so restored sessions keep their

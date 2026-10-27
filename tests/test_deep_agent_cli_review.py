@@ -259,34 +259,38 @@ def _review_batch():
     }
 
 
-def test_auto_mode_approves_batch_without_prompting(monkeypatch, auto_mode):
-    output = _review_terminal(monkeypatch, "")
-    monkeypatch.setattr(commands.Prompt, "ask", lambda *_a, **_k: pytest.fail("prompted"))
+def test_auto_mode_asks_again_after_limit(monkeypatch, auto_mode):
+    output = _review_terminal(monkeypatch, "y\n")
     auto_mode.enabled = True
+    auto_mode.approved = commands._AUTO_APPROVE_LIMIT - 1
     assert commands._prompt_for_interrupt(_review_batch()) == {
         "decisions": [{"type": "approve"}, {"type": "approve"}]
     }
-    assert output.getvalue().count("Auto-approved") == 2
-    assert "rm -rf build" in output.getvalue()
+    assert output.getvalue().count("Auto-approved") == 1
+    assert "review this one to continue" in output.getvalue()
+    # The user's answer starts a new run of auto-approvals.
+    assert auto_mode.enabled and auto_mode.approved == 0
 
 
-def test_auto_approved_long_preview_does_not_offer_pager(monkeypatch, auto_mode):
-    output = _review_terminal(monkeypatch, "")
-    payload = _review(["approve", "reject"])
-    payload["action_requests"][0]["args"]["command"] = "\n".join(f"echo {i}" for i in range(200))
+def test_auto_mode_reviews_actions_pending_in_restored_session(monkeypatch, auto_mode):
+    review = _review(["approve", "reject"])
+    session = _FakeMainSession([
+        _turn_result(PendingInterrupt("old", review)),
+        _turn_result(PendingInterrupt("new", review)),
+        _turn_result(),
+    ])
+
+    async def restore():
+        return session._next_result()
+
+    session.restore = restore
+    output = _review_terminal(monkeypatch, "n\n")
     auto_mode.enabled = True
-    assert commands._prompt_for_interrupt(payload) == {"decisions": [{"type": "approve"}]}
-    assert "Preview shortened." in output.getvalue()
-    assert "Type v" not in output.getvalue()
-
-
-@pytest.mark.parametrize("answer", ["3", " AUTO "])
-def test_review_option_turns_on_auto_mode_for_rest_of_batch(monkeypatch, auto_mode, answer):
-    output = _review_terminal(monkeypatch, answer + "\n")
-    assert commands._prompt_for_interrupt(_review_batch()) == {
-        "decisions": [{"type": "approve"}, {"type": "approve"}]
-    }
-    assert auto_mode.enabled
+    commands.restore_main_agent_session(session)
+    assert session.calls == [
+        ("resume", {"decisions": [{"type": "reject"}]}),
+        ("resume", {"decisions": [{"type": "approve"}]}),
+    ]
     assert output.getvalue().count("Auto-approved") == 1
 
 
@@ -345,6 +349,8 @@ def test_auto_command_toggles_session_state(monkeypatch, approval_mode):
         return
     assert "Auto mode stays off." in text
     assert states == ["Auto mode: on", "Auto mode: on. Usage: /auto [on|off]", "Auto mode: off"]
+    # One REPL label per command: the marker appears after the confirmed /auto on and
+    # disappears after /auto off.
     assert ["[auto]" in label for label in labels[2:]] == [False, False, True, True, True, False, False]
 
 
@@ -560,7 +566,7 @@ def test_main_agent_limit_counts_questions_only(monkeypatch, approval):
     monkeypatch.setattr(
         commands,
         "_prompt_for_interrupt",
-        lambda _: {"decisions": [{"type": "approve"}]} if approval else "yes",
+        lambda _, **__: {"decisions": [{"type": "approve"}]} if approval else "yes",
     )
     result = commands.run_main_agent_query(session, "test")
     assert (result is not None) is approval

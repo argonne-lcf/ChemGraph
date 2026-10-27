@@ -535,7 +535,12 @@ class _AutoMode:
     enabled = False
     # Bypass launches cannot turn reviews back on, so they cannot enter auto mode.
     available = True
+    # Each resume gets a fresh recursion limit, so this count stops a looping agent.
+    approved = 0
 
+
+# Auto-approved actions in a row before the user is asked again.
+_AUTO_APPROVE_LIMIT = 50
 
 # Set only by interactive_mode, so headless and direct callers always review.
 _review_auto_mode: ContextVar[_AutoMode | None] = ContextVar("review_auto_mode", default=None)
@@ -874,9 +879,15 @@ def _clear_pending_review_input() -> None:
         pass
 
 
-def _prompt_for_interrupt(payload: Any) -> Any:
-    """Render one interrupt and collect its resume value."""
+def _prompt_for_interrupt(payload: Any, *, restored: bool = False) -> Any:
+    """Render one interrupt and collect its resume value.
+
+    Auto mode never approves a ``restored`` review, which an earlier launch proposed.
+    """
+    auto_mode = _review_auto_mode.get()
     if not _is_tool_review(payload):
+        if auto_mode is not None:
+            auto_mode.approved = 0
         console.print(
             Panel(
                 _interrupt_question(payload),
@@ -891,7 +902,6 @@ def _prompt_for_interrupt(payload: Any) -> Any:
         for item in payload["review_configs"]
         if isinstance(item, dict)
     }
-    auto_mode = _review_auto_mode.get()
     decisions = []
     for index, action in enumerate(payload["action_requests"], start=1):
         if not isinstance(action, dict):
@@ -907,16 +917,26 @@ def _prompt_for_interrupt(payload: Any) -> Any:
             raise ValueError(
                 f"Tool action {name!r} does not allow approve/reject."
             )
-        auto_approve = auto_mode is not None and auto_mode.enabled and "approve" in allowed
+        auto_on = auto_mode is not None and auto_mode.enabled and "approve" in allowed
+        auto_approve = auto_on and not restored and auto_mode.approved < _AUTO_APPROVE_LIMIT
         panel, truncated = build_action_review(
             action, index, len(payload["action_requests"]), viewable=not auto_approve,
         )
         console.print(panel)
         # Keep the preview so auto-approved commands remain visible.
         if auto_approve:
+            auto_mode.approved += 1
             console.print("[dim]Auto-approved (auto mode)[/dim]")
             decisions.append({"type": "approve"})
             continue
+        if auto_on:
+            console.print(
+                "[yellow]Auto mode: this action was pending in the restored "
+                "session, so it needs your review.[/yellow]"
+                if restored else
+                f"[yellow]Auto mode approved {_AUTO_APPROVE_LIMIT} actions in a "
+                "row; review this one to continue.[/yellow]"
+            )
         offer_auto = auto_mode is not None and auto_mode.available and "approve" in allowed
         default = "approve" if "approve" in allowed else "reject"
         if "approve" in allowed:
@@ -968,6 +988,8 @@ def _prompt_for_interrupt(payload: Any) -> Any:
                 decision = {"type": "reject", "message": answer}
             if decision["type"] in allowed:
                 decisions.append(decision)
+                if auto_mode is not None:
+                    auto_mode.approved = 0
                 break
             console.print(
                 "[yellow]That response is not allowed for this action. "
@@ -992,8 +1014,12 @@ def _run_main_agent_operation(
     checkpoint_runtime: CheckpointRuntime | None = None,
     interactive: bool = True,
     report_failure_usage: bool = True,
+    restored: bool = False,
 ) -> Any:
-    """Run one operation; headless callers own printing when reporting is disabled."""
+    """Run one operation; headless callers own printing when reporting is disabled.
+
+    With ``restored``, the first interrupts came from a checkpoint and are always asked.
+    """
     from chemgraph.agent.main_session import IncompatibleCheckpointError
 
     try:
@@ -1034,13 +1060,16 @@ def _run_main_agent_operation(
             answers: Any
             if len(result.interrupts) == 1:
                 pending = result.interrupts[0]
-                answers = _prompt_for_interrupt(pending.payload)
+                answers = _prompt_for_interrupt(pending.payload, restored=restored)
             else:
                 if any(not pending.id for pending in result.interrupts):
                     raise ValueError("Multiple pending interrupts require stable IDs.")
                 answers = {}
                 for pending in result.interrupts:
-                    answers[pending.id] = _prompt_for_interrupt(pending.payload)
+                    answers[pending.id] = _prompt_for_interrupt(
+                        pending.payload, restored=restored,
+                    )
+            restored = False
 
             result = (
                 checkpoint_runtime.run(lambda: session.resume(answers))
@@ -1110,6 +1139,7 @@ def restore_main_agent_session(
         checkpoint_runtime=checkpoint_runtime,
         interactive=interactive,
         report_failure_usage=interactive,
+        restored=True,
     )
 
 
@@ -1761,6 +1791,7 @@ def interactive_mode(
                 "\n[bold cyan]ChemGraph[/bold cyan]"
                 + (" [bold yellow]\\[auto][/bold yellow]" if auto_mode.enabled else "")
             )
+            auto_mode.approved = 0
             parsed_command = _parse_interactive_input(query)
 
             if parsed_command is None:
