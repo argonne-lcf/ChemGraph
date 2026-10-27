@@ -25,43 +25,49 @@ path first so infrastructure failures are isolated from LLM behavior.
 Backend selection can use environment variables or `[execution]` settings. Do
 not copy another user's endpoint IDs, allocation names, or private paths.
 
-## Distributed peers
+## Academy peers
 
-Academy is an optional transport for messages between independent ChemGraph
-instances. ChemGraph owns reasoning, tools, approval handling, sessions, inbox
-processing, and shutdown. Computation continues to use the execution backends
-above; the messaging adapter does not allocate compute resources.
+The optional `chemgraph.academy` integration contains a thin `ChemGraphPeer`
+Academy agent, a `PeerMessage` payload, and `make_peer_message_tool`. Applications
+provide async turn and error handlers and a mapping of names to actual Academy
+handles. Use Academy's public `Manager`, `Runtime`, registration, and lifecycle
+APIs directly. Computation continues to use the execution backends above.
 
 ```bash
 uv pip install "chemgraph[academy]"
-# or, in a conda/pip environment: python -m pip install "chemgraph[academy]"
-chemgraph distributed --help
 chemgraph dashboard --help
 ```
 
-See the [distributed-peer examples](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/distributed)
-for a checkpointed main-agent planner and executor, legacy single-agent peers,
-and deployment across hosts. Distributed peers default to `main_agent`, with
-configured MCP tools and peer messaging; local science-tool and specialist
-catalogs are disabled by default. Normal ChemGraph approvals remain enabled.
-Each host needs access to the same HTTP exchange, but peers do not need a shared
-filesystem.
+See the [Python examples](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/academy)
+for two persistent sessions using local or HTTP exchanges, including installation,
+model credentials, submission, approval, tracing, and shutdown commands.
 
-### Migration from campaigns
+The application constructs its model, prompts, tools, sessions, and approval
+policy. Its turn handler drives `MainAgentSession.run()` and required `resume()`
+calls for `main_agent`, or `ChemGraph.run()` for other workflows. The wrapper
+processes one turn at a time and keeps accepting messages while approvals or
+application error recovery are pending. It never chooses checkpoint identity,
+retries, or replaces workflows itself.
 
-The old `chemgraph academy` commands, `chemgraph.academy` Python package,
-campaign JSONC format, prompt profiles, MPI daemon, and campaign-specific
-launchers have been removed. Configure ordinary ChemGraph peers and launch them
-with `chemgraph distributed run --config peers.json --peer NAME`. Use site job
-scripts or existing ChemGraph execution backends for HPC placement.
+Acknowledgements mean acceptance into an in-memory inbox, not successful
+execution. Peers remain alive between messages, but shutdown discards queued
+work and duplicate tracking. There is no restart recovery, automatic replay,
+durable inbox, or scheduling framework.
 
-The `academy` extra remains available for the communication adapter. There is
-no automatic campaign conversion. Re-express missions as peer prompts, tool
-access as per-server MCP allowlists, and connectivity as `allowed_peers`.
+### Migration from campaigns and distributed configs
+
+The old campaign APIs, campaign JSONC format, prompt profiles, MPI daemon, and
+campaign-specific launchers remain removed. Neither `chemgraph academy` nor
+`chemgraph distributed` is a supported command. The new `chemgraph.academy`
+module exposes only the wrapper, message payload, and messaging tool; it does
+not restore the campaign framework. Move application configuration into Python
+and pass Academy registrations/handles explicitly. There is no custom discovery
+service, JSON peer configuration, or operator control-file protocol.
+
+Use site job scripts or existing ChemGraph execution backends for HPC placement.
 `dev-academy-sim` is a historical prototype, not a required installation.
-
 `chemgraph dashboard` still reads existing event logs, including old campaign
-runs. Dashboard and CLI tracing work without Academy installed.
+runs. Shared dashboard, CLI tracing, and MCP utilities work without Academy.
 
 ## ALCF model access and MCP
 
@@ -82,5 +88,5 @@ facility-specific assumptions. See [MCP servers](mcp_servers.md).
 5. Add concurrency only after logs, retries, and cleanup are understood.
 6. Record model, calculator, environment, scheduler, and code versions.
 
-Never place tokens in peer configuration files, prompts, repository config, or job logs.
+Never place tokens in application configuration files, prompts, repository config, or job logs.
 Use facility-approved secret mechanisms and least-privilege endpoints.

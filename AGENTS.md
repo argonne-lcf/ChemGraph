@@ -68,7 +68,7 @@ src/
     tools/        # Core simulation logic (ase_core.py) + LangChain @tool wrappers
     mcp/          # FastMCP servers (incl. *_mcp_hpc.py, *_mcp_parsl.py) + cg_fastmcp
     execution/    # Pluggable backends: local, parsl, globus_compute, job_tracker
-    distributed/  # ChemGraph peer runtime and optional Academy communication adapter
+    academy/      # Thin Academy peer wrapper and messaging tool
     dashboard/ observability/  # Shared run inspection and event logs
     models/       # LLM loader, settings, provider normalization, codex adapter
     registry/     # ToolRegistry and AgentRegistry specs and availability checks

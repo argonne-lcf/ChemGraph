@@ -6,8 +6,8 @@ from ase import Atoms
 # Configure pytest-asyncio
 #pytest_plugins = ("pytest_asyncio",)
 
-# The optional Academy transport tests use pytest.importorskip("academy").
-# Distributed runtime, dashboard, and event-log tests run in the core suite.
+# The optional Academy wrapper tests use pytest.importorskip("academy").
+# Shared dashboard and event-log tests run in the core suite.
 
 
 @pytest.fixture(autouse=True)

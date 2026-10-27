@@ -1,8 +1,7 @@
 # Command-line interface
 
 The `chemgraph` command provides query execution, evaluation, session
-inspection, model discovery, the web interface, dashboards, and distributed peer
-orchestration.
+inspection, model discovery, the web interface, and dashboards.
 
 ```text
 chemgraph run        Run an agent query or interactive session
@@ -11,7 +10,6 @@ chemgraph session    List, inspect, or delete saved sessions
 chemgraph models     List registered model identifiers
 chemgraph ui         Launch the Streamlit web interface
 chemgraph dashboard  Launch the trace dashboard
-chemgraph distributed Run ChemGraph peers and exchange messages
 ```
 
 Use `chemgraph <command> --help` for the options supported by your installed
@@ -410,7 +408,7 @@ then inspect the dashboard options available in your version:
 chemgraph dashboard --help
 ```
 
-## Evaluation and distributed peers
+## Evaluation and Academy peers
 
 Evaluation needs an explicit dataset or a configured profile:
 
@@ -418,11 +416,8 @@ Evaluation needs an explicit dataset or a configured profile:
 chemgraph eval --help
 ```
 
-Distributed communication requires the `academy` extra. Computation may need
-additional execution extras:
-
-```bash
-chemgraph distributed --help
-```
+The Academy Python integration requires the `academy` extra. Computation may need
+additional execution extras. Launch peers with Academy's public Python APIs;
+see the [examples](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/academy).
 
 See [Evaluation](evaluation.md) and [HPC and Academy](hpc_and_academy.md).

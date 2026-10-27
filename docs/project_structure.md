@@ -9,7 +9,7 @@ ChemGraph/
 │   │   ├── tools/        # Chemistry, ASE, analysis, and file tools
 │   │   ├── mcp/          # General and HPC MCP servers
 │   │   ├── execution/    # Local, Parsl, Ensemble, Globus backends
-│   │   ├── distributed/  # Peer runtime and optional Academy communication
+│   │   ├── academy/      # Thin Academy peer wrapper and messaging tool
 │   │   ├── dashboard/    # Run dashboard
 │   │   ├── observability/ # Shared event logs and summaries
 │   │   ├── models/       # Model registry, provider loaders, normalization

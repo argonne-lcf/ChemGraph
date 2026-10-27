@@ -381,7 +381,7 @@ Start with:
 
 - [HPC and Academy](https://argonne-lcf.github.io/ChemGraph/hpc_and_academy/)
 - [`scripts/demo/`](scripts/demo/README.md) for execution-backend demos
-- [Distributed peer examples](examples/distributed/README.md)
+- [Academy peer examples](examples/academy/README.md)
 - [Connecting to Argo from an ALCF compute node](examples/connecting_to_argo/README.md)
 
 ## Configuration
