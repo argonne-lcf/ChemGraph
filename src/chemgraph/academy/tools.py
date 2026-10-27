@@ -20,6 +20,19 @@ class _SendPeerMessage(BaseModel):
     reply_to: str | None = None
 
 
+async def send_peer_message(handle: "Handle", message: PeerMessage) -> dict:
+    """Deliver one message and validate the inbox acknowledgement.
+
+    Acceptance means queued in memory, not completed. Failures propagate:
+    delivery may have occurred, so retries (with the same message) belong to
+    the caller.
+    """
+    acknowledgement = await handle.action("receive_message", message.model_dump(mode="json"))
+    if acknowledgement != {"status": "accepted", "message_id": message.message_id}:
+        raise RuntimeError("Invalid peer acknowledgement; delivery may have occurred")
+    return acknowledgement
+
+
 def make_peer_message_tool(*, sender: str, peers: Mapping[str, "Handle"]) -> StructuredTool:
     """Use the supplied handles, with stable IDs for this tool instance's calls.
 
@@ -31,7 +44,7 @@ def make_peer_message_tool(*, sender: str, peers: Mapping[str, "Handle"]) -> Str
     namespace = uuid4()
     peers = dict(peers)
 
-    async def send_peer_message(
+    async def send_to_peer(
         recipient: str, content: str,
         tool_call_id: Annotated[str, InjectedToolCallId],
         reply_to: str | None = None,
@@ -42,13 +55,10 @@ def make_peer_message_tool(*, sender: str, peers: Mapping[str, "Handle"]) -> Str
             message_id=str(uuid5(namespace, tool_call_id)),
             sender=sender, content=content, reply_to=reply_to,
         )
-        acknowledgement = await peers[recipient].action("receive_message", message.model_dump(mode="json"))
-        if acknowledgement != {"status": "accepted", "message_id": message.message_id}:
-            raise RuntimeError("Invalid peer acknowledgement; delivery may have occurred")
-        return acknowledgement
+        return await send_peer_message(peers[recipient], message)
 
     return StructuredTool.from_function(
-        coroutine=send_peer_message, name="send_peer_message", args_schema=_SendPeerMessage,
+        coroutine=send_to_peer, name="send_peer_message", args_schema=_SendPeerMessage,
         handle_tool_error=True,
         description=(
             f"Send a request or reply to one of {list(peers)}. Acceptance means queued in memory, "

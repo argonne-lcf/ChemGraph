@@ -12,7 +12,7 @@ from academy.handle import Handle
 from academy.runtime import Runtime, RuntimeConfig
 from academy.serialize import SerializationStrategy
 
-from chemgraph.academy import ChemGraphPeer, PeerMessage
+from chemgraph.academy import ChemGraphPeer, PeerMessage, send_peer_message
 from examples.academy.common import SessionHandler
 
 
@@ -37,7 +37,7 @@ async def main(args):
         if args.command == "send":
             message = PeerMessage(sender="operator", content=args.content)
             async with asyncio.timeout(30):
-                print(await handles["planner"].action("receive_message", message.model_dump(mode="json")))
+                print(await send_peer_message(handles["planner"], message))
             return
 
         handler = SessionHandler(args.name, {name: handle for name, handle in handles.items() if name != args.name},

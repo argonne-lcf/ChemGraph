@@ -1,9 +1,9 @@
 """Optional Academy inbox glue; applications own their ChemGraph workflows."""
 
 from chemgraph.academy.message import PeerMessage
-from chemgraph.academy.tools import make_peer_message_tool
+from chemgraph.academy.tools import make_peer_message_tool, send_peer_message
 
-__all__ = ["ChemGraphPeer", "PeerMessage", "make_peer_message_tool"]
+__all__ = ["ChemGraphPeer", "PeerMessage", "make_peer_message_tool", "send_peer_message"]
 
 
 def __getattr__(name):

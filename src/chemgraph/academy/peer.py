@@ -19,6 +19,7 @@ class ChemGraphPeer(Agent):
     Acceptance is not execution success. The inbox and seen message IDs live
     only in this instance, consume memory until shutdown, and are not replayed.
     Academy cancels the consumer on shutdown; handlers must allow cancellation.
+    Use one instance per Runtime launch; a shut-down instance cannot restart.
     """
 
     def __init__(
@@ -57,6 +58,10 @@ class ChemGraphPeer(Agent):
                     await self.on_error(message, error)
             finally:
                 self._inbox.task_done()
+
+    async def agent_on_startup(self) -> None:
+        if self._closed:
+            raise RuntimeError("ChemGraphPeer instances are not restartable; launch a new instance")
 
     async def agent_on_shutdown(self) -> None:
         self._closed = True

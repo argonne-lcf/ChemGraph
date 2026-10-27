@@ -1,7 +1,7 @@
 # Persistent ChemGraph peers with Academy
 
-`chemgraph.academy` supplies `ChemGraphPeer`, `PeerMessage`, and
-`make_peer_message_tool`. Academy owns registration, handles, delivery, and
+`chemgraph.academy` supplies `ChemGraphPeer`, `PeerMessage`,
+`make_peer_message_tool`, and `send_peer_message`. Academy owns registration, handles, delivery, and
 lifecycle. The application supplies an async turn handler and an async error
 handler; ChemGraph owns reasoning, tool execution, and approvals.
 
@@ -133,8 +133,10 @@ Construct models, prompts, tools, checkpoints, sessions, and approval policy in
 your application. Pass handles by name to `make_peer_message_tool(sender=...,
 peers=...)`. Keep that tool instance with its workflow/session: repeating a
 tool-call ID generates the same message ID within that instance; a new instance
-has a new namespace. The receiver remembers `(sender, message_id)` for its
-lifetime. Reuse an ID only for the same delivery. Neither sender labels nor the
+has a new namespace. Application code that is not an LLM, such as an operator
+script or a dispatcher, sends with `await send_peer_message(handle, message)`,
+which validates the same acknowledgement. The receiver remembers
+`(sender, message_id)` for its lifetime. Reuse an ID only for the same delivery. Neither sender labels nor the
 handle mapping provide authentication; access control belongs to the exchange.
 
 For `main_agent`, the turn handler must finish any approval/resume cycle before
@@ -153,7 +155,9 @@ turns. The required error handler receives `(message, exception)` and must repor
 the failure and recover or replace the workflow before returning. It may wait
 for an operator while the mailbox remains available. If the error handler
 itself raises, Academy's normal control-loop error policy applies. Handlers must
-yield to the event loop and allow cancellation.
+yield to the event loop and allow cancellation. Launch a new `ChemGraphPeer`
+instance for each run; a shut-down instance refuses to start again, including
+when a `Manager` retry relaunches it.
 
 An acknowledgement means **accepted into memory**, not successful execution.
 Delivery timeouts can occur after acceptance; there is no automatic resend.

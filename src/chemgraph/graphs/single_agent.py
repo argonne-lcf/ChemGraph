@@ -58,6 +58,9 @@ def _tool_call_signature(tool_calls) -> tuple:
 def _is_repeated_tool_cycle(messages) -> bool:
     """Detect if the most recent AI tool-call set repeats the previous one.
 
+    Only the current turn is compared: a retained thread may legitimately
+    repeat a tool call from an earlier turn.
+
     Parameters
     ----------
     messages : list
@@ -66,11 +69,13 @@ def _is_repeated_tool_cycle(messages) -> bool:
     Returns
     -------
     bool
-        ``True`` when the last two AI tool-call sets are identical.
+        ``True`` when the last two AI tool-call sets in this turn are identical.
     """
     ai_with_calls = []
     for message in messages:
-        if hasattr(message, "tool_calls") and getattr(message, "tool_calls", None):
+        if getattr(message, "type", None) == "human":
+            ai_with_calls.clear()
+        elif hasattr(message, "tool_calls") and getattr(message, "tool_calls", None):
             ai_with_calls.append(message)
 
     if len(ai_with_calls) < 2:

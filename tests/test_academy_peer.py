@@ -21,7 +21,7 @@ from academy.serialize import SerializationStrategy
 from aiohttp.test_utils import TestServer
 from langchain_core.messages import AIMessage
 
-from chemgraph.academy import ChemGraphPeer, PeerMessage, make_peer_message_tool
+from chemgraph.academy import ChemGraphPeer, PeerMessage, make_peer_message_tool, send_peer_message
 from chemgraph.agent.llm_agent import ChemGraph
 from chemgraph.models.endpoints import PreparedModel
 from examples.academy.common import SessionHandler, emt_energy
@@ -41,7 +41,7 @@ async def factory(request):
 async def send(handle, content="task", *, message_id=None, sender="operator"):
     message = PeerMessage(sender=sender, content=content, **({"message_id": message_id} if message_id else {}))
     async with asyncio.timeout(3):
-        ack = await handle.action("receive_message", message.model_dump(mode="json"))
+        ack = await send_peer_message(handle, message)
     assert ack == {"status": "accepted", "message_id": message.message_id}
     return message
 
@@ -87,6 +87,11 @@ async def test_prompt_acceptance_sequential_turns_duplicates_and_shutdown(factor
         errors.assert_not_awaited()
         with pytest.raises(RuntimeError, match="shut down"):
             await peer.receive_message(PeerMessage(sender="operator", content="late").model_dump())
+        # A relaunch of the same instance (e.g. a Manager retry) fails at startup.
+        registration = await manager.exchange_client.register_agent(ChemGraphPeer)
+        with pytest.raises(RuntimeError, match="not restartable"):
+            async with Runtime(peer, exchange_factory=factory, registration=registration):
+                pass
 
 
 @pytest.mark.asyncio
@@ -262,6 +267,10 @@ async def test_tool_ids_are_stable_per_instance_and_failures_propagate():
     with pytest.raises(TimeoutError, match="uncertain delivery"):
         await tool.ainvoke(invocation)
     assert handle.action.await_count == 5
+    handle.action.side_effect = None
+    handle.action.return_value = {"status": "accepted", "message_id": "other"}
+    with pytest.raises(RuntimeError, match="Invalid peer acknowledgement"):
+        await send_peer_message(handle, PeerMessage(sender="dispatcher", content="task"))
 
 
 @pytest.mark.asyncio
@@ -295,7 +304,9 @@ async def test_main_session_failure_waits_for_application_retry(tmp_path, monkey
 @pytest.mark.asyncio
 async def test_caller_owned_single_agent_run_retains_thread(tmp_path, monkeypatch):
     scripted_models(monkeypatch, {"worker": [
-        call("emt_energy", {"distance": 0.74}, "emt"), AIMessage(content="energy"), AIMessage(content="follow-up"),
+        call("emt_energy", {"distance": 0.74}, "emt"), AIMessage(content="energy"),
+        # A later turn may repeat the previous turn's last tool call.
+        call("emt_energy", {"distance": 0.74}, "emt-again"), AIMessage(content="follow-up"),
     ]})
     graph = ChemGraph(model_name="worker", workflow_type="single_agent", tools=[emt_energy],
                       enable_memory=False, log_dir=str(tmp_path))
@@ -313,6 +324,7 @@ async def test_caller_owned_single_agent_run_retains_thread(tmp_path, monkeypatc
         assert len(results) == 2
         snapshot = await graph.workflow.aget_state({"configurable": {"thread_id": "caller-owned"}})
         assert sum(m.type == "human" for m in snapshot.values["messages"]) == 2
+        assert sum(m.type == "tool" for m in snapshot.values["messages"]) == 2
 
 
 @pytest.mark.asyncio

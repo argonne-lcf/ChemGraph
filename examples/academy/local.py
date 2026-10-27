@@ -8,7 +8,7 @@ from academy.exchange import LocalExchangeFactory
 from academy.handle import Handle
 from academy.manager import Manager
 
-from chemgraph.academy import ChemGraphPeer, PeerMessage
+from chemgraph.academy import ChemGraphPeer, PeerMessage, send_peer_message
 from examples.academy.common import SessionHandler, console_call
 
 
@@ -28,7 +28,7 @@ async def main(model, work_dir):
 
         for distance in (0.74, 0.90):
             message = PeerMessage(sender="operator", content=f"Ask executor for H2 EMT energy at {distance} angstrom.")
-            print(await handles["planner"].action("receive_message", message.model_dump(mode="json")), flush=True)
+            print(await send_peer_message(handles["planner"], message), flush=True)
             # The first completed turn delegates; the later turn consumes the
             # executor's reply. Both turns use the same MainAgentSession.
             while (await handlers["planner"].completed.get()).sender != "executor":
