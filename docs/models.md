@@ -65,6 +65,29 @@ placeholder required by the client libraries. Argo routes do not read an
 explicit `api_key` or `OPENAI_API_KEY`, so OpenAI credentials are never sent to
 an Argo endpoint.
 
+Claude 5.5 models are available in the Argo model picker and through these
+identifiers:
+
+| Model | ChemGraph identifier | Production Argo ID |
+| --- | --- | --- |
+| Claude Opus 5.5 | `argo:claude-opus-5.5` | `claudeopus55` |
+| Claude Sonnet 5.5 | `argo:claude-sonnet-5.5` | `claudesonnet55` |
+| Claude Haiku 5.5 | `argo:claude-haiku-5.5` | `claudehaiku55` |
+
+For example, with `ARGO_USER` set as above:
+
+```bash
+chemgraph run --model argo:claude-sonnet-5.5 -q "Summarize the water molecule."
+```
+
+These models use Argo's Anthropic-native endpoint. ChemGraph omits sampling
+parameters, including any configured temperature, as required by these models.
+
+**HTML report limitation:** Claude Opus 5.5 rejects forced tool calls, which
+ChemGraph's optional HTML report generator currently uses. Leave `--report`
+disabled (or `generate_report=False` in Python) when selecting this model.
+See the [Opus 5.5 migration guide](https://platform.claude.com/docs/en/models/opus-5-5/migration-guide).
+
 ALCF-hosted inference routes use `ALCF_ACCESS_TOKEN`. Available endpoints and
 access policies are facility-managed, so use `chemgraph models` and the current
 ALCF service instructions rather than copying an old model name.
