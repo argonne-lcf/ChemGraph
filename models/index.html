@@ -631,6 +631,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#reasoning-effort" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reasoning effort
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#public-api-providers" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1678,6 +1689,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#reasoning-effort" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reasoning effort
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#public-api-providers" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1828,18 +1850,49 @@ workflow:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>chemgraph<span class="w"> </span>models
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>gpt-4o-mini<span class="w"> </span>--check-keys
 </code></pre></div>
+<h2 id="reasoning-effort">Reasoning effort<a class="headerlink" href="#reasoning-effort" title="Permanent link">&para;</a></h2>
+<p>ChemGraph exposes provider reasoning controls for a manually verified subset of
+Argo models:</p>
+<table>
+<thead>
+<tr>
+<th>Models</th>
+<th>Accepted values</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argo:gpt-5.6-luna</code>, <code>argo:gpt-5.6-sol</code>, <code>argo:gpt-5.6-terra</code></td>
+<td><code>none</code>, <code>low</code>, <code>medium</code>, <code>high</code>, <code>xhigh</code>, <code>max</code></td>
+<td><code>medium</code></td>
+</tr>
+<tr>
+<td><code>argo:claude-opus-4.8</code>, <code>argo:claude-opus-5</code>, <code>argo:claude-opus-5.5</code>, <code>argo:claude-sonnet-5.5</code>, <code>argo:claude-haiku-5.5</code></td>
+<td><code>low</code>, <code>medium</code>, <code>high</code>, <code>xhigh</code>, <code>max</code></td>
+<td><code>medium</code></td>
+</tr>
+</tbody>
+</table>
+<p>Select the effort for a run with <code>--reasoning-effort</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>argo:gpt-5.6-sol<span class="w"> </span>--reasoning-effort<span class="w"> </span>high<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>-q<span class="w"> </span><span class="s2">"Compare two reaction pathways."</span>
+</code></pre></div>
+<p>For Claude, ChemGraph forwards the value as Anthropic's overall response
+effort. It does not explicitly enable adaptive thinking. Other model IDs reject
+an explicit effort until their endpoint behavior has been verified.</p>
 <h2 id="public-api-providers">Public API providers<a class="headerlink" href="#public-api-providers" title="Permanent link">&para;</a></h2>
 <p>Set the provider's environment variable before launching ChemGraph:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">"..."</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># or ANTHROPIC_API_KEY, GEMINI_API_KEY, or GROQ_API_KEY</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">"..."</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># or ANTHROPIC_API_KEY, GEMINI_API_KEY, or GROQ_API_KEY</span>
 </code></pre></div>
 <p>Use the prefix shown by <code>chemgraph models</code> where one is required. Provider model
 catalogs change more frequently than ChemGraph releases; the CLI registry is
 the source of truth for identifiers supported by the installed version.</p>
 <h2 id="argonne-routes">Argonne routes<a class="headerlink" href="#argonne-routes" title="Permanent link">&para;</a></h2>
 <p>Argo routes use the <code>argo:</code> prefix and an Argonne username:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ARGO_USER</span><span class="o">=</span><span class="s2">"&lt;anl-username&gt;"</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>argo:gpt-4o<span class="w"> </span>-q<span class="w"> </span><span class="s2">"Summarize the water molecule."</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ARGO_USER</span><span class="o">=</span><span class="s2">"&lt;anl-username&gt;"</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>argo:gpt-4o<span class="w"> </span>-q<span class="w"> </span><span class="s2">"Summarize the water molecule."</span>
 </code></pre></div>
 <p>For every <code>argo:</code> model, ChemGraph resolves the identity from an explicit or
 configured <code>argo_user</code>, then <code>ARGO_USER</code>, and finally the internal <code>chemgraph</code>
@@ -1875,7 +1928,7 @@ identifiers:</p>
 </tbody>
 </table>
 <p>For example, with <code>ARGO_USER</code> set as above:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>argo:claude-sonnet-5.5<span class="w"> </span>-q<span class="w"> </span><span class="s2">"Summarize the water molecule."</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>argo:claude-sonnet-5.5<span class="w"> </span>-q<span class="w"> </span><span class="s2">"Summarize the water molecule."</span>
 </code></pre></div>
 <p>These models use Argo's Anthropic-native endpoint. ChemGraph omits sampling
 parameters, including any configured temperature, as required by these models.</p>
@@ -1888,8 +1941,8 @@ access policies are facility-managed, so use <code>chemgraph models</code> and t
 ALCF service instructions rather than copying an old model name.</p>
 <h2 id="local-ollama-models">Local Ollama models<a class="headerlink" href="#local-ollama-models" title="Permanent link">&para;</a></h2>
 <p>Start Ollama, pull a model supported by ChemGraph, then select it:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>ollama<span class="w"> </span>pull<span class="w"> </span>llama3.2
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>llama3.2<span class="w"> </span>-q<span class="w"> </span><span class="s2">"What is the formula of water?"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>ollama<span class="w"> </span>pull<span class="w"> </span>llama3.2
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>llama3.2<span class="w"> </span>-q<span class="w"> </span><span class="s2">"What is the formula of water?"</span>
 </code></pre></div>
 <p>Local models vary substantially in tool-calling reliability. See
 <a href="../running_local_models/">Local models</a> for limitations and advanced endpoints.</p>
