@@ -12,6 +12,18 @@ from chemgraph.cli.formatting import (
 from chemgraph.models.endpoints.codex import SPEC as CODEX_SPEC
 
 
+def test_list_models_displays_argo_claude55():
+    with console.capture() as capture:
+        list_models()
+    lines = capture.get().splitlines()
+    for model in (
+        "argo:claude-opus-5.5", "argo:claude-sonnet-5.5", "argo:claude-haiku-5.5",
+    ):
+        rows = [line for line in lines if model in line]
+        assert len(rows) == 1
+        assert "Argo (ANL)" in rows[0]
+
+
 def test_list_models_displays_codex_subscription():
     with console.capture() as capture:
         list_models()

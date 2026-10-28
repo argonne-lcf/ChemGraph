@@ -191,13 +191,16 @@ supported_argo_models = [
     "argo:gemini-3.1-flash-lite",
     "argo:gemini-3.5-flash",
     # Claude via Argo
+    "argo:claude-opus-5.5",
     "argo:claude-opus-5",
     "argo:claude-opus-4.8",
     "argo:claude-opus-4.7",
     "argo:claude-opus-4.6",
     "argo:claude-opus-4.5",
     "argo:claude-opus-4.1",
+    "argo:claude-haiku-5.5",
     "argo:claude-haiku-4.5",
+    "argo:claude-sonnet-5.5",
     "argo:claude-sonnet-5",
     "argo:claude-sonnet-4.6",
     "argo:claude-sonnet-4.5",
@@ -208,6 +211,9 @@ supported_argo_models = [
 # entries only after validating them against the deployed endpoint.
 MODELS_WITHOUT_TEMPERATURE = frozenset(
     {
+        "argo:claude-opus-5.5",
+        "argo:claude-sonnet-5.5",
+        "argo:claude-haiku-5.5",
         "argo:claude-sonnet-5",
         "argo:gpt-5.6-luna",
         "argo:gpt-5.6-sol",

@@ -1,6 +1,22 @@
 from __future__ import annotations
 
+import pytest
+
 from chemgraph.models.openai import _normalize_argo_model
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["argo:claude-opus-5.5", "argo:claude-sonnet-5.5", "argo:claude-haiku-5.5"],
+)
+@pytest.mark.parametrize(
+    "base_url",
+    ["http://127.0.0.1:18085/argoapi/v1", "https://proxy.example/v1"],
+)
+def test_claude55_custom_endpoint_strips_prefix(monkeypatch, model, base_url):
+    monkeypatch.delenv("CHEMGRAPH_ARGO_MODEL_FORMAT", raising=False)
+
+    assert _normalize_argo_model(model, base_url) == model.removeprefix("argo:")
 
 
 def test_local_argo_shim_keeps_openai_style_model_name(monkeypatch):
