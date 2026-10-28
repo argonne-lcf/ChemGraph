@@ -373,6 +373,17 @@ def test_deepagent_cli_boolean_flags():
     assert "shell commands are not confined to it" in help_text
 
 
+def test_reasoning_effort_cli_flag():
+    parser = cli_main.create_argument_parser()
+
+    assert (
+        parser.parse_args(["run", "--reasoning-effort", "xhigh"]).reasoning_effort
+        == "xhigh"
+    )
+    with pytest.raises(SystemExit):
+        parser.parse_args(["run", "--reasoning-effort", "fast"])
+
+
 def test_main_agent_query_failure_suggests_retry():
     session = _FakeMainSession([RuntimeError("temporary")])
 
@@ -638,6 +649,49 @@ def test_interactive_slash_model_and_workflow_switches(monkeypatch):
         ("Provider/Next-Model", "main_agent"),
         ("Provider/Next-Model", "single_agent"),
     ]
+
+
+def test_interactive_model_switch_uses_supported_reasoning_default(monkeypatch):
+    answers = iter(
+        [
+            "argo:gpt-5.6-sol",
+            "single_agent",
+            "/model argo:claude-opus-4.8",
+            "quit",
+        ]
+    )
+    agents = iter(
+        [
+            SimpleNamespace(session_id="gpt", reasoning_effort="none"),
+            SimpleNamespace(session_id="claude", reasoning_effort="medium"),
+        ]
+    )
+    initialization_calls = []
+
+    monkeypatch.setattr(
+        commands.Prompt,
+        "ask",
+        lambda *_args, **_kwargs: next(answers),
+    )
+
+    def fake_initialize(model, _workflow, *_args, **kwargs):
+        initialization_calls.append((model, kwargs["reasoning_effort"]))
+        return next(agents)
+
+    monkeypatch.setattr(commands, "initialize_agent", fake_initialize)
+
+    with console.capture() as capture:
+        commands.interactive_mode(
+            model="argo:gpt-5.6-sol",
+            generate_report=False,
+            reasoning_effort="none",
+        )
+
+    assert initialization_calls == [
+        ("argo:gpt-5.6-sol", "none"),
+        ("argo:claude-opus-4.8", "medium"),
+    ]
+    assert "Reasoning effort changed to 'medium'" in capture.get()
 
 
 def test_workflow_switch_recovers_from_checkpoint_open_failure(monkeypatch):
@@ -1369,6 +1423,7 @@ def _run_args(**overrides):
         "show_session": None,
         "delete_session": None,
         "config": None,
+        "query": None,
         "verbose": 0,
         "base_url": None,
         "model": "gpt-4o-mini",
@@ -1379,12 +1434,12 @@ def _run_args(**overrides):
         "output": "state",
         "report": False,
         "human_supervised": False,
+        "reasoning_effort": None,
         "recursion_limit": 20,
         "deepagent": None,
         "deepagent_workspace": None,
         "deepagent_skills": None,
         "deepagent_dangerously_skip_approvals": False,
-        "query": None,
         "output_file": None,
         "trace_dir": None,
         "checkpoint_db": None,
@@ -1532,6 +1587,68 @@ def test_main_agent_dispatches_persistent_resume(monkeypatch):
     cli_main._handle_run(_run_args(interactive=True, resume="old-thread"))
 
     assert captured["resume_session"] == "old-thread"
+
+
+@pytest.mark.parametrize("workflow", ["single_agent", "main_agent"])
+def test_noninteractive_run_forwards_reasoning_effort(monkeypatch, workflow):
+    captured = {}
+
+    def fake_initialize(*_args, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(session_id=None)
+
+    def fake_headless(**kwargs):
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(cli_main, "initialize_agent", fake_initialize)
+    monkeypatch.setattr(cli_main, "run_headless_main_agent", fake_headless)
+    monkeypatch.setattr(cli_main, "run_query", lambda *_args, **_kwargs: None)
+
+    with console.capture():
+        cli_main._handle_run(
+            _run_args(
+                model="argo:gpt-5.6-sol",
+                workflow=workflow,
+                query="Analyze water",
+                reasoning_effort="max",
+                dangerously_skip_approvals=workflow == "main_agent",
+            )
+        )
+
+    assert captured["reasoning_effort"] == "max"
+
+
+@pytest.mark.parametrize(
+    ("cli_value", "expected"),
+    [(None, "medium"), ("high", "high")],
+)
+def test_reasoning_effort_toml_and_cli_precedence(
+    monkeypatch,
+    tmp_path,
+    cli_value,
+    expected,
+):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        toml.dumps({"general": {"reasoning_effort": "medium"}})
+    )
+    captured = {}
+    monkeypatch.setattr(
+        cli_main,
+        "interactive_mode",
+        lambda **kwargs: captured.update(kwargs),
+    )
+
+    cli_main._handle_run(
+        _run_args(
+            config=str(config_path),
+            interactive=True,
+            reasoning_effort=cli_value,
+        )
+    )
+
+    assert captured["reasoning_effort"] == expected
 
 
 @pytest.mark.parametrize(

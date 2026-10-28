@@ -32,6 +32,7 @@ Common options:
 | --- | --- |
 | `-q`, `--query` | Natural-language request |
 | `-m`, `--model` | Provider/model identifier |
+| `--reasoning-effort` | Reasoning effort for a supported model |
 | `-w`, `--workflow` | Agent workflow; defaults to `single_agent` |
 | `-o`, `--output` | Full `state` or `last_message` |
 | `-s`, `--structured` | Request a structured final response |
@@ -85,6 +86,26 @@ them after CLI logging configuration. Library use alone does not configure this.
 
 The legacy no-subcommand form, such as `chemgraph -q "..."`, remains supported,
 but new scripts should use `chemgraph run`.
+
+### Reasoning effort
+
+Verified Argo GPT-5.6 and Claude models accept an explicit reasoning
+effort:
+
+```bash
+chemgraph run \
+  --model argo:claude-opus-4.8 \
+  --reasoning-effort xhigh \
+  --query "Analyze the reaction mechanism."
+```
+
+The GPT-5.6 routes accept `none`, `low`, `medium`, `high`, `xhigh`, and `max`.
+The Claude Opus 4.8, Opus 5, Opus 5.5, Sonnet 5.5, and Haiku 5.5 routes accept
+`low`, `medium`, `high`, `xhigh`, and `max`. Both model families default to
+`medium`. Claude effort controls overall response work through Anthropic's
+`output_config.effort`; it does not make ChemGraph explicitly enable adaptive
+thinking. The Claude 5.5 models think by default, and that thinking counts
+toward the response token limit.
 
 ## Validate credentials
 
