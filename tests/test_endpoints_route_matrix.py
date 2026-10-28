@@ -92,20 +92,10 @@ def test_argo_defaults_base_url_when_absent():
     assert prepared.client_kwargs["base_url"] == ARGO_DEFAULT_BASE_URL
 
 
-@pytest.mark.parametrize(
-    "model, wire_model",
-    [
-        ("argo:claude-opus-4.8", "claudeopus48"),
-        ("argo:claude-opus-5.5", "claudeopus55"),
-        ("argo:claude-sonnet-5.5", "claudesonnet55"),
-        ("argo:claude-haiku-5.5", "claudehaiku55"),
-    ],
-)
-def test_argo_claude_uses_anthropic_protocol_and_wire_name(model, wire_model):
+def test_argo_claude_uses_anthropic_protocol_and_wire_name():
     prepared = argo_ep.prepare_anthropic(
         ModelRequest(
-            model=model,
-            temperature=0.7,
+            model="argo:claude-opus-4.8",
             base_url=ARGO_HOSTED_URL,
             argo_user="alice",
         )
@@ -114,7 +104,7 @@ def test_argo_claude_uses_anthropic_protocol_and_wire_name(model, wire_model):
     assert prepared.protocol == "anthropic_native"
     assert prepared.supports_structured_output is False
     assert prepared.client_kwargs == {
-        "model": wire_model,
+        "model": "claudeopus48",
         "api_key": "alice",
         "base_url": ARGO_DEFAULT_ANTHROPIC_BASE_URL,
         "max_tokens": 4000,

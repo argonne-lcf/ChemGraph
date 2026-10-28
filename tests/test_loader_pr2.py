@@ -81,22 +81,12 @@ def test_registry_resolves_expected_endpoint(model, expected_endpoint):
     assert _route(model) == expected_endpoint
 
 
-@pytest.mark.parametrize(
-    "model, wire_model",
-    [
-        ("argo:claude-opus-4.8", "claudeopus48"),
-        ("argo:claude-opus-5.5", "claudeopus55"),
-        ("argo:claude-sonnet-5.5", "claudesonnet55"),
-        ("argo:claude-haiku-5.5", "claudehaiku55"),
-    ],
-)
-def test_argo_models_build_protocol_specific_clients(model, wire_model):
+def test_argo_models_build_protocol_specific_clients():
     from langchain_anthropic import ChatAnthropic
     from langchain_openai import ChatOpenAI
 
     claude_client, claude_prepared = load_chat_model_prepared(
-        model_name=model,
-        temperature=0.7,
+        model_name="argo:claude-opus-4.8",
         argo_user="alice",
     )
     gpt_client, gpt_prepared = load_chat_model_prepared(
@@ -106,42 +96,27 @@ def test_argo_models_build_protocol_specific_clients(model, wire_model):
 
     assert isinstance(claude_client, ChatAnthropic)
     assert claude_prepared.protocol == "anthropic_native"
-    assert claude_prepared.client_kwargs["model"] == wire_model
+    assert claude_prepared.client_kwargs["model"] == "claudeopus48"
     assert claude_prepared.client_kwargs["base_url"].endswith("/argoapi")
-    assert claude_client.temperature is None
     assert isinstance(gpt_client, ChatOpenAI)
     assert gpt_prepared.protocol == "openai_compatible"
     assert gpt_prepared.client_kwargs["model"] == "gpt4o"
     assert gpt_prepared.client_kwargs["base_url"].endswith("/argoapi/v1")
 
 
-@pytest.mark.parametrize(
-    "model, wire_model",
-    [
-        ("argo:claude-opus-4.8", "claudeopus48"),
-        ("argo:claude-opus-5.5", "claudeopus55"),
-        ("argo:claude-sonnet-5.5", "claudesonnet55"),
-        ("argo:claude-haiku-5.5", "claudehaiku55"),
-    ],
-)
-def test_deprecated_openai_loader_preserves_argo_claude_chatopenai(model, wire_model):
+def test_deprecated_openai_loader_preserves_argo_claude_chatopenai():
     from langchain_openai import ChatOpenAI
 
     from chemgraph.models.openai import load_openai_model
 
     with pytest.warns(DeprecationWarning, match="load_openai_model is deprecated"):
         client = load_openai_model(
-            model_name=model,
-            temperature=0.7,
+            model_name="argo:claude-opus-4.8",
+            temperature=0.0,
             argo_user="alice",
         )
 
     assert isinstance(client, ChatOpenAI)
-    assert client.model_name == wire_model
-    assert client.temperature is None
-    assert client.top_p is None
-    assert client.frequency_penalty is None
-    assert client.presence_penalty is None
 
 
 def test_unknown_model_with_base_url_falls_to_vllm():

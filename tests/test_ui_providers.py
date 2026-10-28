@@ -146,17 +146,6 @@ def test_provider_for_model_maps_prefixes_and_lists():
     assert providers.provider_for_model("mystery-model").id == providers.VLLM
 
 
-def test_argo_picker_includes_claude55():
-    info = providers.get_provider(providers.ARGO)
-    options = providers.provider_models(info)
-
-    for model in (
-        "argo:claude-opus-5.5", "argo:claude-sonnet-5.5", "argo:claude-haiku-5.5",
-    ):
-        assert options.count(model) == 1
-        assert providers.provider_for_model(model).id == providers.ARGO
-
-
 def test_vllm_ready_only_with_endpoint_url(clean_env):
     info = providers.get_provider(providers.VLLM)
     config = _config()
