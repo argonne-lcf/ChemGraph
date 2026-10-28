@@ -71,7 +71,7 @@ dependencies = [
     "PyYAML==6.0.3",
     "markdown-it-py==4.2.0",
     "toml==0.10.2",
-    "mcp==1.28.1",
+    "mcp==1.30.0",
     "fastmcp==3.4.4",
     "pytest-asyncio",
     "grandalf==0.8"
