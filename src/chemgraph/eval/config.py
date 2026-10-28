@@ -1,7 +1,7 @@
 """Configuration models for ChemGraph evaluation benchmarks."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import toml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -142,6 +142,26 @@ class BenchmarkConfig(BaseModel):
         default_factory=list, description="Select query IDs before applying max_queries.",
     )
 
+    eval_runtime: Literal["local", "podman"] = "local"
+    podman_image: Optional[str] = None
+    podman_proxy_image: Optional[str] = None
+    podman_cpus: float = Field(default=4, gt=0, allow_inf_nan=False)
+    podman_memory_gb: float = Field(default=8, gt=0, allow_inf_nan=False)
+    query_timeout_seconds: float = Field(default=1800, gt=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def validate_runtime(self):
+        if self.eval_runtime == "podman":
+            if self.workflow_types != ["deep_agent"]:
+                raise ValueError("Podman evaluation supports only the deep_agent workflow")
+            if not self.podman_image or not self.podman_proxy_image:
+                raise ValueError("Podman evaluation requires worker and proxy images")
+            if self.deepagent_workspace:
+                raise ValueError("Podman evaluation uses private volumes; omit deepagent_workspace")
+            if any(not model.startswith("argo:") for model in self.models):
+                raise ValueError("Podman evaluation supports only hosted Argo models")
+        return self
+
     @model_validator(mode="after")
     def validate_deepagent(self):
         """Resolve the shared output root and validate Deep Agent options."""
@@ -153,8 +173,9 @@ class BenchmarkConfig(BaseModel):
                     "(deepagent_auto_approve=True in Python). Evaluation has no "
                     "interactive approval handler."
                 )
-            root = self.deepagent_workspace or Path(self.output_dir) / "logs"
-            self.deepagent_workspace = str(Path(root).expanduser().resolve())
+            if self.eval_runtime == "local":
+                root = self.deepagent_workspace or Path(self.output_dir) / "logs"
+                self.deepagent_workspace = str(Path(root).expanduser().resolve())
             if self.judge_type in ("structured", "both") and not self.structured_output:
                 raise ValueError("Deep Agent structured judging requires structured_output.")
         elif self.deepagent_auto_approve or self.deepagent_workspace:
@@ -368,6 +389,8 @@ class BenchmarkConfig(BaseModel):
             "deepagent_workspace",
             "deepagent_auto_approve",
             "query_ids",
+            "eval_runtime", "podman_image", "podman_proxy_image", "podman_cpus",
+            "podman_memory_gb", "query_timeout_seconds",
         ]
         for key in _direct:
             if key in prof:
