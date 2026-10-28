@@ -274,6 +274,8 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="MCP server command for stdio transport (e.g. 'python -m chemgraph.mcp.mcp_tools')",
     )
+    parser.add_argument("--mcp-token-env", default=None,
+                        help="Environment variable containing this HTTP MCP server's bearer token.")
     parser.add_argument(
         "--mcp-server-name",
         type=str,
@@ -316,6 +318,10 @@ Examples:
     )
 
     subparsers = parser.add_subparsers(dest="command")
+
+    from chemgraph.mcp.service.cli import add_service_args
+
+    add_service_args(subparsers.add_parser("mcp", help="Run or administer the persistent MCP service."))
 
     # ---- "run" subcommand ------------------------------------------------
     run_parser = subparsers.add_parser(
@@ -767,6 +773,7 @@ def _handle_run(args: argparse.Namespace) -> None:
             command=mcp_command,
             server_name=mcp_server_name,
             verbose=(args.verbose > 0),
+            token_env=getattr(args, "mcp_token_env", None) or config.get("mcp_token_env"),
         )
         if mcp_tools is None:
             sys.exit(1)
@@ -1053,6 +1060,11 @@ def main() -> None:
 
     elif args.command == "academy":
         _handle_academy(args)
+
+    elif args.command == "mcp":
+        from chemgraph.mcp.service.cli import run_service
+
+        run_service(args)
 
     elif args.command == "run":
         _handle_run(args)
