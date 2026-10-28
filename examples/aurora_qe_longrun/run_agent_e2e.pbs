@@ -1,0 +1,90 @@
+#!/bin/bash
+#PBS -A ChemGraph
+#PBS -q debug
+#PBS -l select=1:ncpus=208
+#PBS -l walltime=00:30:00
+#PBS -l filesystems=home:flare
+#PBS -N qe_agent_e2e
+#PBS -j oe
+
+# Route 2 (full agent stack) end-to-end validation of cap -> manifest -> resume on
+# real Quantum ESPRESSO DFT. Runs run1 (capped) THEN resume, as two SEPARATE python
+# processes in one allocation, in a FRESH work dir so the manifest is clean. The two
+# stages being separate processes is what makes M3 a real test: resume must adopt
+# run1's log_dir from the persisted session DB, not inherit run1's in-memory state.
+#
+# Submit from this directory:  qsub run_agent_e2e.pbs
+#
+# ====================== EDIT ME (site-specific) ==============================
+# These defaults are for ALCF Aurora (PBS + oneAPI + the ALCF LLM inference API).
+# To port to another HPC, change: the #PBS directives above (account/queue; use
+# #SBATCH on a Slurm site), the `module load` lines, QE_BIN, ESPRESSO_PSEUDO, PY,
+# and the LLM/proxy block. See README.md "Porting to another HPC".
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+
+echo "Jobid: $PBS_JOBID"
+echo "Host:  $(hostname)"
+
+for m in oneapi/release oneapi/eng-compiler; do
+  module is-loaded "$m" 2>/dev/null && module unload "$m" 2>/dev/null || true
+done
+module load oneapi/release/2025.3.1 mpich/opt/develop-git.6037a7a
+module load hdf5/1.14.6
+module list 2>&1 | tail -6
+
+export MPIR_CVAR_CH4_XPMEM_ENABLE=0
+export MPIR_CVAR_ENABLE_GPU=0
+export FI_CXI_DEFAULT_CQ_SIZE=131072
+export FI_CXI_CQ_FILL_PERCENT=20
+export OMP_NUM_THREADS=1
+
+# Aurora compute nodes have NO direct outbound network -- the agent's LLM call to
+# inference-api.alcf.anl.gov must go through the ALCF HTTP proxy (httpx/openai read
+# *_PROXY from the env). Keep localhost + the HSN fabric off the proxy so MPI/pw.x
+# sockets stay local. (Not needed if your LLM endpoint is directly reachable.)
+export HTTPS_PROXY="http://proxy.alcf.anl.gov:3128"
+export HTTP_PROXY="http://proxy.alcf.anl.gov:3128"
+export https_proxy="http://proxy.alcf.anl.gov:3128"
+export http_proxy="http://proxy.alcf.anl.gov:3128"
+export no_proxy="localhost,127.0.0.1,.hsn.cm.aurora.alcf.anl.gov"
+export NO_PROXY="$no_proxy"
+
+QE_BIN=/soft/applications/quantum_espresso/7.5-oneapi2025.0.5/cpu/bin/pw.x
+NRANKS=8
+export ASE_ESPRESSO_COMMAND="mpiexec -np ${NRANKS} -ppn ${NRANKS} -d 1 ${QE_BIN}"
+export ESPRESSO_PSEUDO="${ESPRESSO_PSEUDO:-$HOME/qe_pseudo}"
+
+export QE_CAP_WINDOW="${QE_CAP_WINDOW:-40}"
+export QE_CAP_MARGIN="${QE_CAP_MARGIN:-8}"
+export QE_LLM_MODEL="${QE_LLM_MODEL:-openai/gpt-oss-120b}"
+
+# Python that has chemgraph installed. Point PY at your environment.
+PY="${PY:-$HOME/chemgraph-env/bin/python}"
+
+# FRESH per-job work dir keeps run1's manifest uncontaminated by prior attempts.
+# Both stages share it so resume finds session_id.txt; neither pins
+# CHEMGRAPH_LOG_DIR, so the agent picks its own dir (M3 must bring resume home).
+export WORK_DIR="$PBS_O_WORKDIR/agent_e2e_${PBS_JOBID%%.*}"
+mkdir -p "$WORK_DIR"
+
+echo "--- proxy probe: inference-api.alcf.anl.gov via $HTTPS_PROXY ---"
+if curl -sS -o /dev/null -w "probe HTTP %{http_code} in %{time_total}s\n" \
+     --max-time 20 https://inference-api.alcf.anl.gov/ ; then
+  echo "proxy probe reached the endpoint (any HTTP code = TCP+TLS OK)"
+else
+  echo "PROXY PROBE FAILED (rc=$?) -- compute node cannot reach the LLM endpoint"
+  exit 1
+fi
+
+echo "WORK_DIR=$WORK_DIR  window=$QE_CAP_WINDOW margin=$QE_CAP_MARGIN model=$QE_LLM_MODEL"
+
+echo "########## STAGE 1: run1 (capped) ##########"
+"$PY" "$PBS_O_WORKDIR/qe_agent_e2e.py" run1
+echo "=== run1 done ==="
+
+echo "########## STAGE 2: resume (uncapped, fresh process) ##########"
+"$PY" "$PBS_O_WORKDIR/qe_agent_e2e.py" resume
+echo "=== resume done ==="
+
+echo "=== agent e2e (run1+resume) done ==="
