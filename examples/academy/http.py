@@ -4,7 +4,13 @@ import argparse
 import asyncio
 import os
 import shlex
+import sys
 from contextlib import AsyncExitStack
+from pathlib import Path
+
+if __package__ in (None, ""):
+    # Keep this script from shadowing the standard-library http package.
+    sys.path[0] = str(Path(__file__).resolve().parents[2])
 
 from academy.exchange import HttpExchangeFactory
 from academy.exchange.cloud.client import HttpAgentRegistration

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -19,13 +20,32 @@ from academy.manager import Manager
 from academy.runtime import Runtime, RuntimeConfig
 from academy.serialize import SerializationStrategy
 from aiohttp.test_utils import TestServer
+from ase import Atoms
+from ase.calculators.emt import EMT
+from ase.io import read, write
 from langchain_core.messages import AIMessage
 
 from chemgraph.academy import ChemGraphPeer, PeerMessage, make_peer_message_tool, send_peer_message
 from chemgraph.agent.llm_agent import ChemGraph
+from chemgraph.memory.store import SessionStore
 from chemgraph.models.endpoints import PreparedModel
-from examples.academy.common import SessionHandler, emt_energy
+from chemgraph.tools.ase_tools import run_ase
+from examples.academy.common import SessionHandler
 from tests.test_main_agent import _ScriptedChatModel
+
+
+@pytest.mark.parametrize("example", ["local", "http"])
+@pytest.mark.parametrize("as_module", [False, True])
+def test_example_entry_points_do_not_shadow_stdlib_http(example, as_module):
+    command = (["-m", f"examples.academy.{example}"] if as_module
+               else [f"examples/academy/{example}.py"])
+    result = subprocess.run(
+        [sys.executable, *command, "--help"],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "usage:" in result.stdout
 
 
 @pytest_asyncio.fixture(params=["local", "http"])
@@ -157,8 +177,94 @@ def call(name, args, call_id):
     return AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": call_id}])
 
 
+def energy_call(structure, results, call_id):
+    return call("run_ase", {"params": {
+        "input_structure_file": str(structure), "output_results_file": str(results),
+        "driver": "energy", "calculator": {"calculator_type": "emt"},
+    }}, call_id)
+
+
+def peer_responses(name):
+    if name == "planner":
+        return [item for i in range(2) for item in (
+            call("send_peer_message", {"recipient": "executor", "content": f"energy {i}"}, f"request-{i}"),
+            AIMessage(content="delegated"), AIMessage(content=f"summary {i}"),
+        )]
+    return [item for i, distance in enumerate((0.74, 0.90)) for item in (
+        call("search_tools", {"query": "save_atomsdata_to_file run_ase"}, f"search-{i}"),
+        call("load_tools", {"names": ["save_atomsdata_to_file", "run_ase"]}, f"load-{i}"),
+        call("save_atomsdata_to_file", {
+            "atomsdata": {"numbers": [1, 1], "positions": [[0, 0, 0], [0, 0, distance]]},
+            "fname": f"h2-{distance:.2f}.xyz",
+        }, f"structure-{i}"),
+        energy_call(f"h2-{distance:.2f}.xyz", f"h2-{distance:.2f}.json", f"emt-{i}"),
+        call("send_peer_message", {"recipient": "planner", "content": ""}, f"reply-{i}"),
+        AIMessage(content="sent"),
+    )]
+
+
+class _PeerChatModel(_ScriptedChatModel):
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        result = super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+        for tool_call in result.generations[0].message.tool_calls:
+            if tool_call["name"] == "send_peer_message" and tool_call["args"]["recipient"] == "planner":
+                # Reply with the real tool output, including its file path.
+                energy = next(m for m in reversed(messages) if m.type == "tool" and m.name == "run_ase")
+                request = next(m for m in reversed(messages) if m.type == "human")
+                tool_call["args"].update(content=energy.content,
+                                         reply_to=json.loads(request.content.split("\n", 1)[1])["message_id"])
+        return result
+
+
+async def approve_native_tools(_function, payload):
+    actions = payload["action_requests"]
+    assert actions and all(action["name"] in {"save_atomsdata_to_file", "run_ase"} for action in actions)
+    return {"decisions": [{"type": "approve"} for _ in actions]}
+
+
+def assert_peer_histories(directory):
+    sessions = {}
+    for name, count in (("planner", 4), ("executor", 2)):
+        database = directory / name / "sessions.db"
+        assert database.is_file()
+        store = SessionStore(str(database))
+        summaries = store.list_sessions()
+        assert len(summaries) == 1
+        session = store.get_session(summaries[0].session_id)
+        assert session.status == "completed"
+        assert session.model_name == name
+        assert sum(m.role == "human" for m in session.messages) == count
+        assert session.messages[-1].content == ("summary 1" if name == "planner" else "sent")
+        sessions[name] = session
+    assert sessions["planner"].session_id != sessions["executor"].session_id
+    results = [json.loads(m.content) for m in sessions["executor"].messages if m.tool_name == "run_ase"]
+    assert len(results) == 2
+    requests = [json.loads(m.content.split("\n", 1)[1]) for m in sessions["executor"].messages if m.role == "human"]
+    replies = [json.loads(m.content.split("\n", 1)[1]) for m in sessions["planner"].messages
+               if m.role == "human" and json.loads(m.content.split("\n", 1)[1])["sender"] == "executor"]
+    assert [json.loads(reply["content"]) for reply in replies] == results
+    assert [reply["reply_to"] for reply in replies] == [request["message_id"] for request in requests]
+    for result, distance in zip(results, (0.74, 0.90), strict=True):
+        structure = directory / "executor" / f"h2-{distance:.2f}.xyz"
+        atoms = read(structure)
+        assert atoms.get_chemical_formula() == "H2"
+        assert atoms.get_distance(0, 1) == pytest.approx(distance)
+        atoms.calc = EMT()
+        assert result["status"] == "success"
+        assert result["driver"] == "energy"
+        assert result["energy_unit"] == "eV"
+        assert result["potential_energy"] == pytest.approx(atoms.get_potential_energy())
+        assert result["results_file"] == str(directory / "executor" / f"h2-{distance:.2f}.json")
+        saved = json.loads(Path(result["results_file"]).read_text())
+        assert saved["success"] is True
+        assert saved["energy_unit"] == "eV"
+        assert saved["potential_energy"] == result["potential_energy"]
+    assert results[0]["potential_energy"] != results[1]["potential_energy"]
+    assert not list((directory / "planner").glob("h2-*"))
+
+
 def scripted_models(monkeypatch, responses):
-    models = {name: _ScriptedChatModel(responses=items) for name, items in responses.items()}
+    models = {name: _PeerChatModel(responses=items) for name, items in responses.items()}
 
     def load(**kwargs):
         name = kwargs["model_name"]
@@ -170,17 +276,9 @@ def scripted_models(monkeypatch, responses):
 
 @pytest.mark.asyncio
 async def test_real_workflows_delegate_emt_reply_and_accept_subsequent_work(factory, tmp_path, monkeypatch):
-    models = scripted_models(monkeypatch, {
-        "planner": [item for i in range(2) for item in (
-            call("send_peer_message", {"recipient": "executor", "content": f"energy {i}"}, f"request-{i}"),
-            AIMessage(content="delegated"), AIMessage(content=f"summary {i}"),
-        )],
-        "executor": [item for i in range(2) for item in (
-            call("emt_energy", {"distance": 0.74 + i * 0.16}, f"emt-{i}"),
-            call("send_peer_message", {"recipient": "planner", "content": f"result {i}"}, f"reply-{i}"),
-            AIMessage(content="sent"),
-        )],
-    })
+    models = scripted_models(monkeypatch, {name: peer_responses(name) for name in ("planner", "executor")})
+    approvals = AsyncMock(side_effect=approve_native_tools)
+    monkeypatch.setattr("examples.academy.common.console_call", approvals)
     handlers, peers = {}, {}
     async with await Manager.from_exchange_factory(factory) as manager:
         registrations = {name: await manager.exchange_client.register_agent(ChemGraphPeer) for name in models}
@@ -205,10 +303,9 @@ async def test_real_workflows_delegate_emt_reply_and_accept_subsequent_work(fact
             assert handler.agent.approval_mode == "review"
             snapshot = await handler.agent.workflow.aget_state(handler.session.config)
             assert sum(m.type == "human" for m in snapshot.values["messages"]) == count
-        results = [json.loads(m.content) for m in snapshot.values["messages"] if m.type == "tool" and m.name == "emt_energy"]
-        assert len(results) == 2
-        assert results[0] == emt_energy.invoke({"distance": 0.74})
-        assert results[0]["potential_energy"] != results[1]["potential_energy"]
+        assert [action["name"] for args in approvals.call_args_list
+                for action in args.args[1]["action_requests"]] == ["save_atomsdata_to_file", "run_ase"] * 2
+        assert_peer_histories(tmp_path)
 
 
 @pytest.mark.asyncio
@@ -303,12 +400,14 @@ async def test_main_session_failure_waits_for_application_retry(tmp_path, monkey
 
 @pytest.mark.asyncio
 async def test_caller_owned_single_agent_run_retains_thread(tmp_path, monkeypatch):
+    structure = tmp_path / "h2.xyz"
+    write(structure, Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]]))
     scripted_models(monkeypatch, {"worker": [
-        call("emt_energy", {"distance": 0.74}, "emt"), AIMessage(content="energy"),
+        energy_call(structure, tmp_path / "energy.json", "emt"), AIMessage(content="energy"),
         # A later turn may repeat the previous turn's last tool call.
-        call("emt_energy", {"distance": 0.74}, "emt-again"), AIMessage(content="follow-up"),
+        energy_call(structure, tmp_path / "energy.json", "emt-again"), AIMessage(content="follow-up"),
     ]})
-    graph = ChemGraph(model_name="worker", workflow_type="single_agent", tools=[emt_energy],
+    graph = ChemGraph(model_name="worker", workflow_type="single_agent", tools=[run_ase],
                       enable_memory=False, log_dir=str(tmp_path))
     results = []
 
@@ -324,7 +423,11 @@ async def test_caller_owned_single_agent_run_retains_thread(tmp_path, monkeypatc
         assert len(results) == 2
         snapshot = await graph.workflow.aget_state({"configurable": {"thread_id": "caller-owned"}})
         assert sum(m.type == "human" for m in snapshot.values["messages"]) == 2
-        assert sum(m.type == "tool" for m in snapshot.values["messages"]) == 2
+        calculations = [json.loads(m.content) for m in snapshot.values["messages"] if m.type == "tool"]
+        assert len(calculations) == 2
+        assert all(result["status"] == "success" for result in calculations)
+        assert calculations[0]["potential_energy"] == calculations[1]["potential_energy"]
+        assert json.loads((tmp_path / "energy.json").read_text())["success"] is True
 
 
 @pytest.mark.asyncio
@@ -335,25 +438,14 @@ async def test_http_example_in_separate_processes(tmp_path):
 import asyncio
 import sys
 from types import SimpleNamespace
-from langchain_core.messages import AIMessage
 import chemgraph.agent.llm_agent as agent_module
 from chemgraph.models.endpoints import PreparedModel
-from tests.test_main_agent import _ScriptedChatModel
-from tests.test_academy_peer import call
+from tests.test_academy_peer import _PeerChatModel, approve_native_tools, peer_responses
+import examples.academy.common as common
 from examples.academy.http import main
 name, url, directory = sys.argv[1:]
-if name == "planner":
-    responses = [item for i in range(2) for item in (
-        call("send_peer_message", {"recipient": "executor", "content": f"energy {i}"}, f"request-{i}"),
-        AIMessage(content="delegated"), AIMessage(content=f"summary {i}"),
-    )]
-else:
-    responses = [item for i in range(2) for item in (
-        call("emt_energy", {"distance": 0.74 + i * 0.16}, f"emt-{i}"),
-        call("send_peer_message", {"recipient": "planner", "content": f"energy {i}"}, f"reply-{i}"),
-        AIMessage(content="sent"),
-    )]
-model = _ScriptedChatModel(responses=responses)
+common.console_call = approve_native_tools
+model = _PeerChatModel(responses=peer_responses(name))
 agent_module.load_chat_model_prepared = lambda **kwargs: (
     model, PreparedModel(endpoint_name=name, protocol="openai_compatible", client_kwargs={"model": name}))
 asyncio.run(main(SimpleNamespace(command="run", name=name, url=url, work_dir=directory, model=name)))
@@ -393,6 +485,7 @@ asyncio.run(main(SimpleNamespace(command="run", name=name, url=url, work_dir=dir
                 await handle.shutdown()
                 output, _ = await asyncio.wait_for(processes[name].communicate(), 10)
                 assert processes[name].returncode == 0, output.decode()
+            assert_peer_histories(tmp_path)
         finally:
             for process in processes.values():
                 if process.returncode is None:
