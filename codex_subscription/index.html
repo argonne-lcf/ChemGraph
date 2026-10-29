@@ -1850,7 +1850,7 @@ across model calls so the model can reason from the actual operations performed.
   read the image through Codex.</li>
 <li><code>main_agent</code> supports interactive or explicitly authorized headless execution and can restore its supervisor checkpoint;
   individual Codex calls still start fresh read-only threads.</li>
-<li>The integration pins <code>openai-codex==0.144.4</code>; check the installed ChemGraph
+<li>The integration pins <code>openai-codex==0.163.0</code>; check the installed ChemGraph
   release before changing that dependency.</li>
 <li>ChemGraph starts ephemeral, read-only Codex threads. ChemGraph's graph executes
   all exposed tools; Codex supplies model decisions.</li>
@@ -1858,7 +1858,7 @@ across model calls so the model can reason from the actual operations performed.
   <code>codex:</code> model.</li>
 </ul>
 <p>Model availability and account behavior depend on your ChatGPT account and
-installed Codex CLI; consult the official documentation linked above.</p>
+the SDK's bundled Codex runtime; consult the official documentation linked above.</p>
 
 
 
