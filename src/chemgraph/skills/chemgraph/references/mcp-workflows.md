@@ -27,5 +27,7 @@ and result-reading tools. Job tools include `check_job_status`,
    or submission does not establish successful calculation completion.
 
 For unavailable capabilities, describe the missing tool or setup requirement.
-Do not generate an alternative unapproved shell simulation to bypass missing
-chemistry tools or the workspace worker's role.
+A Python or CLI alternative may be used when permitted by the user's selected
+execution method and the environment's tool and execution permissions. Do not
+switch away from an explicitly requested MCP workflow or use a fallback to
+bypass a rejected action or execution restriction.

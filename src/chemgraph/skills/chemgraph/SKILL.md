@@ -10,24 +10,26 @@ metadata:
 # Use ChemGraph
 
 1. Identify the requested calculation, input structures, calculator/model,
-   execution system, and output location. Inspect attached tool schemas before
-   selecting arguments. Ask for missing scientific choices rather than inventing
-   them; do not replace the requested calculator with another one silently.
+   execution system, and output location. Preserve explicit scientific choices.
+   For omitted choices, use configured or schema defaults for the selected
+   execution environment; ask only for required information that remains
+   unresolved. Inspect the selected interface's schemas before choosing arguments.
 2. Use native chemistry tools for supported local operations. When discovery is
    available, search/load the needed tools before considering scripts or reading
    their implementation source. Scripts can reuse ChemGraph's Python APIs when
    a capability is unavailable or a separate batch script is needed.
-   Preserve an explicitly requested execution method. Report missing dependencies.
-   This skill does not grant tools or override approvals.
-3. Follow the instructions for the selected route:
+   Report missing dependencies. This skill does not grant tools or override
+   approvals.
+3. Preserve the user's selected execution method. Otherwise, choose a route based
+   on the available tools and execution host:
    - Local chemistry tools: use [MCP workflow guidance](references/mcp-workflows.md)
      for attached tools, or [Python and CLI guidance](references/python-and-cli.md)
      when using those interfaces.
    - Direct PBS on an authorized submission host: use
      [the ASE batch example](references/ase-batch.md) and
      [pbs-hpc](../pbs-hpc/SKILL.md); no chemistry MCP server or Parsl is required.
-   - Remote submission from a host without `qsub`: use
-     [iri-hpc](../iri-hpc/SKILL.md) for ALCF jobs.
+   - ALCF submission through the IRI API, including from a host without `qsub`:
+     use [iri-hpc](../iri-hpc/SKILL.md).
    When inputs need construction, follow
    [local structure preparation](references/structure-preparation.md).
 4. Establish where every file lives: the agent's virtual filesystem, its shell,

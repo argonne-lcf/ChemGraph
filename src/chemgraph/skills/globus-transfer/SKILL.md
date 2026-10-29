@@ -55,13 +55,16 @@ record/task and resume it; never generate a replacement submission ID.
   after `globus task show` reports a terminal state for any known task, and the
   active-task listing in the recipes succeeds with an empty result. A failed listing
   leaves the outcome uncertain.
+- Report a failed or paused task with `globus task event-list`.
+- Never delete files at either end unless the user asks.
+
+For tracked HPC runs:
+
 - Stage only before job submission. Once the run directory has `submission.started`
   or `job.id` or `submission.history`, never transfer into its remote counterpart
   again, including after resolving a rejected submission.
 - Collect into a subdirectory such as `RUN_DIR/outputs/`, never into the run
   directory itself, so a transfer cannot overwrite job markers or inputs.
-- Report a failed or paused task with `globus task event-list`.
-- Never delete files at either end unless the user asks.
 
 For other operations, consult the [Globus CLI reference](https://docs.globus.org/cli/)
 and [ALCF's Globus guide](https://docs.alcf.anl.gov/data-management/data-transfer/using-globus/).

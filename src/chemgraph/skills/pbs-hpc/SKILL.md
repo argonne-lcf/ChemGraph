@@ -19,10 +19,11 @@ allocation, endpoint, private path, or environment.
 
 Check whether `execute` runs on that host. A local shell on a laptop cannot run
 remote PBS commands merely because a skill or an HPC MCP server is attached.
-When the shell runs on the submission host, write the job files and submit with
-PBS commands directly. Otherwise use [iri-hpc](../iri-hpc/SKILL.md) for ALCF remote
-submission, suitable attached HPC tools, or prepare the script and state where
-the user must submit it. Preserve the user's selected execution method.
+Preserve the user's selected execution method. If none was selected and the shell
+runs on the submission host, write the job files and submit with PBS commands
+directly. For remote submission, use [iri-hpc](../iri-hpc/SKILL.md) for ALCF jobs
+or suitable attached HPC tools. If submission is unavailable, prepare the script
+and state where the user must submit it.
 
 Read the applicable site-reference sections before choosing launch settings:
 [Polaris](references/polaris.md), [Aurora](references/aurora.md), or

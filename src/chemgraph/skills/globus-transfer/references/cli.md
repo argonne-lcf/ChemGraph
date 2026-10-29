@@ -21,12 +21,15 @@ BASH
 
 ## Record and submit a transfer
 
+For IRI staging, use the exact SOURCE and DESTINATION values printed by the
+iri-hpc Stage recipe. For other transfers, use the selected collections and paths.
+
 ```bash
 exec bash /dev/fd/3 3<<'BASH' </dev/null
 STATE=...        # state directory outside the transferred tree, e.g. <workspace>/.globus
 LABEL=...        # unique per run and direction, e.g. run-001-stage-in
-SOURCE=...       # literal SOURCE value printed by the iri-hpc Stage recipe
-DESTINATION=...  # literal DESTINATION value printed by the iri-hpc Stage recipe
+SOURCE=...       # configured source collection:path
+DESTINATION=...  # configured destination collection:path
 mkdir -p "$STATE"
 set -C       # refuse to overwrite an existing record
 sid=$(globus task generate-submission-id) && [ -n "$sid" ] &&

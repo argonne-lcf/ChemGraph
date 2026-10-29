@@ -1,6 +1,6 @@
 ---
 name: iri-hpc
-description: Stage, submit, monitor, cancel, and collect ALCF PBS jobs through the IRI Facility API v2 with curl and alcf-tokens, from a host without SSH or qsub. Use for remote ChemGraph calculations on Polaris, Aurora, or Crux via IRI.
+description: Stage, submit, monitor, cancel, and collect ALCF PBS jobs through the IRI Facility API v2 with curl and alcf-tokens. Use for remote ChemGraph calculations on Polaris, Aurora, or Crux when IRI is requested or direct qsub is unavailable.
 license: Apache-2.0
 compatibility: Requires bash, curl 7.76+, jq, alcf-tokens, globus-cli (through the globus-transfer skill), an ALCF allocation, and an existing compute environment with ChemGraph installed.
 metadata:
@@ -10,11 +10,13 @@ metadata:
 
 # Remote PBS jobs through the IRI API
 
-Use this workflow when the user wants ALCF batch execution from a host that cannot
-run `qsub`. On an authorized submission host, use [pbs-hpc](../pbs-hpc/SKILL.md)
-directly instead. Never mix submission methods for one run. Use its relevant
-site-reference sections for environment and launch requirements; `#PBS`
-directives do not apply here because the JobSpec selects resources.
+Use this workflow when the user selects IRI or needs ALCF batch execution from a
+host that cannot run `qsub`. If no method was selected and the shell is on an
+authorized submission host, prefer [pbs-hpc](../pbs-hpc/SKILL.md). Preserve an
+explicitly selected method and never mix submission methods for one run. Use the
+PBS skill's relevant site-reference sections for environment and launch
+requirements; `#PBS` directives do not apply here because the JobSpec selects
+resources.
 
 ## Setup
 
@@ -100,7 +102,8 @@ function, as shown in [the v2 recipes](references/api-v2.md).
    skill, labelled `$RUN-stage-in`, with records in `./.globus/`, from
    `$LOCAL:$LOCAL_ROOT/$RUN/` to `$REMOTE_COLLECTION:$REMOTE_GLOBUS_ROOT/$RUN/` as in
    the stage recipe. Wait until that task is `SUCCEEDED`, then confirm with IRI `ls`
-   that input dependencies (structure, model files) exist. Output files are created
+   that the structure and any explicitly supplied checkpoint files exist. Named
+   pretrained models do not require staging model files. Output files are created
    by the job.
 4. **Submit once** with `python "$SKILLS/iri-hpc/scripts/iri_submit.py" "$RUN"`,
    as its own command after the stage-in task succeeded and you reviewed the staged

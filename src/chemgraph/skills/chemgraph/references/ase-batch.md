@@ -13,13 +13,13 @@ and use the returned artifact path.
 Write `input.json` with the user's structure, calculator/model, and scientific
 settings in a fresh run directory. For direct PBS, use absolute paths visible on
 compute nodes and put the result JSON in that shared directory. For IRI, use
-run-relative calculation paths such as `water.xyz`, `result.json`, and
-`models/polar-1-m.model` for files staged with the run. JobSpec paths remain
-absolute remote paths. Never pass laptop paths to the remote calculation.
+run-relative calculation paths such as `water.xyz` and `result.json` for files
+staged with the run. JobSpec paths remain absolute remote paths. Never pass
+laptop paths to the remote calculation.
 
-For example, this direct-PBS MACE-Polar input assumes an accessible model file
-and its optional dependencies; it is not a default calculator choice for other
-requests:
+Use the requested calculator and a supported model name, or omit `model` to use
+that calculator's default. A model file path is optional for custom or pre-staged
+checkpoints. This direct-PBS example uses MACE-Polar:
 
 ```json
 {
@@ -31,7 +31,7 @@ requests:
   "steps": 200,
   "calculator": {
     "calculator_type": "mace_polar",
-    "model": "/shared/models/polar-1-m.model",
+    "model": "polar-1-m",
     "device": "cuda",
     "default_dtype": "float64",
     "charge": 0,
@@ -43,10 +43,12 @@ requests:
 `opt` optimizes geometry; `vib` already optimizes before calculating frequencies.
 Use one `vib` job for optimization plus frequencies. `ir` additionally requires
 calculator dipoles; `thermo` computes ideal-gas thermochemistry using the supplied
-temperature and pressure. Preserve these choices. A supplied model file must be
-staged or already accessible on compute nodes. A named model may download during
-calculator initialization inside the allocation; it needs compute-node network
-access or an existing cache. Compute nodes may reach the internet only through a
+temperature and pressure. Preserve these choices. Stage explicitly supplied
+checkpoint files or use files already accessible on compute nodes; for IRI,
+checkpoints staged with the run can use run-relative paths. Named pretrained
+models need no user-supplied file: the calculator downloads missing weights during
+initialization inside the allocation. This needs compute-node network access or
+an existing cache. Compute nodes may reach the internet only through a
 proxy that the job must set: the launch templates do not, so export the site's
 proxy variables before Python (for Polaris, see
 [network proxy setup](../../pbs-hpc/references/polaris.md#internet-proxy-login-and-compute-nodes)).
@@ -83,4 +85,4 @@ The script exits 0 for success, 2 for nonconvergence, and 1 for failure. Inspect
 PBS stdout/stderr and the existing result JSON (`success`, `converged`,
 `potential_energy`, and driver-specific data). Frequencies and trajectories use
 the run directory. Early failures may leave only stderr; missing results or
-scheduler history do not establish success. No separate summary schema is needed.
+scheduler history do not establish success.
