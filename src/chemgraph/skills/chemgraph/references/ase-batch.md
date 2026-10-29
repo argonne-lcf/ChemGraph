@@ -46,8 +46,11 @@ calculator dipoles; `thermo` computes ideal-gas thermochemistry using the suppli
 temperature and pressure. Preserve these choices. A supplied model file must be
 staged or already accessible on compute nodes. A named model may download during
 calculator initialization inside the allocation; it needs compute-node network
-access or an existing cache. Preserve the site's proxy settings. Do not execute
-the calculation on a login node to download or initialize a model.
+access or an existing cache. Compute nodes may reach the internet only through a
+proxy that the job must set: the launch templates do not, so export the site's
+proxy variables before Python (for Polaris, see
+[network proxy setup](../../pbs-hpc/references/polaris.md#internet-proxy-login-and-compute-nodes)).
+Do not execute the calculation on a login node to download or initialize a model.
 
 Copy [calculate.py](../assets/calculate.py) into the run directory unchanged. Its
 PBS host check precedes chemistry imports and rejects accidental execution on a
@@ -62,7 +65,8 @@ For either route, quote shell paths and use JSON serialization for input values.
 For a single Polaris GPU calculation, launch one process with
 `CUDA_VISIBLE_DEVICES=0` and `OMP_NUM_THREADS=8`. Source the compute environment
 with nounset temporarily disabled if activation requires it, then restore it;
-retain the site's proxy settings and set `TMPDIR=/tmp` before Python.
+export the site's proxy variables when the job needs network access, and set
+`TMPDIR=/tmp` before Python.
 
 Before staging/submission, parse `input.json`, inspect scientific settings and
 path mappings, check the structure, and run `bash -n` on the launch script.

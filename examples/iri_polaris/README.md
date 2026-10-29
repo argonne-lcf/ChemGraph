@@ -24,20 +24,23 @@ ChemGraph's `deep_agent` and `main_agent` workflows load the bundled skills
 automatically. Create and select a workspace so they get file and shell tools:
 
 ```bash
-mkdir ./iri-workspace
-cd ./iri-workspace
+mkdir -p ~/iri-workspace
+cd ~/iri-workspace
 # Choose one workflow:
 chemgraph run --interactive -w deep_agent --deepagent-workspace "$PWD" -m "$LLM_MODEL"
 chemgraph run --interactive -w main_agent --workspace "$PWD" -m "$LLM_MODEL"
 ```
 
-On later sessions, return to this workspace without recreating it. `./iri-workspace`
+On later sessions, return to this workspace without recreating it. `~/iri-workspace`
 is an illustrative choice, not a location for agents to search for configuration.
+Keep the workspace under your home directory: Globus Connect Personal shares home
+by default, and `iri_configure.py` maps it as `/~/...`.
 
 Launch from the environment where `alcf-tokens` and `globus` are installed; the agent's shell
 inherits only `PATH`, `VIRTUAL_ENV`, and a few other variables. Follow the host's
 actual tool approvals; this workflow does not add a separate approval for every
-file write or shell command. Review submission details before the submission step.
+file write or shell command. Review submission details before the submission step;
+when approvals are on, read the `iri_submit.py` command before approving it.
 Use the skills' complete Bash recipe blocks, including the fd 3 wrapper and variable
 setup. For DeepAgent, allow 180 seconds for submission, 420 for IRI filesystem
 polling, and 660 for Globus wait. Exit 124 means inspect saved state and wait; it
