@@ -67,6 +67,7 @@ from chemgraph.cli.formatting import (
     build_action_review,
     format_response,
     format_token_usage,
+    _safe_review_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -854,12 +855,21 @@ def _render_main_agent_event(event: str, payload: dict[str, Any]) -> None:
     subagent_name = payload.get("subagent_name")
     tool_name = payload.get("tool_name") or "unknown"
     arguments = payload.get("arguments", "")
+    reason = payload.get("reason")
+    # One print keeps a reason with its call when parallel tools start together.
     console.print(
         (f"[dim]Subagent[/dim] [bold cyan]{escape(str(subagent_name))}[/bold cyan] "
          if subagent_name else "[bold cyan]main_agent[/bold cyan] ")
         + f"[dim]→[/dim] [bold]{escape(str(tool_name))}[/bold]"
         f"({escape(str(arguments))})"
+        + (f"\n[dim]  ↳ {escape(_safe_review_text(str(reason)))}[/dim]" if reason else "")
     )
+
+
+def _render_deep_agent_event(event: str, payload: dict[str, Any]) -> None:
+    """Render delegated tool activity; direct calls are already printed as messages."""
+    if payload.get("subagent_name"):
+        _render_main_agent_event(event, payload)
 
 
 def _clear_pending_review_input() -> None:
@@ -1742,6 +1752,7 @@ def interactive_mode(
             terminal_tool_names=terminal_tool_names,
             **(main_options if selected_workflow == "main_agent" else {}),
             approval_mode=approval_mode,
+            on_event=_render_deep_agent_event if selected_workflow == "deep_agent" else None,
         )
 
     agent = initialize_selection(model, workflow, reasoning_effort)

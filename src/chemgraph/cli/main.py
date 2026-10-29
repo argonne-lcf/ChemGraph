@@ -31,6 +31,7 @@ from chemgraph.cli.commands import (
     ALL_WORKFLOW_TYPES,
     WORKFLOW_ALIASES,
     _anchor_skill_dirs,
+    _render_deep_agent_event,
     resolve_workflow,
     delete_session_cmd,
     initialize_agent,
@@ -867,6 +868,14 @@ def _handle_run(args: argparse.Namespace) -> None:
                 f"View with: chemgraph dashboard -- --run-dir {trace.trace_dir}[/dim]"
             )
 
+    on_event = trace.on_event if trace else None
+    if args.workflow == "deep_agent":
+        # Delegated tool calls are not in the printed messages; show them as events.
+        def on_event(event, payload, _trace=on_event):
+            _render_deep_agent_event(event, payload)
+            if _trace is not None:
+                _trace(event, payload)
+
     # Initialize agent
     agent = initialize_agent(
         args.model,
@@ -882,7 +891,7 @@ def _handle_run(args: argparse.Namespace) -> None:
         human_supervised=args.human_supervised,
         tools=mcp_tools,
         deepagent_tool_registry=deepagent_tool_registry,
-        on_event=trace.on_event if trace else None,
+        on_event=on_event,
         deepagent_workspace=deepagent_workspace,
         deepagent_skill_dirs=deepagent_skill_dirs,
         deepagent_discover_skills=deepagent_discover_skills,

@@ -99,8 +99,11 @@ def build_action_review(
     args = action.get("args", {})
     label = ""
     preview = []
+    reason = None
     if isinstance(args, dict):
         args = dict(args)
+        if isinstance(args.get("reason"), str) and args["reason"].strip():
+            reason = args.pop("reason")
         if name == "execute" and isinstance(args.get("command"), str):
             label = "Command:"
             preview = [(args.pop("command"), "bash")]
@@ -132,6 +135,8 @@ def build_action_review(
     except (TypeError, ValueError):
         arguments = (repr(args), None)
     parts = [(f"Tool: {name}", None)]
+    if reason is not None:
+        parts.append((f"Reason: {reason}", None))
     if args or not preview:
         parts.append(arguments)
     if preview:

@@ -9,6 +9,7 @@ from deepagents.backends.protocol import BackendProtocol
 from chemgraph.agent.deepagent_backend import (
     DEEPAGENT_ENV_ALLOWLIST, host_shell_environment, resolve_workspace,
 )
+from chemgraph.graphs.tool_reasons import ToolReasonMiddleware
 from chemgraph.registry.middleware import RegistryToolsMiddleware
 from chemgraph.registry.tools import ToolRegistry
 from chemgraph.skills.runtime import ChemGraphSkillsMiddleware, prepare_skill_backend
@@ -175,6 +176,14 @@ def resolve_workspace_interrupt_policy(tool_registry=None, interrupt_on=_DEFAULT
     return policy
 
 
+def tool_reason_names(interrupt_on=_DEFAULT_INTERRUPT_POLICY):
+    """Name tools that must state a reason, including under approval bypass."""
+    names = set(resolve_workspace_interrupt_policy())
+    if isinstance(interrupt_on, dict):
+        names.update(name for name, policy in interrupt_on.items() if policy)
+    return frozenset(names)
+
+
 def prepare_workspace_runtime(
     *, backend=None, tools=(), tool_registry=None, skills=None,
     discover_skills=True, user_skills_dir=None, skill_dirs=None,
@@ -216,4 +225,6 @@ def prepare_workspace_runtime(
         from chemgraph.runtime.middleware import ScopedToolsMiddleware
 
         middleware.append(ScopedToolsMiddleware())
+    # Innermost, so registry-loaded tools are extended and executed without the reason.
+    middleware.append(ToolReasonMiddleware(tool_reason_names(interrupt_on)))
     return effective_backend, sources, middleware, effective_interrupt_on
