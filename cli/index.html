@@ -2028,6 +2028,21 @@ file, and flag replacements that apply to all occurrences. Pending terminal
 input is cleared before each decision where supported, so an Enter queued during
 earlier work does not approve the next action. Redirected input is preserved.
 The startup host-access confirmation is separate from these per-action reviews.</p>
+<p><strong>Auto mode.</strong> In an interactive <code>deep_agent</code> or <code>main_agent</code> chat, <code>/auto on</code>
+(after a confirmation) or answering <code>3</code> / <code>auto</code> at a review approves every
+later tool action without asking, including actions from main-agent workers.
+Each action's preview is still printed with an <code>Auto-approved</code> line, and the
+prompt shows <code>ChemGraph [auto]</code>. Questions from the agent are still asked, and
+actions whose policy does not allow approval are still reviewed. After 50
+auto-approved actions in a row, the next action is reviewed, and your answer
+starts a new run. Actions that were already pending in a session restored with
+<code>/resume</code> are always reviewed. <code>/auto off</code>
+restores reviews; <code>/auto</code> and <code>/config</code> show the current state. Auto mode lasts
+until <code>/auto off</code> or exit, including across <code>/model</code>, <code>/workflow</code>, and
+<code>/resume</code>. It is never saved with a session, so restored sessions keep their
+reviewed approval mode and every new launch starts with reviews on. Unlike
+<code>--dangerously-skip-approvals</code>, it does not skip the startup host-access
+confirmation.</p>
 <p>The selected directory is mounted for file tools at <code>/workspace</code>. Thus,
 <code>--deepagent-workspace test/</code> makes <code>/workspace/example.py</code> refer to
 <code>test/example.py</code>, not <code>test/workspace/example.py</code>. Shell execution uses the
