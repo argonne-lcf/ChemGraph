@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 if __package__ in (None, ""):
-    # Keep the sibling http.py from shadowing the standard-library package.
+    # Make the repository root importable for examples.academy.common.
     sys.path[0] = str(Path(__file__).resolve().parents[2])
 
 from academy.exchange import LocalExchangeFactory

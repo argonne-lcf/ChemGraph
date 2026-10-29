@@ -271,7 +271,7 @@ class ChemGraph:
         to restore opaque backends, custom tools, or worker options in another
         session instance. Change it whenever those components' behavior changes.
     on_event : callable, optional
-        Callback invoked with dashboard workflow events, by default None.
+        Callback invoked with workflow events, by default None.
 
     Raises
     ------

@@ -8,7 +8,6 @@ from chemgraph.academy import PeerMessage, make_peer_message_tool
 from chemgraph.agent.llm_agent import ChemGraph, PromptConfig
 from chemgraph.agent.main_session import MainAgentSession
 from chemgraph.cli.commands import _prompt_for_interrupt
-from chemgraph.cli.trace import CLIRunTrace
 
 
 async def console_call(function, *args):
@@ -49,8 +48,6 @@ class SessionHandler:
         self.completed: asyncio.Queue[PeerMessage] = asyncio.Queue()
         directory = Path(work_dir).resolve() / name
         directory.mkdir(parents=True, exist_ok=True)
-        self.trace = CLIRunTrace(directory / "trace", model_name=model, workflow_type="main_agent")
-        self.trace.start()
         role = (
             "You coordinate H2 energy calculations. Ask executor to run them, "
             "then explain the results to the user."
@@ -62,12 +59,10 @@ class SessionHandler:
             tools=[make_peer_message_tool(sender=name, peers=peers)],
             prompts=PromptConfig(main_agent=role), log_dir=str(directory),
             subagent_names=[], discover_skills=False,
-            on_event=self.trace.on_event,
         )
         self.session = MainAgentSession(
             self.agent.workflow, session_store=self.agent.session_store,
             session_metadata=self.agent.main_agent_metadata,
-            on_event=self.trace.on_event,
         )
 
     async def __call__(self, message: PeerMessage):

@@ -35,12 +35,11 @@ APIs directly. Computation continues to use the execution backends above.
 
 ```bash
 uv pip install "chemgraph[academy]"
-chemgraph dashboard --help
 ```
 
 See the [Python examples](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/academy)
 for two persistent sessions using local or HTTP exchanges, including installation,
-model credentials, submission, approval, tracing, and shutdown commands.
+model credentials, submission, approval, and shutdown commands.
 
 The application constructs its model, prompts, tools, sessions, and approval
 policy. Its turn handler drives `MainAgentSession.run()` and required `resume()`
@@ -66,8 +65,6 @@ service, JSON peer configuration, or operator control-file protocol.
 
 Use site job scripts or existing ChemGraph execution backends for HPC placement.
 `dev-academy-sim` is a historical prototype, not a required installation.
-`chemgraph dashboard` still reads existing event logs, including old campaign
-runs. Shared dashboard, CLI tracing, and MCP utilities work without Academy.
 
 ## ALCF model access and MCP
 

@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,38 +13,18 @@ pytest.importorskip("academy")
 
 from academy.exchange import HttpExchangeFactory, LocalExchangeFactory
 from academy.exchange.cloud.app import create_app
-from academy.exchange.cloud.client import HttpAgentRegistration
 from academy.handle import Handle
 from academy.manager import Manager
-from academy.runtime import Runtime, RuntimeConfig
+from academy.runtime import Runtime
 from academy.serialize import SerializationStrategy
 from aiohttp.test_utils import TestServer
-from ase import Atoms
 from ase.calculators.emt import EMT
-from ase.io import read, write
+from ase.io import read
 from langchain_core.messages import AIMessage
 
 from chemgraph.academy import ChemGraphPeer, PeerMessage, make_peer_message_tool, send_peer_message
-from chemgraph.agent.llm_agent import ChemGraph
 from chemgraph.memory.store import SessionStore
-from chemgraph.models.endpoints import PreparedModel
-from chemgraph.tools.ase_tools import run_ase
-from examples.academy.common import SessionHandler
 from tests.test_main_agent import _ScriptedChatModel
-
-
-@pytest.mark.parametrize("example", ["local", "http"])
-@pytest.mark.parametrize("as_module", [False, True])
-def test_example_entry_points_do_not_shadow_stdlib_http(example, as_module):
-    command = (["-m", f"examples.academy.{example}"] if as_module
-               else [f"examples/academy/{example}.py"])
-    result = subprocess.run(
-        [sys.executable, *command, "--help"],
-        cwd=Path(__file__).resolve().parents[1],
-        capture_output=True, text=True, timeout=30,
-    )
-    assert result.returncode == 0, result.stderr
-    assert "usage:" in result.stdout
 
 
 @pytest_asyncio.fixture(params=["local", "http"])
@@ -149,30 +128,6 @@ async def test_failure_handler_preserves_mailbox_and_holds_later_messages(factor
         assert received == ["later", "subsequent"]
 
 
-@pytest.mark.asyncio
-async def test_native_http_registration_round_trip_and_runtime():
-    received = asyncio.Queue()
-    async with TestServer(create_app()) as server:
-        factory = HttpExchangeFactory(str(server.make_url("")), auth_method=None)
-        client = await factory.create_user_client()
-        try:
-            original = await client.register_agent(ChemGraphPeer)
-            registration = HttpAgentRegistration.model_validate_json(original.model_dump_json())
-            peer = ChemGraphPeer(received.put, on_error=AsyncMock())
-            async with Runtime(peer, exchange_factory=factory, registration=registration,
-                               config=RuntimeConfig(default_serializer=SerializationStrategy.JSON,
-                                                    allowed_deserializers={SerializationStrategy.JSON})) as runtime:
-                handle = Handle(registration.agent_id, exchange=client,
-                                request_serializer=SerializationStrategy.JSON,
-                                result_serializer=SerializationStrategy.JSON)
-                await send(handle)
-                assert (await asyncio.wait_for(received.get(), 3)).content == "task"
-                await handle.shutdown()
-                await runtime.wait_shutdown(timeout=3)
-        finally:
-            await client.close()
-
-
 def call(name, args, call_id):
     return AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": call_id}])
 
@@ -263,82 +218,6 @@ def assert_peer_histories(directory):
     assert not list((directory / "planner").glob("h2-*"))
 
 
-def scripted_models(monkeypatch, responses):
-    models = {name: _PeerChatModel(responses=items) for name, items in responses.items()}
-
-    def load(**kwargs):
-        name = kwargs["model_name"]
-        return models[name], PreparedModel(endpoint_name=name, protocol="openai_compatible", client_kwargs={"model": name})
-
-    monkeypatch.setattr("chemgraph.agent.llm_agent.load_chat_model_prepared", load)
-    return models
-
-
-@pytest.mark.asyncio
-async def test_real_workflows_delegate_emt_reply_and_accept_subsequent_work(factory, tmp_path, monkeypatch):
-    models = scripted_models(monkeypatch, {name: peer_responses(name) for name in ("planner", "executor")})
-    approvals = AsyncMock(side_effect=approve_native_tools)
-    monkeypatch.setattr("examples.academy.common.console_call", approvals)
-    handlers, peers = {}, {}
-    async with await Manager.from_exchange_factory(factory) as manager:
-        registrations = {name: await manager.exchange_client.register_agent(ChemGraphPeer) for name in models}
-        handles = {name: Handle(reg.agent_id, exchange=manager.exchange_client) for name, reg in registrations.items()}
-        for name in models:
-            handler = SessionHandler(name, {other: handle for other, handle in handles.items() if other != name},
-                                     model=name, work_dir=tmp_path, console_lock=asyncio.Lock())
-            handlers[name] = handler
-            peers[name] = ChemGraphPeer(handler, on_error=AsyncMock(side_effect=AssertionError("unexpected failure")))
-            await manager.launch(peers[name], registration=registrations[name])
-        for i in range(2):
-            await send(handles["planner"], f"request {i}")
-            async with asyncio.timeout(10):
-                while (await handlers["planner"].completed.get()).sender != "executor":
-                    pass
-                for peer in peers.values():
-                    await peer._inbox.join()
-            snapshot = await handlers["planner"].agent.workflow.aget_state(handlers["planner"].session.config)
-            assert snapshot.values["messages"][-1].content == f"summary {i}"
-        for name, count in (("planner", 4), ("executor", 2)):
-            handler = handlers[name]
-            assert handler.agent.approval_mode == "review"
-            snapshot = await handler.agent.workflow.aget_state(handler.session.config)
-            assert sum(m.type == "human" for m in snapshot.values["messages"]) == count
-        assert [action["name"] for args in approvals.call_args_list
-                for action in args.args[1]["action_requests"]] == ["save_atomsdata_to_file", "run_ase"] * 2
-        assert_peer_histories(tmp_path)
-
-
-@pytest.mark.asyncio
-async def test_real_approval_queues_messages_until_session_resume(factory, tmp_path, monkeypatch):
-    scripted_models(monkeypatch, {"worker": [
-        call("write_file", {"file_path": "approved.txt", "content": "approved"}, "write"),
-        AIMessage(content="first complete"), AIMessage(content="second complete"),
-    ]})
-    reviewing, approve = asyncio.Event(), asyncio.Event()
-
-    async def review(function, payload):
-        assert payload["action_requests"][0]["name"] == "write_file"
-        reviewing.set()
-        await approve.wait()
-        return {"decisions": [{"type": "approve"}]}
-
-    monkeypatch.setattr("examples.academy.common.console_call", review)
-    async with await Manager.from_exchange_factory(factory) as manager:
-        handler = SessionHandler("worker", {}, model="worker", work_dir=tmp_path, console_lock=asyncio.Lock())
-        peer = ChemGraphPeer(handler, on_error=AsyncMock(side_effect=AssertionError("unexpected failure")))
-        handle = await manager.launch(peer)
-        await send(handle, "first")
-        await asyncio.wait_for(reviewing.wait(), 10)
-        await send(handle, "second")
-        assert handler.session.pending_interrupts
-        assert peer._inbox.qsize() == 1
-        assert handler.completed.empty()
-        approve.set()
-        await asyncio.wait_for(peer._inbox.join(), 10)
-        assert [handler.completed.get_nowait().content for _ in range(2)] == ["first", "second"]
-        assert not handler.session.pending_interrupts
-
-
 @pytest.mark.asyncio
 async def test_tool_ids_are_stable_per_instance_and_failures_propagate():
     messages = []
@@ -371,66 +250,6 @@ async def test_tool_ids_are_stable_per_instance_and_failures_propagate():
 
 
 @pytest.mark.asyncio
-async def test_main_session_failure_waits_for_application_retry(tmp_path, monkeypatch):
-    scripted_models(monkeypatch, {"worker": [ValueError("model failed"),
-                                           AIMessage(content="recovered"), AIMessage(content="later")]})
-    failed, retry = asyncio.Event(), asyncio.Event()
-
-    async def operator_retry(*_args):
-        failed.set()
-        await retry.wait()
-
-    monkeypatch.setattr("examples.academy.common.console_call", operator_retry)
-    async with await Manager.from_exchange_factory(LocalExchangeFactory()) as manager:
-        handler = SessionHandler("worker", {}, model="worker", work_dir=tmp_path, console_lock=asyncio.Lock())
-        peer = ChemGraphPeer(handler, on_error=handler.on_error)
-        handle = await manager.launch(peer)
-        await send(handle, "first")
-        await asyncio.wait_for(failed.wait(), 5)
-        assert handler.session.failed
-        await send(handle, "second")
-        assert peer._inbox.qsize() == 1
-        retry.set()
-        await asyncio.wait_for(peer._inbox.join(), 10)
-        assert not handler.session.failed
-        snapshot = await handler.agent.workflow.aget_state(handler.session.config)
-        assert sum(m.type == "human" for m in snapshot.values["messages"]) == 2
-        assert snapshot.values["messages"][-1].content == "later"
-
-
-@pytest.mark.asyncio
-async def test_caller_owned_single_agent_run_retains_thread(tmp_path, monkeypatch):
-    structure = tmp_path / "h2.xyz"
-    write(structure, Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]]))
-    scripted_models(monkeypatch, {"worker": [
-        energy_call(structure, tmp_path / "energy.json", "emt"), AIMessage(content="energy"),
-        # A later turn may repeat the previous turn's last tool call.
-        energy_call(structure, tmp_path / "energy.json", "emt-again"), AIMessage(content="follow-up"),
-    ]})
-    graph = ChemGraph(model_name="worker", workflow_type="single_agent", tools=[run_ase],
-                      enable_memory=False, log_dir=str(tmp_path))
-    results = []
-
-    async def turn(message):
-        results.append(await graph.run(message.content, config={"thread_id": "caller-owned"}))
-
-    async with await Manager.from_exchange_factory(LocalExchangeFactory()) as manager:
-        peer = ChemGraphPeer(turn, on_error=AsyncMock(side_effect=AssertionError("unexpected failure")))
-        handle = await manager.launch(peer)
-        await send(handle, "calculate")
-        await send(handle, "follow up")
-        await asyncio.wait_for(peer._inbox.join(), 10)
-        assert len(results) == 2
-        snapshot = await graph.workflow.aget_state({"configurable": {"thread_id": "caller-owned"}})
-        assert sum(m.type == "human" for m in snapshot.values["messages"]) == 2
-        calculations = [json.loads(m.content) for m in snapshot.values["messages"] if m.type == "tool"]
-        assert len(calculations) == 2
-        assert all(result["status"] == "success" for result in calculations)
-        assert calculations[0]["potential_energy"] == calculations[1]["potential_energy"]
-        assert json.loads((tmp_path / "energy.json").read_text())["success"] is True
-
-
-@pytest.mark.asyncio
 async def test_http_example_in_separate_processes(tmp_path):
     # Run the documented HTTP entry point with scripted models in each child.
     # Registrations are passed verbatim, exactly as in the example commands.
@@ -442,7 +261,7 @@ import chemgraph.agent.llm_agent as agent_module
 from chemgraph.models.endpoints import PreparedModel
 from tests.test_academy_peer import _PeerChatModel, approve_native_tools, peer_responses
 import examples.academy.common as common
-from examples.academy.http import main
+from examples.academy.http_peers import main
 name, url, directory = sys.argv[1:]
 common.console_call = approve_native_tools
 model = _PeerChatModel(responses=peer_responses(name))

@@ -75,10 +75,10 @@ def _serialize_state(value: Any) -> Any:
     return serialize_state(value)
 
 
-class _BaseDashboardEventCallback(BaseCallbackHandler):
-    """Forward LangChain callback events to the dashboard event surface."""
+class _BaseEventCallback(BaseCallbackHandler):
+    """Forward LangChain callback events to the workflow event surface."""
 
-    _failure_log_message = "dashboard event callback failed"
+    _failure_log_message = "event callback failed"
 
     def __init__(self, on_event: EventCallback, thread_id: str) -> None:
         self._on_event = on_event
@@ -155,13 +155,13 @@ class _BaseDashboardEventCallback(BaseCallbackHandler):
         self._emit("tool_call_failed", payload)
 
 
-class _TurnEventCallback(_BaseDashboardEventCallback):
-    """Forward run_turn callback events to the dashboard event surface."""
+class _TurnEventCallback(_BaseEventCallback):
+    """Forward run_turn callback events to the workflow event surface."""
 
     _failure_log_message = "turn event callback failed"
 
 
-class _AstreamEventCallback(_BaseDashboardEventCallback):
-    """Forward graph stream callback events to the dashboard event surface."""
+class _AstreamEventCallback(_BaseEventCallback):
+    """Forward graph stream callback events to the workflow event surface."""
 
     _failure_log_message = "astream event callback failed"

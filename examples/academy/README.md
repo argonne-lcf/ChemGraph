@@ -72,7 +72,7 @@ Ctrl-C also shuts down Academy's manager and cancels active processing.
 Approve structure creation and calculations in the terminal. MACE may download
 model weights on first use. Inspect the optimized structures and calculation
 results at the paths returned by the tools when checking the bond-length
-comparison. Per-peer histories and traces are under `academy-local/`.
+comparison. Per-peer histories are under `academy-local/`.
 
 ## HTTP exchange and separate processes
 
@@ -87,7 +87,7 @@ In terminal 2, register the two agents once:
 
 ```bash
 source .venv/bin/activate
-python -m examples.academy.http register
+python -m examples.academy.http_peers register
 ```
 
 Copy both printed `export PLANNER_REGISTRATION=...` and
@@ -99,14 +99,14 @@ cache. Keep them private and use only one running process per registration.
 In terminal 2, with model credentials configured as above:
 
 ```bash
-python -m examples.academy.http run planner
+python -m examples.academy.http_peers run planner
 ```
 
 In terminal 3, activate the environment, configure model credentials, paste the
 same two registration exports, and run:
 
 ```bash
-python -m examples.academy.http run executor
+python -m examples.academy.http_peers run executor
 ```
 
 Keep this terminal available to approve structure creation and calculations.
@@ -115,14 +115,14 @@ Wait for both peers to print `ready`. In terminal 4, activate the environment an
 paste the two registration exports. Submit a request:
 
 ```bash
-python -m examples.academy.http send "Calculate the H2 energy using EMT at a bond length of 0.74 angstrom."
+python -m examples.academy.http_peers send "Calculate the H2 energy using EMT at a bond length of 0.74 angstrom."
 ```
 
 Read results in the peer terminals. After the planner prints its summary, submit
 another request to the same processes:
 
 ```bash
-python -m examples.academy.http send "Now calculate the EMT energy at 0.90 angstrom and compare with the previous result."
+python -m examples.academy.http_peers send "Now calculate the EMT energy at 0.90 angstrom and compare with the previous result."
 ```
 
 Press Ctrl-C in each peer terminal, then Ctrl-C in the exchange terminal, to
@@ -155,7 +155,7 @@ on both hosts. On host A, start the loopback exchange, register both peers, and
 run only the planner using the HTTP instructions above and a fresh work directory:
 
 ```bash
-python -m examples.academy.http run planner --work-dir academy-http-native-check
+python -m examples.academy.http_peers run planner --work-dir academy-http-native-check
 ```
 
 On host B, forward its loopback port to host A's exchange, keeping SSH running
@@ -169,18 +169,18 @@ In another terminal on host B, activate its venv, configure its model login,
 paste the same two registration exports from host A, and run:
 
 ```bash
-python -m examples.academy.http --url http://127.0.0.1:8700 run executor --work-dir academy-http-native-check
+python -m examples.academy.http_peers --url http://127.0.0.1:8700 run executor --work-dir academy-http-native-check
 ```
 
 Wait for both peers to print `ready`, then submit the two documented HTTP
 requests from host A, waiting for the first summary before the follow-up.
 Approve writes/calculations on host B. Verify the planner's comparison on host A
 and the two distinct results on host B; reported file paths refer to host B.
-Each host keeps its own peer database and trace. Shut down both peers, then the
+Each host keeps its own peer database. Shut down both peers, then the
 tunnel and exchange. This test uses SSH to reach the loopback-only exchange;
 it does not test an authenticated public HTTP deployment or transfer artifacts.
 
-## Approvals, errors, and tracing
+## Approvals and errors
 
 The example application keeps ChemGraph's normal review policy enabled.
 `save_atomsdata_to_file` and `run_ase` display the existing ChemGraph approval UI
@@ -195,17 +195,6 @@ Workflow exceptions print in the peer terminal; Enter invokes the existing
 `MainAgentSession.retry()` API. The error handler returns only after recovery,
 so later messages cannot enter the failed session prematurely. Ctrl-C stops
 instead. Retry is an application decision, never an automatic delivery retry.
-
-Ordinary ChemGraph tracing is available per workflow:
-
-```bash
-chemgraph dashboard -- --run-dir academy-local/planner/trace
-# Or, for the HTTP example:
-chemgraph dashboard -- --run-dir academy-http/executor/trace
-```
-
-There is no peer-specific dashboard or shared remote status service. The shared
-dashboard and tracing modules also work without Academy installed.
 
 Memory is enabled separately for each peer. `common.py` passes the agent's
 session store to `MainAgentSession`, which saves its readable conversation

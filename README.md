@@ -185,7 +185,7 @@ checkpoints cannot resume. Supported new CLI sessions restore their saved
 workspace, skills, catalog, workers, and pending approvals.
 
 See the [CLI guide](https://argonne-lcf.github.io/ChemGraph/cli/) for session
-semantics, interactive commands, MCP connections, tracing, and the
+semantics, interactive commands, MCP connections, and the
 development-only workspace Deep Agent.
 
 Call the workspace Deep Agent directly in an approval-driven interactive

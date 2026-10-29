@@ -9,7 +9,7 @@ from contextlib import AsyncExitStack
 from pathlib import Path
 
 if __package__ in (None, ""):
-    # Keep this script from shadowing the standard-library http package.
+    # Make the repository root importable for examples.academy.common.
     sys.path[0] = str(Path(__file__).resolve().parents[2])
 
 from academy.exchange import HttpExchangeFactory

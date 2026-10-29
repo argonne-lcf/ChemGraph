@@ -1,11 +1,31 @@
 from types import SimpleNamespace
 
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from chemgraph.agent import llm_agent
 from chemgraph.agent.llm_agent import ChemGraph, PromptConfig
+from chemgraph.graphs.single_agent import _is_repeated_tool_cycle, route_tools
 from chemgraph.models.endpoints import PreparedModel
+
+
+@pytest.mark.parametrize("new_turn", [False, True])
+def test_repeated_tool_cycle_is_scoped_to_current_turn(new_turn):
+    messages = [
+        HumanMessage(content="calculate"),
+        AIMessage(content="", tool_calls=[{
+            "name": "calculator", "args": {"expression": "2 + 2"}, "id": "first",
+        }]),
+        ToolMessage(content="4", name="calculator", tool_call_id="first"),
+    ]
+    if new_turn:
+        messages.append(HumanMessage(content="calculate again"))
+    messages.append(AIMessage(content="", tool_calls=[{
+        "name": "calculator", "args": {"expression": "2 + 2"}, "id": "second",
+    }]))
+
+    assert _is_repeated_tool_cycle(messages) is (not new_turn)
+    assert route_tools({"messages": messages}) == ("tools" if new_turn else "done")
 
 
 def _fake_prepared(**_kwargs):
