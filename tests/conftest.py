@@ -6,9 +6,7 @@ from ase import Atoms
 # Configure pytest-asyncio
 #pytest_plugins = ("pytest_asyncio",)
 
-# Test modules that require the optional ``academy`` extra guard themselves with
-# ``pytest.importorskip("academy")`` at module top, so they skip cleanly (rather
-# than erroring collection) when the extra is not installed.
+# The optional Academy wrapper tests use pytest.importorskip("academy").
 
 
 @pytest.fixture(autouse=True)

@@ -1,5 +1,4 @@
 import asyncio
-import json
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -278,64 +277,3 @@ def test_turn_event_callback_ignores_llm_decision_extraction_errors():
     callback.on_llm_end(SimpleNamespace(generations=[BrokenGenerationGroup()]))
 
     assert [event for event, _payload in events] == ["llm_call_finished"]
-
-
-@pytest.mark.asyncio
-async def test_cli_trace_events_are_emitted_from_astream_path(monkeypatch, tmp_path):
-    from chemgraph.cli.trace import CLIRunTrace
-
-    class FakeWorkflow:
-        def __init__(self):
-            self.state = {"messages": [AIMessage(content="done")]}
-
-        async def astream(self, inputs, *, stream_mode, config):
-            for callback in config.get("callbacks", []):
-                callback.on_chat_model_start({"name": "FakeChatModel"}, [["hello"]], run_id="test-call")
-                callback.on_llm_end(SimpleNamespace(generations=[]), run_id="test-call")
-            yield self.state
-
-        def get_state(self, config):
-            return SimpleNamespace(values=self.state)
-
-        async def aget_state(self, config):
-            return self.get_state(config)
-
-    monkeypatch.setattr(
-        "chemgraph.agent.llm_agent.construct_single_agent_graph",
-        lambda *_args, **_kwargs: FakeWorkflow(),
-    )
-    monkeypatch.setattr(
-        "chemgraph.agent.llm_agent.load_chat_model_prepared",
-        lambda **_kwargs: _prepared(),
-    )
-
-    trace = CLIRunTrace(
-        tmp_path / "trace",
-        run_id="trace-test",
-        model_name="gpt-4o-mini",
-        workflow_type="single_agent",
-        query="x",
-    )
-    trace.start()
-    agent = ChemGraph(
-        model_name="gpt-4o-mini",
-        workflow_type="single_agent",
-        enable_memory=False,
-        log_dir=str(tmp_path / "logs"),
-        on_event=trace.on_event,
-    )
-    await agent.run("x")
-    trace.finish(status="completed")
-
-    events = [
-        json.loads(line)["event"]
-        for line in (tmp_path / "trace" / "events.jsonl").read_text().splitlines()
-    ]
-    assert events == [
-        "run_started",
-        "workflow_started",
-        "llm_call_started",
-        "llm_call_finished",
-        "workflow_finished",
-        "run_finished",
-    ]

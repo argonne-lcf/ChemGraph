@@ -68,7 +68,7 @@ src/
     tools/        # Core simulation logic (ase_core.py) + LangChain @tool wrappers
     mcp/          # FastMCP servers (incl. *_mcp_hpc.py, *_mcp_parsl.py) + cg_fastmcp
     execution/    # Pluggable backends: local, parsl, globus_compute, job_tracker
-    academy/      # Distributed multi-agent module (campaigns, dashboard, runtime)
+    academy/      # Thin Academy peer wrapper and messaging tool
     models/       # LLM loader, settings, provider normalization, codex adapter
     registry/     # ToolRegistry and AgentRegistry specs and availability checks
     skills/       # Bundled Agent Skills (*/SKILL.md) shipped as package data

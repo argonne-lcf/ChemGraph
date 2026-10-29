@@ -73,7 +73,7 @@ The commands below use `uv pip`; with standard `venv`/`pip` or conda, replace
 | `parsl` | `uv pip install "chemgraph[parsl]"` | Parsl execution |
 | `ensemble_launcher` | `uv pip install "chemgraph[ensemble_launcher]"` | ALCF ensemble launcher |
 | `globus_compute` | `uv pip install "chemgraph[globus_compute]"` | Globus Compute execution |
-| `academy` | `uv pip install "chemgraph[academy]"` | Academy multi-agent runtime |
+| `academy` | `uv pip install "chemgraph[academy]"` | Thin Academy wrapper for caller-owned ChemGraph workflows |
 | `codex` | Source checkout: `uv pip install -e ".[codex]"` | Codex subscription route |
 
 Extras can be combined:

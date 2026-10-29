@@ -280,15 +280,6 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         default="ChemGraph General Tools",
         help="Display name for the MCP server connection (default: 'ChemGraph General Tools')",
     )
-    parser.add_argument(
-        "--trace-dir",
-        type=str,
-        default=None,
-        help=(
-            "Write per-run events to this directory so the run is viewable "
-            "via 'chemgraph dashboard -- --run-dir <trace-dir>'."
-        ),
-    )
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -399,59 +390,6 @@ Examples:
         "ui_args",
         nargs=argparse.REMAINDER,
         help="Extra arguments forwarded to 'streamlit run'.",
-    )
-
-    # ---- "dashboard" subcommands ----------------------------------------
-    dashboard_parser = subparsers.add_parser(
-        "dashboard",
-        help="Serve the ChemGraph dashboard for a run directory.",
-    )
-    dashboard_parser.add_argument(
-        "dashboard_args",
-        nargs=argparse.REMAINDER,
-        help="Arguments forwarded to chemgraph.academy.dashboard.",
-    )
-
-    # ---- "academy" subcommand -------------------------------------------
-    academy_parser = subparsers.add_parser(
-        "academy",
-        help="Run and inspect Academy-backed ChemGraph agent campaigns.",
-    )
-    academy_sub = academy_parser.add_subparsers(dest="academy_command")
-
-    daemon_parser = academy_sub.add_parser(
-        "mpi-daemon",
-        help="Run one ChemGraph Academy agent daemon inside mpiexec.",
-    )
-    daemon_parser.add_argument(
-        "daemon_args",
-        nargs=argparse.REMAINDER,
-        help="Arguments forwarded to chemgraph.academy.runtime.daemon.",
-    )
-
-    compute_parser = academy_sub.add_parser(
-        "run-compute",
-        help="Run a profile-backed ChemGraph Academy campaign in this allocation.",
-    )
-    compute_parser.add_argument(
-        "compute_args",
-        nargs=argparse.REMAINDER,
-        help="Arguments forwarded to chemgraph.academy.runtime.compute_launcher.",
-    )
-
-    dashboard_parser = academy_sub.add_parser(
-        "dashboard",
-        help="Start the local dashboard launcher for a ChemGraph Academy run.",
-    )
-    dashboard_parser.add_argument(
-        "dashboard_args",
-        nargs=argparse.REMAINDER,
-        help="Arguments forwarded to chemgraph.academy.runtime.dashboard_launcher.",
-    )
-
-    academy_sub.add_parser(
-        "campaigns",
-        help="List ChemGraph Academy campaign specs.",
     )
 
     # ---- Legacy fallback args -------------------------------------------
@@ -840,33 +778,6 @@ def _handle_run(args: argparse.Namespace) -> None:
     # Show banner
     console.print(create_banner())
 
-    # ---- Optional run trace for the local dashboard --------------------
-    trace = None
-    trace_dir = getattr(args, "trace_dir", None) or config.get("trace_dir")
-    if trace_dir:
-        from pathlib import Path
-
-        from chemgraph.cli.trace import CLIRunTrace
-
-        if args.workflow != "single_agent":
-            console.print(
-                "[yellow]--trace-dir is currently only effective for the "
-                "single_agent workflow; events will not be written for "
-                f"{args.workflow!r}.[/yellow]"
-            )
-        else:
-            trace = CLIRunTrace(
-                Path(trace_dir),
-                model_name=args.model,
-                workflow_type=args.workflow,
-                query=args.query,
-            )
-            trace.start()
-            console.print(
-                f"[dim]Tracing run to {trace.trace_dir}. "
-                f"View with: chemgraph dashboard -- --run-dir {trace.trace_dir}[/dim]"
-            )
-
     # Initialize agent
     agent = initialize_agent(
         args.model,
@@ -882,7 +793,6 @@ def _handle_run(args: argparse.Namespace) -> None:
         human_supervised=args.human_supervised,
         tools=mcp_tools,
         deepagent_tool_registry=deepagent_tool_registry,
-        on_event=trace.on_event if trace else None,
         deepagent_workspace=deepagent_workspace,
         deepagent_skill_dirs=deepagent_skill_dirs,
         deepagent_discover_skills=deepagent_discover_skills,
@@ -891,25 +801,16 @@ def _handle_run(args: argparse.Namespace) -> None:
     )
 
     if not agent:
-        if trace is not None:
-            trace.finish(status="failed", error="agent_initialization_failed")
         sys.exit(1)
 
     # Execute query
     console.print(f"[bold blue]Query:[/bold blue] {args.query}")
     if args.resume:
         console.print(f"[bold blue]Resuming from:[/bold blue] {args.resume}")
-    try:
-        result = run_query(
-            agent, args.query, verbose=(args.verbose > 0), resume_from=args.resume,
-            usage_stderr=True,
-        )
-    except Exception:
-        if trace is not None:
-            trace.finish(status="failed")
-        raise
-    if trace is not None:
-        trace.finish(status="completed")
+    result = run_query(
+        agent, args.query, verbose=(args.verbose > 0), resume_from=args.resume,
+        usage_stderr=True,
+    )
 
     if result:
         format_response(result, verbose=(args.verbose > 0))
@@ -933,55 +834,6 @@ def _strip_remainder_separator(args: list[str]) -> list[str]:
     if args and args[0] == "--":
         return args[1:]
     return args
-
-
-def _run_module_main(module_name: str, argv: list[str]) -> None:
-    """Run a module-level main() with forwarded command-line arguments."""
-    import importlib
-
-    module = importlib.import_module(module_name)
-    old_argv = sys.argv
-    try:
-        sys.argv = [f"chemgraph {module_name.rsplit('.', 1)[-1]}", *argv]
-        code = module.main()
-    finally:
-        sys.argv = old_argv
-    if isinstance(code, int) and code:
-        sys.exit(code)
-
-
-def _handle_academy(args: argparse.Namespace) -> None:
-    """Handle Academy-backed ChemGraph campaign commands."""
-    command = getattr(args, "academy_command", None)
-    if command == "mpi-daemon":
-        _run_module_main(
-            "chemgraph.academy.runtime.daemon",
-            _strip_remainder_separator(args.daemon_args),
-        )
-        return
-    if command == "dashboard":
-        _run_module_main(
-            "chemgraph.academy.runtime.dashboard_launcher",
-            _strip_remainder_separator(args.dashboard_args),
-        )
-        return
-    if command == "run-compute":
-        from chemgraph.academy.runtime.compute_launcher import main as compute_main
-
-        code = compute_main(_strip_remainder_separator(args.compute_args))
-        if code:
-            sys.exit(code)
-        return
-    if command == "campaigns":
-        from chemgraph.academy.campaigns import list_campaigns
-
-        for name in list_campaigns():
-            console.print(name)
-        return
-    console.print(
-        "Usage: chemgraph academy "
-        "{mpi-daemon,run-compute,dashboard,campaigns}.",
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -1044,15 +896,6 @@ def main() -> None:
                 deep_agent_roots=args.deep_agent_root,
             )
         )
-
-    elif args.command == "dashboard":
-        _run_module_main(
-            "chemgraph.academy.dashboard",
-            _strip_remainder_separator(args.dashboard_args),
-        )
-
-    elif args.command == "academy":
-        _handle_academy(args)
 
     elif args.command == "run":
         _handle_run(args)

@@ -25,21 +25,46 @@ path first so infrastructure failures are isolated from LLM behavior.
 Backend selection can use environment variables or `[execution]` settings. Do
 not copy another user's endpoint IDs, allocation names, or private paths.
 
-## Academy campaigns
+## Academy peers
 
-Academy supports persistent multi-agent campaigns and a dashboard runtime.
-Install it into the environment ChemGraph runs in:
+The optional `chemgraph.academy` integration contains a thin `ChemGraphPeer`
+Academy agent, a `PeerMessage` payload, and `make_peer_message_tool`. Applications
+provide async turn and error handlers and a mapping of names to actual Academy
+handles. Use Academy's public `Manager`, `Runtime`, registration, and lifecycle
+APIs directly. Computation continues to use the execution backends above.
 
 ```bash
-uv pip install "chemgraph[academy,parsl,globus_compute]"
-# or, in a conda/pip environment: python -m pip install "chemgraph[academy,parsl,globus_compute]"
-chemgraph academy --help
-chemgraph dashboard --help
+uv pip install "chemgraph[academy]"
 ```
 
-The [MACE ensemble-screening example](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/academy/example-002-mace-ensemble-screening)
-has a README and end-to-end guide. Review campaign JSON/JSONC, runtime profiles,
-prompt profiles, and data paths before launch.
+See the [Python examples](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/academy)
+for two persistent sessions using local or HTTP exchanges, including installation,
+model credentials, submission, approval, and shutdown commands.
+
+The application constructs its model, prompts, tools, sessions, and approval
+policy. Its turn handler drives `MainAgentSession.run()` and required `resume()`
+calls for `main_agent`, or `ChemGraph.run()` for other workflows. The wrapper
+processes one turn at a time and keeps accepting messages while approvals or
+application error recovery are pending. It never chooses checkpoint identity,
+retries, or replaces workflows itself.
+
+Acknowledgements mean acceptance into an in-memory inbox, not successful
+execution. Peers remain alive between messages, but shutdown discards queued
+work and duplicate tracking. There is no restart recovery, automatic replay,
+durable inbox, or scheduling framework.
+
+### Migration from campaigns and distributed configs
+
+The old campaign APIs, campaign JSONC format, prompt profiles, MPI daemon, and
+campaign-specific launchers remain removed. Neither `chemgraph academy` nor
+`chemgraph distributed` is a supported command. The new `chemgraph.academy`
+module exposes only the wrapper, message payload, and messaging tool; it does
+not restore the campaign framework. Move application configuration into Python
+and pass Academy registrations/handles explicitly. There is no custom discovery
+service, JSON peer configuration, or operator control-file protocol.
+
+Use site job scripts or existing ChemGraph execution backends for HPC placement.
+`dev-academy-sim` is a historical prototype, not a required installation.
 
 ## ALCF model access and MCP
 
@@ -60,5 +85,5 @@ facility-specific assumptions. See [MCP servers](mcp_servers.md).
 5. Add concurrency only after logs, retries, and cleanup are understood.
 6. Record model, calculator, environment, scheduler, and code versions.
 
-Never place tokens in campaign files, prompts, repository config, or job logs.
+Never place tokens in application configuration files, prompts, repository config, or job logs.
 Use facility-approved secret mechanisms and least-privilege endpoints.

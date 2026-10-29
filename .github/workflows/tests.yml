@@ -85,7 +85,7 @@ jobs:
         chemgraph --help
         python -m pip check
 
-  # Exercises the distributed/HPC feature set: the Academy multi-agent module
+  # Exercises the distributed/HPC feature set: the optional Academy peer wrapper
   # and the parsl / globus-compute execution backends. These tests use mocks and
   # local subprocesses (no real HPC cluster, Globus endpoint, or LLM), so they
   # run in CI. Live tests remain gated behind --run-globus-compute / --run-llm
@@ -116,6 +116,6 @@ jobs:
     - name: Verify QuickJS is installed
       run: python -c "import quickjs"
 
-    - name: Run academy + backend tests
+    - name: Run distributed communication + backend tests
       run: |
         python -m pytest tests/ -v -k "not tblite"

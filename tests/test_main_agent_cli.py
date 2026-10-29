@@ -1441,7 +1441,6 @@ def _run_args(**overrides):
         "deepagent_skills": None,
         "deepagent_dangerously_skip_approvals": False,
         "output_file": None,
-        "trace_dir": None,
         "checkpoint_db": None,
         "mcp_url": None,
         "mcp_command": None,
