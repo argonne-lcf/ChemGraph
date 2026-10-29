@@ -208,6 +208,22 @@ input is cleared before each decision where supported, so an Enter queued during
 earlier work does not approve the next action. Redirected input is preserved.
 The startup host-access confirmation is separate from these per-action reviews.
 
+**Auto mode.** In an interactive `deep_agent` or `main_agent` chat, `/auto on`
+(after a confirmation) or answering `3` / `auto` at a review approves every
+later tool action without asking, including actions from main-agent workers.
+Each action's preview is still printed with an `Auto-approved` line, and the
+prompt shows `ChemGraph [auto]`. Questions from the agent are still asked, and
+actions whose policy does not allow approval are still reviewed. After 50
+auto-approved actions in a row, the next action is reviewed, and your answer
+starts a new run. Actions that were already pending in a session restored with
+`/resume` are always reviewed. `/auto off`
+restores reviews; `/auto` and `/config` show the current state. Auto mode lasts
+until `/auto off` or exit, including across `/model`, `/workflow`, and
+`/resume`. It is never saved with a session, so restored sessions keep their
+reviewed approval mode and every new launch starts with reviews on. Unlike
+`--dangerously-skip-approvals`, it does not skip the startup host-access
+confirmation.
+
 The selected directory is mounted for file tools at `/workspace`. Thus,
 `--deepagent-workspace test/` makes `/workspace/example.py` refer to
 `test/example.py`, not `test/workspace/example.py`. Shell execution uses the

@@ -92,7 +92,7 @@ def action_review_summary(action: dict) -> Text:
 
 
 def build_action_review(
-    action: dict, index: int, total: int, *, full: bool = False,
+    action: dict, index: int, total: int, *, full: bool = False, viewable: bool = True,
 ) -> tuple[Panel, bool]:
     """Build a sanitized preview and report omissions, using only supplied args."""
     name = str(action.get("name", "unknown"))
@@ -151,7 +151,10 @@ def build_action_review(
             truncated |= omitted
         details.append(Syntax(value, lexer, word_wrap=True) if lexer else Text(value))
     if truncated:
-        details.append(Text("Preview shortened. Type v to inspect the full action."))
+        details.append(Text(
+            "Preview shortened. Type v to inspect the full action."
+            if viewable else "Preview shortened."
+        ))
     return Panel(
         Group(*details),
         title=Text(f"Review action {index} of {total}"),

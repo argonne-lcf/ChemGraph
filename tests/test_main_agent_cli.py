@@ -403,7 +403,7 @@ def test_incompatible_main_agent_graph_reports_recovery_without_retry(monkeypatc
     error = IncompatibleCheckpointError(f"Incompatible topology. {NEW_SESSION_GUIDANCE}")
     results = [_turn_result(PendingInterrupt("approval", {"action_requests": []}))] if during_resume else []
     session = _FakeMainSession([*results, error])
-    monkeypatch.setattr(commands, "_prompt_for_interrupt", lambda _payload: {"decisions": []})
+    monkeypatch.setattr(commands, "_prompt_for_interrupt", lambda _payload, **_: {"decisions": []})
     with console.capture() as output:
         assert commands.run_main_agent_query(session, "calculate") is None
     rendered = " ".join(output.get().split())

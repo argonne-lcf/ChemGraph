@@ -240,6 +240,36 @@ async def test_twelve_file_approvals_complete(monkeypatch, tmp_path, via_cli):
     assert len(agent.session_store.get_session(agent.session_id).messages) == 14
 
 
+@pytest.mark.parametrize("start", ["on", "via_prompt"])
+def test_cli_auto_mode_approves_real_review_payloads(monkeypatch, tmp_path, start):
+    def write(*names):
+        return AIMessage(content="", tool_calls=[
+            {"name": "write_file", "args": {"file_path": f"/workspace/{name}.txt", "content": name},
+             "id": f"write-{name}", "type": "tool_call"}
+            for name in names
+        ])
+
+    agent = _agent(
+        monkeypatch, tmp_path,
+        responses=[write("a", "b"), write("c"), AIMessage(content="Done")],
+        deepagent_backend=LocalShellBackend(root_dir=tmp_path, env={}),
+    )
+    answers = iter([] if start == "on" else ["3"])
+    monkeypatch.setattr(commands.Prompt, "ask", lambda *_a, **_k: next(answers))
+    monkeypatch.setattr(commands.time, "sleep", lambda _: None)
+    auto_mode = commands._AutoMode()
+    auto_mode.enabled = start == "on"
+    token = commands._review_auto_mode.set(auto_mode)
+    try:
+        with commands.console.capture() as capture:
+            result = commands.run_query(agent, "Write three files", thread_id=41)
+    finally:
+        commands._review_auto_mode.reset(token)
+    assert result.content == "Done"
+    assert all((tmp_path / f"{name}.txt").read_text() == name for name in "abc")
+    assert capture.get().count("Auto-approved") == (3 if start == "on" else 2)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("return_option", ["state", "last_message"])
 async def test_async_saver_recovers_approval_and_logs(

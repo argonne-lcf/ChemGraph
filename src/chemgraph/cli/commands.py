@@ -534,6 +534,23 @@ _thread_counter: int = 0
 _interactive_usage: ContextVar[dict | None] = ContextVar("interactive_usage", default=None)
 
 
+class _AutoMode:
+    """REPL-only switch that approves tool reviews; never saved with a session."""
+
+    enabled = False
+    # Bypass launches cannot turn reviews back on, so they cannot enter auto mode.
+    available = True
+    # Each resume gets a fresh recursion limit, so this count stops a looping agent.
+    approved = 0
+
+
+# Auto-approved actions in a row before the user is asked again.
+_AUTO_APPROVE_LIMIT = 50
+
+# Set only by interactive_mode, so headless and direct callers always review.
+_review_auto_mode: ContextVar[_AutoMode | None] = ContextVar("review_auto_mode", default=None)
+
+
 def _next_thread_id() -> int:
     """Return the next interactive-mode thread ID.
 
@@ -867,9 +884,15 @@ def _clear_pending_review_input() -> None:
         pass
 
 
-def _prompt_for_interrupt(payload: Any) -> Any:
-    """Render one interrupt and collect its resume value."""
+def _prompt_for_interrupt(payload: Any, *, restored: bool = False) -> Any:
+    """Render one interrupt and collect its resume value.
+
+    Auto mode never approves a ``restored`` review, which an earlier launch proposed.
+    """
+    auto_mode = _review_auto_mode.get()
     if not _is_tool_review(payload):
+        if auto_mode is not None:
+            auto_mode.approved = 0
         console.print(
             Panel(
                 _interrupt_question(payload),
@@ -899,14 +922,39 @@ def _prompt_for_interrupt(payload: Any) -> Any:
             raise ValueError(
                 f"Tool action {name!r} does not allow approve/reject."
             )
-        panel, truncated = build_action_review(action, index, len(payload["action_requests"]))
+        auto_on = auto_mode is not None and auto_mode.enabled and "approve" in allowed
+        auto_approve = auto_on and not restored and auto_mode.approved < _AUTO_APPROVE_LIMIT
+        panel, truncated = build_action_review(
+            action, index, len(payload["action_requests"]), viewable=not auto_approve,
+        )
         console.print(panel)
+        # Keep the preview so auto-approved commands remain visible.
+        if auto_approve:
+            auto_mode.approved += 1
+            console.print("[dim]Auto-approved (auto mode)[/dim]")
+            decisions.append({"type": "approve"})
+            continue
+        if auto_on:
+            console.print(
+                "[yellow]Auto mode: this action was pending in the restored "
+                "session, so it needs your review.[/yellow]"
+                if restored else
+                f"[yellow]Auto mode approved {_AUTO_APPROVE_LIMIT} actions in a "
+                "row; review this one to continue.[/yellow]"
+            )
+        offer_auto = auto_mode is not None and auto_mode.available and "approve" in allowed
         default = "approve" if "approve" in allowed else "reject"
         if "approve" in allowed:
             console.print("1. Approve this action (Enter / y)", markup=False)
         if "reject" in allowed:
             shortcut = "Enter / n" if default == "reject" else "n"
             console.print(f"2. Reject this action ({shortcut})", markup=False)
+        if offer_auto:
+            console.print(
+                "3. Approve and auto-approve the rest of this session (3 / auto)",
+                markup=False,
+            )
+        if "reject" in allowed:
             console.print(
                 "Or type instructions to skip this action and revise it.",
                 markup=False,
@@ -933,10 +981,20 @@ def _prompt_for_interrupt(payload: Any) -> Any:
                 decision = {"type": "approve"}
             elif command in {"2", "n", "no", "r", "reject"}:
                 decision = {"type": "reject"}
+            elif offer_auto and command in {"3", "auto"}:
+                auto_mode.enabled = True
+                console.print(
+                    "[yellow]Auto mode on: tool actions are approved without "
+                    "asking for the rest of this session. Use /auto off to "
+                    "review again.[/yellow]"
+                )
+                decision = {"type": "approve"}
             else:
                 decision = {"type": "reject", "message": answer}
             if decision["type"] in allowed:
                 decisions.append(decision)
+                if auto_mode is not None:
+                    auto_mode.approved = 0
                 break
             console.print(
                 "[yellow]That response is not allowed for this action. "
@@ -961,8 +1019,12 @@ def _run_main_agent_operation(
     checkpoint_runtime: CheckpointRuntime | None = None,
     interactive: bool = True,
     report_failure_usage: bool = True,
+    restored: bool = False,
 ) -> Any:
-    """Run one operation; headless callers own printing when reporting is disabled."""
+    """Run one operation; headless callers own printing when reporting is disabled.
+
+    With ``restored``, the first interrupts came from a checkpoint and are always asked.
+    """
     from chemgraph.agent.main_session import IncompatibleCheckpointError
 
     try:
@@ -1003,13 +1065,16 @@ def _run_main_agent_operation(
             answers: Any
             if len(result.interrupts) == 1:
                 pending = result.interrupts[0]
-                answers = _prompt_for_interrupt(pending.payload)
+                answers = _prompt_for_interrupt(pending.payload, restored=restored)
             else:
                 if any(not pending.id for pending in result.interrupts):
                     raise ValueError("Multiple pending interrupts require stable IDs.")
                 answers = {}
                 for pending in result.interrupts:
-                    answers[pending.id] = _prompt_for_interrupt(pending.payload)
+                    answers[pending.id] = _prompt_for_interrupt(
+                        pending.payload, restored=restored,
+                    )
+            restored = False
 
             result = (
                 checkpoint_runtime.run(lambda: session.resume(answers))
@@ -1079,6 +1144,7 @@ def restore_main_agent_session(
         checkpoint_runtime=checkpoint_runtime,
         interactive=interactive,
         report_failure_usage=interactive,
+        restored=True,
     )
 
 
@@ -1291,6 +1357,7 @@ def save_output(content: str, output_file: str) -> bool:
 
 
 _INTERACTIVE_COMMANDS = {
+    "auto",
     "clear",
     "config",
     "help",
@@ -1399,7 +1466,20 @@ def _print_main_agent_restore_configuration(thread_id, config):
     console.print(table)
 
 
+def _interactive_auto_mode(operation):
+    """Give each interactive session its own auto-mode switch, starting off."""
+    @wraps(operation)
+    def run(*args, **kwargs):
+        token = _review_auto_mode.set(_AutoMode())
+        try:
+            return operation(*args, **kwargs)
+        finally:
+            _review_auto_mode.reset(token)
+    return run
+
+
 @_report_session_usage
+@_interactive_auto_mode
 def interactive_mode(
     model: str = "gpt-4o-mini",
     workflow: str = "single_agent",
@@ -1503,6 +1583,8 @@ def interactive_mode(
     except ValueError as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
         return 2
+    auto_mode = _review_auto_mode.get()
+    auto_mode.available = approval_mode != "bypass"
 
     if workspace is not None and (not isinstance(workspace, str) or not workspace.strip()):
         console.print("[red]Workspace must be a non-empty host directory path.[/red]")
@@ -1713,7 +1795,11 @@ def interactive_mode(
 
     while True:
         try:
-            query = Prompt.ask("\n[bold cyan]ChemGraph[/bold cyan]")
+            query = Prompt.ask(
+                "\n[bold cyan]ChemGraph[/bold cyan]"
+                + (" [bold yellow]\\[auto][/bold yellow]" if auto_mode.enabled else "")
+            )
+            auto_mode.approved = 0
             parsed_command = _parse_interactive_input(query)
 
             if parsed_command is None:
@@ -1751,6 +1837,7 @@ Available commands:
   /config            Show current configuration
   /model <name>      Change model
   /workflow <type>   Change workflow type
+  /auto \\[on|off]     Approve tool actions without asking (this session only)
 
 Session commands:
   /history           List recent sessions
@@ -1768,7 +1855,9 @@ pause to request input.
 
 Tool action reviews: Enter or y approves; n rejects. Type instructions
 instead to skip the displayed action and ask the agent to revise it. Each
-action in a batch is reviewed separately.
+action in a batch is reviewed separately. Choose 3 (or type auto) to approve
+and switch on auto mode; `/auto off` brings the reviews back. Questions from
+the agent are always asked.
 
 Example queries:
   What is the SMILES string for water?
@@ -1794,6 +1883,7 @@ Example queries:
                 console.print(f"Model: {model}")
                 console.print(f"Workflow: {workflow}")
                 console.print(f"Approval mode: {approval_mode}")
+                console.print(f"Auto mode: {'on' if auto_mode.enabled else 'off'}")
                 console.print(
                     "Deep Agent: "
                     f"{'enabled' if workflow == 'deep_agent' or (enable_deepagent and workflow == 'main_agent') else 'disabled'}"
@@ -1803,6 +1893,45 @@ Example queries:
                     console.print(f"Failed: {main_session.failed}")
                 elif hasattr(agent, "session_id"):
                     console.print(f"Session ID: {agent.session_id}")
+                continue
+            elif command == "auto":
+                setting = argument.casefold()
+                if setting not in {"", "on", "off"}:
+                    console.print("[red]Usage: /auto \\[on|off][/red]")
+                    continue
+                if setting and not auto_mode.available:
+                    console.print(
+                        "[yellow]Approvals are already bypassed for this launch "
+                        "(--dangerously-skip-approvals); /auto off cannot restore "
+                        "reviews. Restart without the flag to review actions.[/yellow]"
+                    )
+                    continue
+                if setting == "off":
+                    auto_mode.enabled = False
+                    console.print("[green]Auto mode off: tool actions will be reviewed.[/green]")
+                elif setting == "on" and not auto_mode.enabled:
+                    console.print(
+                        Panel(
+                            "Auto mode approves every reviewed tool action, including "
+                            "shell commands and file changes, without asking. The "
+                            "shell is not confined to the workspace. Questions from "
+                            "the agent are still asked. Auto mode lasts until "
+                            "/auto off or exit and is never saved with a session.",
+                            title="[bold red]Auto mode[/bold red]",
+                            style="red",
+                        )
+                    )
+                    if Confirm.ask("Turn on auto mode?", default=False):
+                        auto_mode.enabled = True
+                        console.print("[yellow]Auto mode on.[/yellow]")
+                    else:
+                        console.print("Auto mode stays off.")
+                else:
+                    console.print(
+                        f"Auto mode: {'on' if auto_mode.enabled else 'off'}. "
+                        "Usage: /auto [on|off]",
+                        markup=False,
+                    )
                 continue
             elif command == "history":
                 if argument:
