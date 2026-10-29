@@ -96,7 +96,7 @@ ocsr = [
 ]
 codex = [
     # The adapter parses SDK notification methods/payloads; verify its contract tests before upgrading.
-    "openai-codex==0.144.4",
+    "openai-codex==0.163.0",
 ]
 calculators = [
     "tblite==0.4.0; python_version < '3.13' or platform_system != 'Darwin'",
