@@ -7,15 +7,18 @@ from typing import Any
 
 from deepagents import create_deep_agent
 from deepagents.backends.protocol import BackendProtocol
+from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
 from langgraph.checkpoint.memory import InMemorySaver
 
 from chemgraph.registry.tools import ToolRegistry
+from chemgraph.graphs.tool_reasons import ToolReasonMiddleware
 from chemgraph.graphs.workspace import (
     DEFAULT_WORKSPACE_INTERRUPT_ON as DEFAULT_DEEPAGENT_INTERRUPT_ON,
     _DEFAULT_INTERRUPT_POLICY,
     _normalize_backend as _normalize_backend,
     normalize_skill_sources as normalize_skill_sources,
     prepare_workspace_runtime,
+    tool_reason_names,
 )
 
 
@@ -111,6 +114,14 @@ def construct_deep_agent_graph(
         )
         registered.extend(loader.proxies())
         middleware.append(loader)
+    elif not any(spec["name"] == GENERAL_PURPOSE_SUBAGENT["name"] for spec in registered):
+        # The implicit worker inherits only default-slot overrides (ChemGraphSkillsMiddleware).
+        registered.append({
+            **GENERAL_PURPOSE_SUBAGENT, "skills": sources,
+            "middleware": [middleware[0], ToolReasonMiddleware(
+                tool_reason_names(interrupt_on), subagent_name=GENERAL_PURPOSE_SUBAGENT["name"],
+            )],
+        })
     workflow = create_deep_agent(
         model=llm,
         subagents=registered,

@@ -73,6 +73,7 @@ def test_action_preview_is_literal_and_does_not_read_files(
     ("write_file", {"file_path": "/a\x9b2K", "content": "danger\x1b]0;title\x07\rharmless"}),
     ("edit_file", {"old_string": "old\r\n", "new_string": "new\x1b[2K\x9b2K\n"}),
     ("custom\x1b[2K", {"path": "a\x9b2K\x7f"}),
+    ("execute", {"command": "ls", "reason": "why\x1b[2J\x9b2K"}),
     ("execute", {"command": " ".join(chr(n) for n in range(160) if n < 32 or n >= 127)}),
 ])
 def test_action_reviews_escape_terminal_controls(monkeypatch, name, args, full):
@@ -92,6 +93,27 @@ def test_action_reviews_escape_terminal_controls(monkeypatch, name, args, full):
     if name == "edit_file":
         assert "-old\\x0d" in output  # Preserve CR before splitting diff lines.
     assert action == original
+
+
+def test_tool_reason_is_shown_once_and_escaped_in_review_and_event_line():
+    from chemgraph.cli.commands import _render_main_agent_event
+
+    terminal = Console(width=120, color_system=None)
+    with terminal.capture() as capture:
+        terminal.print(format_action_review(
+            {"name": "execute", "args": {"command": "ls", "reason": "List the run directory."}}, 1, 1,
+        ))
+    output = capture.get()
+    assert "Reason: List the run directory." in output
+    assert '"reason"' not in output
+
+    with console.capture() as capture:
+        _render_main_agent_event("tool_call_started", {
+            "tool_name": "execute", "arguments": "{'command': 'ls'}", "reason": "[red]why[/red]\x1b[2J",
+        })
+    output = capture.get()
+    assert "↳ [red]why[/red]\\x1b[2J" in output
+    assert "\x1b[2J" not in output
 
 
 # Pytest stores IDs in PYTEST_CURRENT_TEST, which has a size limit on Windows.

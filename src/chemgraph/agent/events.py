@@ -6,6 +6,7 @@ from typing import Any, Callable
 from langchain_core.callbacks import BaseCallbackHandler
 
 from chemgraph.agent.usage import response_usage
+from chemgraph.graphs.tool_reasons import TOOL_REASON_EVENT
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,7 @@ class _BaseDashboardEventCallback(BaseCallbackHandler):
     def __init__(self, on_event: EventCallback, thread_id: str) -> None:
         self._on_event = on_event
         self._thread_id = thread_id
+        self._tool_reasons: dict[str, dict[str, Any]] = {}
 
     def _emit(self, event: str, payload: dict[str, Any]) -> None:
         try:
@@ -135,10 +137,19 @@ class _BaseDashboardEventCallback(BaseCallbackHandler):
         metadata = kwargs.get("metadata")
         if isinstance(metadata, dict) and metadata.get(SUBAGENT_METADATA_KEY):
             payload["subagent_name"] = str(metadata[SUBAGENT_METADATA_KEY])
+        if reason := self._tool_reasons.pop(str(kwargs.get("tool_call_id")), None):
+            payload["reason"] = reason["reason"]
+            if reason.get("subagent_name"):
+                payload.setdefault("subagent_name", reason["subagent_name"])
         self._emit(
             "tool_call_started",
             payload,
         )
+
+    def on_custom_event(self, name, data, **kwargs) -> None:
+        # ToolReasonMiddleware publishes the reason it strips before execution.
+        if name == TOOL_REASON_EVENT and isinstance(data, dict) and data.get("tool_call_id"):
+            self._tool_reasons[str(data["tool_call_id"])] = data
 
     def on_tool_end(self, output, **kwargs) -> None:
         payload: dict[str, Any] = {"result": _serialize_state(output)}
