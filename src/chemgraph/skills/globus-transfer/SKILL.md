@@ -10,12 +10,20 @@ metadata:
 
 # Globus transfers
 
-The user authenticates in a terminal with `globus login`, and runs any further
-`globus login --gcs …` or consent command the CLI prints for a collection. Never run
-interactive logins and never handle tokens. Check access with `globus whoami`.
+Check authentication with `globus whoami`. For missing/expired authentication,
+the user runs `globus login` in their terminal; for required collection consent,
+they run the `globus login --gcs …` or consent command the CLI prints. Never run
+interactive logins and never handle tokens. DNS, connection, or timeout errors
+do not establish an authentication failure. A disconnected local endpoint needs
+Globus Connect Personal running and reachable; repeating login does not fix that.
+Report the actual error and use the [CLI diagnostics](references/cli.md#wait-and-check)
+for failed or stalled tasks, preserving their records.
 
-Collection IDs and the path each collection uses come from the user's configuration
-(for `iri-hpc`, `target.toml`). Ask for missing values; never guess them. Collection
+Collection IDs and the path each collection uses come from the selected configuration
+(for `iri-hpc`, the workspace's `target.toml`) or explicit user input. Example
+paths do not identify a workspace or authorize searching other configurations.
+Verify that the local path maps the selected workspace, especially after importing
+a configuration. Ask for missing values; never guess them. Collection
 paths can differ from compute-node paths: on ALCF Eagle, collection
 `/<project>/…` is `/eagle/<project>/…` on compute nodes. Use the exact commands in
 [the CLI recipes](references/cli.md).
@@ -47,13 +55,16 @@ record/task and resume it; never generate a replacement submission ID.
   after `globus task show` reports a terminal state for any known task, and the
   active-task listing in the recipes succeeds with an empty result. A failed listing
   leaves the outcome uncertain.
+- Report a failed or paused task with `globus task event-list`.
+- Never delete files at either end unless the user asks.
+
+For tracked HPC runs:
+
 - Stage only before job submission. Once the run directory has `submission.started`
   or `job.id` or `submission.history`, never transfer into its remote counterpart
   again, including after resolving a rejected submission.
 - Collect into a subdirectory such as `RUN_DIR/outputs/`, never into the run
   directory itself, so a transfer cannot overwrite job markers or inputs.
-- Report a failed or paused task with `globus task event-list`.
-- Never delete files at either end unless the user asks.
 
 For other operations, consult the [Globus CLI reference](https://docs.globus.org/cli/)
 and [ALCF's Globus guide](https://docs.alcf.anl.gov/data-management/data-transfer/using-globus/).

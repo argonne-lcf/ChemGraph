@@ -15,9 +15,11 @@ tool may have been excluded by a configured filter; searching cannot enable it.
 Call the loaded native tools instead of invoking their implementation through
 `execute` or inspecting source to rediscover their arguments.
 
-For the PBS water workflow:
+For water preparation:
 
-1. Choose a fresh shared run directory visible on login and compute nodes.
+1. Choose a fresh run directory on the host where the preparation tool executes.
+   On a submission host, use a shared directory visible on compute nodes. On a
+   laptop, use the selected local workspace; stage its run directory later.
 2. Call `smiles_to_coordinate_file` with `smiles="O"` and `output_file` set to
    the absolute host path of `water.xyz` in that directory. This is lightweight
    RDKit coordinate generation, not the requested ASE calculation.
@@ -25,9 +27,13 @@ For the PBS water workflow:
    with `file_to_atomsdata` and verify three atoms: one O and two H, with finite
    coordinates. Stop preparation on an error or rejected write; do not submit
    an input that has not been generated and checked.
-4. Put the returned absolute `path` in `ASEInputSchema.input_structure_file`.
-   Follow [the ASE batch example](ase-batch.md) and the `pbs-hpc` skill to write
-   the calculation and submit it. Keep the requested calculator on compute nodes.
+4. For direct PBS, put the verified compute-visible path in
+   `ASEInputSchema.input_structure_file`. For IRI, stage the structure with the
+   run directory and use a run-relative path such as `water.xyz` in `input.json`.
+   A laptop-generated absolute `path` belongs to the laptop, not the compute node.
+   Follow [the ASE batch example](ase-batch.md) and the selected
+   [PBS](../../pbs-hpc/SKILL.md) or [IRI](../../iri-hpc/SKILL.md) workflow.
+   Keep the requested calculator on compute nodes.
 
 Local registry tools execute in the agent process, on the agent host. Their
 filesystem is independent of a virtual file backend, remote shell, or MCP server.
@@ -36,10 +42,32 @@ tool. Relative writes use `CHEMGRAPH_LOG_DIR`; carry the returned absolute path
 forward instead of guessing where a relative filename landed. For separate
 hosts, stage the generated artifact and use the verified compute-visible path.
 
-If native tools are not configured, a skill-guided local script may call
-`chemgraph.tools.cheminformatics_core.smiles_to_coordinate_file_core` with the
-same SMILES and absolute output path. Reuse that implementation rather than
-writing coordinates or recreating chemistry logic. Report missing dependencies.
+If native tools are not configured, run this Python fallback from the selected
+fresh run directory in an environment with ChemGraph, RDKit, and ASE installed:
+
+```python
+from pathlib import Path
+
+import numpy as np
+from ase.io import read
+from chemgraph.tools.cheminformatics_core import smiles_to_coordinate_file_core
+
+artifact = smiles_to_coordinate_file_core(
+    smiles="O", output_file=str(Path("water.xyz").resolve())
+)
+if not artifact["ok"] or artifact["natoms"] != 3:
+    raise ValueError(f"Water preparation failed: {artifact}")
+atoms = read(artifact["path"])
+if sorted(atoms.get_chemical_symbols()) != ["H", "H", "O"]:
+    raise ValueError("Expected one O and two H atoms")
+if atoms.positions.shape != (3, 3) or not np.isfinite(atoms.positions).all():
+    raise ValueError("Invalid water coordinates")
+print({"path": artifact["path"], "natoms": len(atoms)})
+```
+
+Reuse the core implementation rather than writing coordinates or recreating
+chemistry logic. Report missing dependencies and stop on preparation errors.
+The checked local artifact still needs staging when execution is on another host.
 
 Keep full structures, trajectories, and logs in files. Return concise status,
 atom counts, relevant results, and artifact paths; load more data only when needed.

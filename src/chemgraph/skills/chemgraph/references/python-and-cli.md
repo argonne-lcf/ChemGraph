@@ -15,8 +15,9 @@ chemgraph run --interactive --workflow main_agent --workspace . --subagent deep_
 
 For direct PBS calculations, write a workspace script following
 [the ASE batch example](ase-batch.md) and use the `pbs-hpc` skill to submit it.
-Run the Deep Agent on the submission host with a shared workspace; no `--mcp-url`
-or ChemGraph execution-backend configuration is needed for this route.
+Run submission commands on the authorized host with a workspace visible to
+compute nodes; no `--mcp-url` or ChemGraph execution-backend configuration is
+needed for this route.
 
 Attach an externally managed MCP server with `--mcp-url URL`. Starting a server
 and attaching to one are separate actions. Do not assume that an HTTP MCP server
@@ -54,5 +55,4 @@ filesystem backend. They implement different interfaces.
 Without an explicit main-agent workspace, file tools use checkpoints and no
 shell is available. Registry tools still run on the host under their review
 policy. `--tool NAME` restricts the main-agent or standalone DeepAgent catalog;
-TOML `tools = []` disables discovery. Old graph checkpoints cannot resume after
-the capabilities upgrade, but old transcripts remain readable.
+TOML `tools = []` disables discovery.

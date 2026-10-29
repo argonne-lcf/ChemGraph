@@ -19,22 +19,30 @@ allocation, endpoint, private path, or environment.
 
 Check whether `execute` runs on that host. A local shell on a laptop cannot run
 remote PBS commands merely because a skill or an HPC MCP server is attached.
-When the shell runs on the submission host, write the job files and submit with
-PBS commands directly. Otherwise use suitable attached HPC tools, or prepare the
-script and state where the user must submit it.
+Preserve the user's selected execution method. If none was selected and the shell
+runs on the submission host, write the job files and submit with PBS commands
+directly. For remote submission, use [iri-hpc](../iri-hpc/SKILL.md) for ALCF jobs
+or suitable attached HPC tools. If submission is unavailable, prepare the script
+and state where the user must submit it.
 
-Read the applicable site reference before choosing launch settings:
+Read the applicable site-reference sections before choosing launch settings:
 [Polaris](references/polaris.md), [Aurora](references/aurora.md), or
 [Crux](references/crux.md). Consult the linked official guides for current
 queue limits and site policies.
 
-The Polaris reference includes login-node usage, modules, network proxy setup,
-queues, MPI/OpenMP examples, CPU/GPU affinity, MPS/MIG, and storage. Read it for
-Polaris environment setup as well as job submission.
+For a simple Polaris job, start with [queues](references/polaris.md#queues),
+[filesystems](references/polaris.md#filesystems),
+[application modules](references/polaris.md#software--modules), and
+[network proxy setup](references/polaris.md#internet-proxy-login-and-compute-nodes).
+For single-process ASE launch settings, use the
+[ASE batch example](../chemgraph/references/ase-batch.md). Consult the site's MPI,
+affinity, and MPS/MIG sections when the application needs those features.
 
-The Aurora reference covers hardware, queue selection, PALS, Intel GPU hierarchy
-and affinity, monitoring, and group-restricted `/soft` access. Read it for Aurora
-operations and environment troubleshooting as well as job submission.
+For Aurora, start with [system basics](references/aurora.md#system-basics) for
+filesystems and the application environment, and
+[queues and submission](references/aurora.md#pbs-queues-and-submission). Consult
+PALS, GPU affinity, monitoring, and `/soft` troubleshooting sections as needed.
+Use the [Crux reference](references/crux.md) for its site-specific settings.
 
 ## Prepare and track a job
 
@@ -53,9 +61,11 @@ script in the workspace and run it inside PBS; no MCP server or Parsl is needed.
    Save submission evidence and the complete scheduler ID in the run directory.
 4. Inspect with `qstat -f JOB_ID`; distinguish queued, held, running, and terminal
    states. Explain scheduler comments rather than submitting duplicate jobs.
-5. Inspect stdout/stderr and application result files. A job disappearing from
-   the active queue does not prove success. Use available job history and exit
-   status, and report missing evidence explicitly. Cancel only the requested job.
+   For a submission-only request, report the accepted ID and observed status.
+5. When results are requested, monitor to a terminal state and inspect stdout/stderr
+   and application result files. A job disappearing from the active queue does not
+   prove success. Use available job history and exit status, and report missing
+   evidence explicitly. Cancel only the requested job.
 
 Run this submission sequence from the fresh host run directory after completing
 and inspecting the files:
