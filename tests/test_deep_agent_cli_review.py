@@ -238,6 +238,122 @@ def test_review_feedback_preserves_text(monkeypatch):
     }
 
 
+@pytest.fixture
+def auto_mode():
+    holder = commands._AutoMode()
+    token = commands._review_auto_mode.set(holder)
+    yield holder
+    commands._review_auto_mode.reset(token)
+
+
+def _review_batch():
+    return {
+        "action_requests": [
+            {"name": "execute", "args": {"command": "rm -rf build"}},
+            {"name": "write_file", "args": {"file_path": "/workspace/a.txt", "content": "a"}},
+        ],
+        "review_configs": [
+            {"action_name": name, "allowed_decisions": ["approve", "reject"]}
+            for name in ("execute", "write_file")
+        ],
+    }
+
+
+def test_auto_mode_asks_again_after_limit(monkeypatch, auto_mode):
+    output = _review_terminal(monkeypatch, "y\n")
+    auto_mode.enabled = True
+    auto_mode.approved = commands._AUTO_APPROVE_LIMIT - 1
+    assert commands._prompt_for_interrupt(_review_batch()) == {
+        "decisions": [{"type": "approve"}, {"type": "approve"}]
+    }
+    assert output.getvalue().count("Auto-approved") == 1
+    assert "review this one to continue" in output.getvalue()
+    # The user's answer starts a new run of auto-approvals.
+    assert auto_mode.enabled and auto_mode.approved == 0
+
+
+def test_auto_mode_reviews_actions_pending_in_restored_session(monkeypatch, auto_mode):
+    review = _review(["approve", "reject"])
+    session = _FakeMainSession([
+        _turn_result(PendingInterrupt("old", review)),
+        _turn_result(PendingInterrupt("new", review)),
+        _turn_result(),
+    ])
+
+    async def restore():
+        return session._next_result()
+
+    session.restore = restore
+    output = _review_terminal(monkeypatch, "n\n")
+    auto_mode.enabled = True
+    commands.restore_main_agent_session(session)
+    assert session.calls == [
+        ("resume", {"decisions": [{"type": "reject"}]}),
+        ("resume", {"decisions": [{"type": "approve"}]}),
+    ]
+    assert output.getvalue().count("Auto-approved") == 1
+
+
+def test_auto_mode_still_reviews_restricted_policy(monkeypatch, auto_mode):
+    output = _review_terminal(monkeypatch, "\n")
+    auto_mode.enabled = True
+    assert commands._prompt_for_interrupt(_review(["reject"])) == {
+        "decisions": [{"type": "reject"}]
+    }
+    assert "Auto-approved" not in output.getvalue()
+    assert "3. Approve" not in output.getvalue()
+
+
+@pytest.fixture(params=["headless", "bypass"])
+def unavailable_auto_mode(request):
+    if request.param == "headless":
+        yield
+        return
+    # Stricter worker policies still review during bypass, which /auto cannot undo.
+    holder = commands._AutoMode()
+    holder.available = False
+    token = commands._review_auto_mode.set(holder)
+    yield
+    commands._review_auto_mode.reset(token)
+
+
+@pytest.mark.usefixtures("unavailable_auto_mode")
+def test_auto_option_is_not_offered_outside_reviewed_repl(monkeypatch):
+    output = _review_terminal(monkeypatch, "3\n")
+    assert commands._prompt_for_interrupt(_review(["approve", "reject"])) == {
+        "decisions": [{"type": "reject", "message": "3"}]
+    }
+    assert "3. Approve" not in output.getvalue()
+
+
+@pytest.mark.parametrize("approval_mode", ["review", "bypass"])
+def test_auto_command_toggles_session_state(monkeypatch, approval_mode):
+    prompts = iter(["/auto on", "/auto on", "/config", "/auto", "/auto off", "/config", "/quit"])
+    if approval_mode == "review":
+        prompts = iter(["initial-model", "deep_agent", *prompts])
+    labels, confirmations = [], iter([False, True])
+    monkeypatch.setattr(commands.Prompt, "ask", lambda label, **_k: labels.append(label) or next(prompts))
+    monkeypatch.setattr(commands.Confirm, "ask", lambda *_a, **_k: next(confirmations))
+    monkeypatch.setattr(commands, "create_banner", lambda: "")
+    monkeypatch.setattr(commands, "initialize_agent", lambda *_a, **_k: SimpleNamespace())
+    output = io.StringIO()
+    monkeypatch.setattr(commands, "console", Console(file=output, width=200))
+    commands.interactive_mode(workflow="deep_agent", approval_mode=approval_mode)
+    text = output.getvalue()
+    states = [line for line in text.splitlines() if line.startswith("Auto mode: ")]
+    assert commands._review_auto_mode.get() is None
+    if approval_mode == "bypass":
+        assert next(confirmations) is False  # Bypass never asks to confirm.
+        assert text.count("already bypassed") == 3
+        assert states == ["Auto mode: off", "Auto mode: off. Usage: /auto [on|off]", "Auto mode: off"]
+        return
+    assert "Auto mode stays off." in text
+    assert states == ["Auto mode: on", "Auto mode: on. Usage: /auto [on|off]", "Auto mode: off"]
+    # One REPL label per command: the marker appears after the confirmed /auto on and
+    # disappears after /auto off.
+    assert ["[auto]" in label for label in labels[2:]] == [False, False, True, True, True, False, False]
+
+
 @pytest.mark.parametrize("answer", ["v", "VIEW"])
 def test_full_view_returns_to_same_action_without_approving(monkeypatch, answer):
     from contextlib import contextmanager
@@ -450,7 +566,7 @@ def test_main_agent_limit_counts_questions_only(monkeypatch, approval):
     monkeypatch.setattr(
         commands,
         "_prompt_for_interrupt",
-        lambda _: {"decisions": [{"type": "approve"}]} if approval else "yes",
+        lambda _, **__: {"decisions": [{"type": "approve"}]} if approval else "yes",
     )
     result = commands.run_main_agent_query(session, "test")
     assert (result is not None) is approval

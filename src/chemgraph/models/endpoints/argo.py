@@ -70,13 +70,16 @@ ARGO_MODEL_MAP = {
     "argo:gemini-3.1-flash-lite": "gemini31flashlite",
     "argo:gemini-3.5-flash": "gemini35flash",
     # Claude via Argo
+    "argo:claude-opus-5.5": "claudeopus55",
     "argo:claude-opus-5": "claudeopus5",
     "argo:claude-opus-4.8": "claudeopus48",
     "argo:claude-opus-4.7": "claudeopus47",
     "argo:claude-opus-4.6": "claudeopus46",
     "argo:claude-opus-4.5": "claudeopus45",
     "argo:claude-opus-4.1": "claudeopus41",
+    "argo:claude-haiku-5.5": "claudehaiku55",
     "argo:claude-haiku-4.5": "claudehaiku45",
+    "argo:claude-sonnet-5.5": "claudesonnet55",
     "argo:claude-sonnet-5": "claudesonnet5",
     "argo:claude-sonnet-4.6": "claudesonnet46",
     "argo:claude-sonnet-4.5": "claudesonnet45",
@@ -270,6 +273,8 @@ def prepare_anthropic(request: ModelRequest) -> PreparedModel:
     )
     if requested_model_name not in MODELS_WITHOUT_TEMPERATURE:
         client_kwargs["temperature"] = request.temperature
+    if request.reasoning_effort is not None:
+        client_kwargs["reasoning_effort"] = request.reasoning_effort
 
     return PreparedModel(
         endpoint_name="argo_anthropic",

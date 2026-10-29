@@ -30,6 +30,7 @@ Common options:
 | --- | --- |
 | `-q`, `--query` | Natural-language request |
 | `-m`, `--model` | Provider/model identifier |
+| `--reasoning-effort` | Reasoning effort for a supported model |
 | `-w`, `--workflow` | Agent workflow; defaults to `single_agent` |
 | `-o`, `--output` | Full `state` or `last_message` |
 | `-s`, `--structured` | Request a structured final response |
@@ -83,6 +84,26 @@ them after CLI logging configuration. Library use alone does not configure this.
 
 The legacy no-subcommand form, such as `chemgraph -q "..."`, remains supported,
 but new scripts should use `chemgraph run`.
+
+### Reasoning effort
+
+Verified Argo GPT-5.6 and Claude models accept an explicit reasoning
+effort:
+
+```bash
+chemgraph run \
+  --model argo:claude-opus-4.8 \
+  --reasoning-effort xhigh \
+  --query "Analyze the reaction mechanism."
+```
+
+The GPT-5.6 routes accept `none`, `low`, `medium`, `high`, `xhigh`, and `max`.
+The Claude Opus 4.8, Opus 5, Opus 5.5, Sonnet 5.5, and Haiku 5.5 routes accept
+`low`, `medium`, `high`, `xhigh`, and `max`. Both model families default to
+`medium`. Claude effort controls overall response work through Anthropic's
+`output_config.effort`; it does not make ChemGraph explicitly enable adaptive
+thinking. The Claude 5.5 models think by default, and that thinking counts
+toward the response token limit.
 
 ## Validate credentials
 
@@ -184,6 +205,22 @@ file, and flag replacements that apply to all occurrences. Pending terminal
 input is cleared before each decision where supported, so an Enter queued during
 earlier work does not approve the next action. Redirected input is preserved.
 The startup host-access confirmation is separate from these per-action reviews.
+
+**Auto mode.** In an interactive `deep_agent` or `main_agent` chat, `/auto on`
+(after a confirmation) or answering `3` / `auto` at a review approves every
+later tool action without asking, including actions from main-agent workers.
+Each action's preview is still printed with an `Auto-approved` line, and the
+prompt shows `ChemGraph [auto]`. Questions from the agent are still asked, and
+actions whose policy does not allow approval are still reviewed. After 50
+auto-approved actions in a row, the next action is reviewed, and your answer
+starts a new run. Actions that were already pending in a session restored with
+`/resume` are always reviewed. `/auto off`
+restores reviews; `/auto` and `/config` show the current state. Auto mode lasts
+until `/auto off` or exit, including across `/model`, `/workflow`, and
+`/resume`. It is never saved with a session, so restored sessions keep their
+reviewed approval mode and every new launch starts with reviews on. Unlike
+`--dangerously-skip-approvals`, it does not skip the startup host-access
+confirmation.
 
 The selected directory is mounted for file tools at `/workspace`. Thus,
 `--deepagent-workspace test/` makes `/workspace/example.py` refer to

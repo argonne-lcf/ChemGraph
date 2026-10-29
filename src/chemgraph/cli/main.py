@@ -19,6 +19,7 @@ from rich.markup import escape
 
 from chemgraph.skills.runtime import resolve_skill_dirs
 from chemgraph.models.endpoints.registry import match_endpoint
+from chemgraph.models.supported_models import REASONING_EFFORT_CHOICES
 from chemgraph.utils.config_utils import (
     flatten_config,
     get_argo_user_from_flat_config,
@@ -95,6 +96,12 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
             "LLM model to use; Codex subscription models use "
             "codex:<model-id> (default: gpt-4o-mini)"
         ),
+    )
+    parser.add_argument(
+        "--reasoning-effort",
+        choices=REASONING_EFFORT_CHOICES,
+        default=None,
+        help="Reasoning effort for supported models",
     )
     parser.add_argument(
         "-w",
@@ -451,6 +458,7 @@ def load_config(config_file: str) -> Dict[str, Any]:
                 "thread": 1,
                 "recursion_limit": 200,
                 "human_supervised": False,
+                "reasoning_effort": None,
                 "enable_deepagent": False,
                 "deepagent_workspace": None,
                 "deepagent_skills": None,
@@ -733,6 +741,7 @@ def _handle_run(args: argparse.Namespace) -> None:
             recursion_limit=args.recursion_limit,
             base_url=base_url,
             argo_user=argo_user,
+            reasoning_effort=getattr(args, "reasoning_effort", None),
             verbose=(args.verbose > 0),
             tools=mcp_tools,
             deepagent_tool_registry=deepagent_tool_registry,
@@ -763,6 +772,7 @@ def _handle_run(args: argparse.Namespace) -> None:
             structured_output=args.structured, return_option=args.output,
             generate_report=args.report, recursion_limit=args.recursion_limit,
             base_url=base_url, argo_user=argo_user, verbose=args.verbose > 0,
+            reasoning_effort=getattr(args, "reasoning_effort", None),
             human_supervised=args.human_supervised, tools=mcp_tools,
             enable_deepagent=enable_deepagent, deepagent_workspace=deepagent_workspace,
             deepagent_skill_dirs=deepagent_skill_dirs,
@@ -825,6 +835,7 @@ def _handle_run(args: argparse.Namespace) -> None:
         args.recursion_limit,
         base_url=base_url,
         argo_user=argo_user,
+        reasoning_effort=getattr(args, "reasoning_effort", None),
         verbose=(args.verbose > 0),
         human_supervised=args.human_supervised,
         tools=mcp_tools,

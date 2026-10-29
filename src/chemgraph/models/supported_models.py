@@ -191,13 +191,16 @@ supported_argo_models = [
     "argo:gemini-3.1-flash-lite",
     "argo:gemini-3.5-flash",
     # Claude via Argo
+    "argo:claude-opus-5.5",
     "argo:claude-opus-5",
     "argo:claude-opus-4.8",
     "argo:claude-opus-4.7",
     "argo:claude-opus-4.6",
     "argo:claude-opus-4.5",
     "argo:claude-opus-4.1",
+    "argo:claude-haiku-5.5",
     "argo:claude-haiku-4.5",
+    "argo:claude-sonnet-5.5",
     "argo:claude-sonnet-5",
     "argo:claude-sonnet-4.6",
     "argo:claude-sonnet-4.5",
@@ -208,6 +211,9 @@ supported_argo_models = [
 # entries only after validating them against the deployed endpoint.
 MODELS_WITHOUT_TEMPERATURE = frozenset(
     {
+        "argo:claude-opus-5.5",
+        "argo:claude-sonnet-5.5",
+        "argo:claude-haiku-5.5",
         "argo:claude-sonnet-5",
         "argo:gpt-5.6-luna",
         "argo:gpt-5.6-sol",
@@ -222,16 +228,31 @@ MODELS_WITHOUT_TEMPERATURE = frozenset(
 
     }
 )
-MODELS_WITH_REASONING_EFFORT = frozenset(
-    {
-        "argo:gpt-5.6-luna",
-        "argo:gpt-5.6-sol",
-        "argo:gpt-5.6-terra",
-    }
-)
-SUPPORTED_REASONING_EFFORTS = frozenset(
-    {"none", "low", "medium", "high", "xhigh", "max"}
-)
+REASONING_EFFORT_CHOICES = ("none", "low", "medium", "high", "xhigh", "max")
+_GPT_5_6_REASONING_EFFORTS = frozenset(REASONING_EFFORT_CHOICES)
+_CLAUDE_REASONING_EFFORTS = frozenset(REASONING_EFFORT_CHOICES[1:])
+REASONING_EFFORTS_BY_MODEL = {
+    "argo:gpt-5.6-luna": _GPT_5_6_REASONING_EFFORTS,
+    "argo:gpt-5.6-sol": _GPT_5_6_REASONING_EFFORTS,
+    "argo:gpt-5.6-terra": _GPT_5_6_REASONING_EFFORTS,
+    "argo:claude-opus-4.8": _CLAUDE_REASONING_EFFORTS,
+    "argo:claude-opus-5": _CLAUDE_REASONING_EFFORTS,
+    "argo:claude-opus-5.5": _CLAUDE_REASONING_EFFORTS,
+    "argo:claude-sonnet-5.5": _CLAUDE_REASONING_EFFORTS,
+    "argo:claude-haiku-5.5": _CLAUDE_REASONING_EFFORTS,
+}
+DEFAULT_REASONING_EFFORT_BY_MODEL = {
+    "argo:gpt-5.6-luna": "medium",
+    "argo:gpt-5.6-sol": "medium",
+    "argo:gpt-5.6-terra": "medium",
+    "argo:claude-opus-4.8": "medium",
+    "argo:claude-opus-5": "medium",
+    "argo:claude-opus-5.5": "medium",
+    "argo:claude-sonnet-5.5": "medium",
+    "argo:claude-haiku-5.5": "medium",
+}
+MODELS_WITH_REASONING_EFFORT = frozenset(REASONING_EFFORTS_BY_MODEL)
+SUPPORTED_REASONING_EFFORTS = frozenset(REASONING_EFFORT_CHOICES)
 
 all_supported_models = (
     supported_openai_models

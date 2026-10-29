@@ -37,6 +37,27 @@ chemgraph models
 chemgraph run --model gpt-4o-mini --check-keys
 ```
 
+## Reasoning effort
+
+ChemGraph exposes provider reasoning controls for a manually verified subset of
+Argo models:
+
+| Models | Accepted values | Default |
+| --- | --- | --- |
+| `argo:gpt-5.6-luna`, `argo:gpt-5.6-sol`, `argo:gpt-5.6-terra` | `none`, `low`, `medium`, `high`, `xhigh`, `max` | `medium` |
+| `argo:claude-opus-4.8`, `argo:claude-opus-5`, `argo:claude-opus-5.5`, `argo:claude-sonnet-5.5`, `argo:claude-haiku-5.5` | `low`, `medium`, `high`, `xhigh`, `max` | `medium` |
+
+Select the effort for a run with `--reasoning-effort`:
+
+```bash
+chemgraph run --model argo:gpt-5.6-sol --reasoning-effort high \
+  -q "Compare two reaction pathways."
+```
+
+For Claude, ChemGraph forwards the value as Anthropic's overall response
+effort. It does not explicitly enable adaptive thinking. Other model IDs reject
+an explicit effort until their endpoint behavior has been verified.
+
 ## Public API providers
 
 Set the provider's environment variable before launching ChemGraph:
@@ -64,6 +85,29 @@ configured `argo_user`, then `ARGO_USER`, and finally the internal `chemgraph`
 placeholder required by the client libraries. Argo routes do not read an
 explicit `api_key` or `OPENAI_API_KEY`, so OpenAI credentials are never sent to
 an Argo endpoint.
+
+Claude 5.5 models are available in the Argo model picker and through these
+identifiers:
+
+| Model | ChemGraph identifier | Production Argo ID |
+| --- | --- | --- |
+| Claude Opus 5.5 | `argo:claude-opus-5.5` | `claudeopus55` |
+| Claude Sonnet 5.5 | `argo:claude-sonnet-5.5` | `claudesonnet55` |
+| Claude Haiku 5.5 | `argo:claude-haiku-5.5` | `claudehaiku55` |
+
+For example, with `ARGO_USER` set as above:
+
+```bash
+chemgraph run --model argo:claude-sonnet-5.5 -q "Summarize the water molecule."
+```
+
+These models use Argo's Anthropic-native endpoint. ChemGraph omits sampling
+parameters, including any configured temperature, as required by these models.
+
+**HTML report limitation:** Claude Opus 5.5 rejects forced tool calls, which
+ChemGraph's optional HTML report generator currently uses. Leave `--report`
+disabled (or `generate_report=False` in Python) when selecting this model.
+See the [Opus 5.5 migration guide](https://platform.claude.com/docs/en/models/opus-5-5/migration-guide).
 
 ALCF-hosted inference routes use `ALCF_ACCESS_TOKEN`. Available endpoints and
 access policies are facility-managed, so use `chemgraph models` and the current

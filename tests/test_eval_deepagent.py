@@ -562,7 +562,7 @@ async def test_deepagent_retry_exception_preserves_reply_and_usage(evaluation_co
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("model_name,effort", [("fake", None), ("argo:gpt-5.6-sol", "none")])
+@pytest.mark.parametrize("model_name,effort", [("fake", None), ("argo:gpt-5.6-sol", "medium")])
 async def test_deepagent_real_graph_formats_native_trace(
     evaluation_config, monkeypatch, model_name, effort,
 ):
