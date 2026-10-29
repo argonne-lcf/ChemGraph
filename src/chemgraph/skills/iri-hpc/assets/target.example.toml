@@ -22,8 +22,10 @@ remote_root = "/eagle/YOUR_PROJECT/YOUR_USER/iri-runs"
 # Globus collections for staging (globus-transfer skill).
 # Find with: globus endpoint local-id
 local_collection_id = "YOUR_LOCAL_COLLECTION_ID"
-# The workspace as the local collection names it; Globus Connect Personal uses /~/ for home.
-local_globus_root = "/~/iri-test"
+# The selected local workspace as the collection names it; /~/ means home in
+# Globus Connect Personal. This is a staging-path mapping, not a location to
+# search for configuration. Update it when importing a target into another workspace.
+local_globus_root = "/~/YOUR_WORKSPACE"
 # Must match the remote_root filesystem. Public ALCF collections (globus endpoint search):
 # Eagle alcf#dtn_eagle 05d2c76a-e867-4f67-aa57-76edeb0beda0,
 # Home alcf#dtn_home 9032dd3a-e841-4687-a163-2720da731b5b,
@@ -32,6 +34,8 @@ remote_collection_id = "05d2c76a-e867-4f67-aa57-76edeb0beda0"  # Eagle
 # remote_root as the collection names it: Eagle's collection root is /eagle.
 remote_globus_root = "/YOUR_PROJECT/YOUR_USER/iri-runs"
 
-# Existing compute environment with ChemGraph installed; never installed automatically.
+# Existing remote compute environment with ChemGraph and the requested calculator
+# installed, supplied by the user or deployment configuration. These are remote
+# activation/Python settings, not laptop paths; never install it automatically.
 environment_setup = "source /eagle/YOUR_PROJECT/YOUR_USER/envs/chemgraph/bin/activate"
 python = "/eagle/YOUR_PROJECT/YOUR_USER/envs/chemgraph/bin/python"

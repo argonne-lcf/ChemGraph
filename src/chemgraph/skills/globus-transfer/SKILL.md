@@ -10,12 +10,20 @@ metadata:
 
 # Globus transfers
 
-The user authenticates in a terminal with `globus login`, and runs any further
-`globus login --gcs …` or consent command the CLI prints for a collection. Never run
-interactive logins and never handle tokens. Check access with `globus whoami`.
+Check authentication with `globus whoami`. For missing/expired authentication,
+the user runs `globus login` in their terminal; for required collection consent,
+they run the `globus login --gcs …` or consent command the CLI prints. Never run
+interactive logins and never handle tokens. DNS, connection, or timeout errors
+do not establish an authentication failure. A disconnected local endpoint needs
+Globus Connect Personal running and reachable; repeating login does not fix that.
+Report the actual error and use the [CLI diagnostics](references/cli.md#wait-and-check)
+for failed or stalled tasks, preserving their records.
 
-Collection IDs and the path each collection uses come from the user's configuration
-(for `iri-hpc`, `target.toml`). Ask for missing values; never guess them. Collection
+Collection IDs and the path each collection uses come from the selected configuration
+(for `iri-hpc`, the workspace's `target.toml`) or explicit user input. Example
+paths do not identify a workspace or authorize searching other configurations.
+Verify that the local path maps the selected workspace, especially after importing
+a configuration. Ask for missing values; never guess them. Collection
 paths can differ from compute-node paths: on ALCF Eagle, collection
 `/<project>/…` is `/eagle/<project>/…` on compute nodes. Use the exact commands in
 [the CLI recipes](references/cli.md).

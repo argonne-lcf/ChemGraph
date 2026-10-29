@@ -9,14 +9,27 @@ it with a quoted `bash -c` string or feed the script to Bash on stdin.
 Sourcing `iri.sh` loads IDs and paths from `target.toml`. Request bodies contain no
 secrets; the token travels only through a pipe from builtin `printf` to `curl -H @-`.
 With DeepAgent `execute`, use `timeout=180` for submission and `timeout=420` for
-IRI filesystem polling. After exit 124, inspect saved state; never infer that a
-mutation was not sent. For `iri_submit.py`, rerun the normal helper after inspection:
-it checks the OS lock and saved outcome, refusing uncertain replays. On a busy
-exit 3, wait before invoking it again. `.submission.lock` is permanent, so its
-presence does not indicate activity. Never delete it or any submission evidence.
+IRI filesystem polling. After exit 124, inspect saved state and follow
+[Resume](#resume); never infer that a mutation was not sent.
 
 HTTP errors return nonzero with the problem body printed. Report it rather than
 retrying a write blindly.
+
+## Connection and authentication
+
+Distinguish missing/expired credentials or an explicit authentication rejection
+(such as HTTP 401) from DNS, TLS, proxy, connection, or timeout failures. Ask the
+user to run `alcf-tokens login iri` only when token/authentication evidence
+warrants it. A permission denial may require correcting account or resource access
+rather than logging in again. Report the actual failure; do not treat a generic
+helper login suggestion as proof when the underlying error is a network failure.
+Never run an interactive login or handle tokens directly.
+
+For connectivity failures, inspect reachability and the host's network/proxy
+configuration. A failed write may already have reached the server: preserve its
+records and apply the relevant resume procedure before another mutation. For
+Globus login, consent, and endpoint availability, use
+[globus-transfer](../../globus-transfer/SKILL.md).
 
 ## Discover
 
@@ -27,15 +40,24 @@ source "$SKILLS/iri-hpc/scripts/iri.sh" || exit 1
 RUN=...  # plain run name, no slashes, e.g. water-opt-001
 REMOTE_RUN="$REMOTE_ROOT/$RUN"
 curl -sS --fail-with-body "$BASE/status/resources/$COMPUTE" | jq '{name, current_status}'
-iri "$BASE/account/whoami"
 iri "$BASE/account/projects" | jq -r '.[].name'
 BASH
 ```
 
+`account/whoami` is optional identity diagnostics, not routine discovery. If
+needed, call it through `iri` with the same wrapper and setup. Its identifier
+need not be the scheduler username; do not use it to replace the configured
+`username`/`OWNER` used for job filtering.
+
 ## Stage
 
 ALCF's IRI `upload` and `download` return 501. Create the directory here, transfer
-the files with the `globus-transfer` skill, then list them:
+the files with the `globus-transfer` skill, then list them. All `iri_fs` calls use
+the configured `storage_resource_id` (`STORAGE`): an Eagle resource can inspect
+Eagle paths, not `/home`. Use the matching configured storage resource for the
+path; a failure through Eagle does not prove a `/home` environment is absent.
+Compute paths and Globus collection paths can differ; use the mappings in
+`target.toml`.
 
 ```bash
 exec bash /dev/fd/3 3<<'BASH' </dev/null
@@ -117,6 +139,36 @@ stdout stays empty and the marker continues to block uncertain replays. `--retry
 refuses. A timeout, 409, redirect, missing response ID, or 5xx (including a new
 headerless 501) stays blocked. No automatic fallback or second POST occurs.
 
+## Resume
+
+A later session starts from saved evidence in the run directory. Accepted jobs
+survive agent exit. After an `iri_submit.py` timeout, inspect that evidence and
+rerun the normal helper: it checks the OS lock and saved outcome before doing
+anything. A busy exit 3 means wait before invoking it again. `.submission.lock`
+is permanent; its existence does not indicate an active process. Never delete
+it. Genuine uncertainty still blocks submission, and definite rejections require
+correction and a separate submit.
+
+- Valid `job.id`: monitor and collect that job as requested. Never submit again.
+- `submission.started` without `job.id`: stop and inspect the saved evidence.
+  Running the helper may finish an interrupted accepted/rejected outcome from its
+  matching history without sending a request. Otherwise it stays blocked. The
+  [paged listing](#inspect-uncertainty) is diagnostic only: an empty result cannot
+  prove no job was submitted. `--retry-uncertain` is deprecated and always refuses.
+- Resolved legacy rejection in `submission.history`, with no active marker or
+  accepted job: ready for a **separate** normal submission. Never restage.
+- `submission.rejected.json` without a marker: the request was definitively
+  rejected. Fix the cause (for a 401, ask the user to log in) and submit separately.
+- No submission evidence, but a `.globus/$RUN-stage-in.json` record: resume that
+  transfer with the `globus-transfer` skill; never start another.
+
+Any `submission.started`, `job.id`, or `submission.history` prohibits stage-in.
+Never delete evidence, edit an uncertain request, or submit in another directory
+to work around uncertainty. Independently confirmed job IDs can be monitored
+read-only using the [monitor recipe](#monitor); this does not reset local state.
+The only local recovery is the [legacy rejection procedure](#resolve-a-legacy-idempotency-rejection)
+below, which requires evidence covering every prior attempt and user confirmation.
+
 ## Monitor
 
 ```bash
@@ -131,9 +183,12 @@ iri "$BASE/compute/status/$COMPUTE/$JOB?historical=true" |
 BASH
 ```
 
-States are new, queued, held, active, completed, failed, and canceled. If a facility
-operator independently confirms an uncertain run's job ID, use this read-only
-variant. It neither writes `job.id` nor clears the marker:
+States are new, queued, held, active, completed, failed, and canceled. For a
+submission-only request, return the accepted ID and observed state. For completed
+results, monitor to a terminal state and collect output; a queued job has no
+calculation results yet, and scheduler completion alone does not prove success.
+If a facility operator independently confirms an uncertain run's job ID, use this
+read-only variant. It neither writes `job.id` nor clears the marker:
 
 ```bash
 exec bash /dev/fd/3 3<<'BASH' </dev/null
