@@ -374,6 +374,84 @@ def test_hpc_worker_job_and_calculate_asset_roundtrips(
     assert module.main() == 1
 
 
+@pytest.mark.parametrize(
+    'scenario,expected',
+    [
+        ('success', 0),
+        ('partial', 3),
+        ('unconverged', 1),
+        ('identity', 1),
+        ('electronic', 1),
+    ],
+)
+def test_workflow_real_preparation_mocked_engine(
+    tmp_path, monkeypatch, fake_engine, scenario, expected
+):
+    from examples.molecular_properties.run import run_workflow
+    from pathlib import Path
+
+    original = ase_core.run_ase_core
+    opt_count = 0
+    handoffs = []
+
+    def run(p):
+        nonlocal opt_count
+        if p.driver == 'opt':
+            opt_count += 1
+        if scenario == 'partial' and opt_count > 1:
+            return {
+                'status': 'failure',
+                'message': 'synthetic failed conformer',
+                'stage': 'optimization',
+            }
+        result = original(p)
+        if result.get('status') != 'success':
+            return result
+        path = Path(p.output_results_file)
+        data = json.loads(path.read_text())
+        if p.driver == 'opt' and scenario == 'unconverged':
+            result['converged'] = data['converged'] = False
+            path.write_text(json.dumps(data))
+        if p.driver == 'opt' and scenario == 'identity':
+            data['final_structure']['positions'][0][0] += 10
+            path.write_text(json.dumps(data))
+        if p.driver == 'electronic':
+            handoffs.append(
+                (p.input_structure_file, read(p.input_structure_file).positions.copy())
+            )
+            if scenario == 'electronic':
+                return {'status': 'failure', 'message': 'synthetic SCF failure'}
+        return result
+
+    monkeypatch.setattr(ase_core, 'run_ase_core', run)
+    summary, code = run_workflow(
+        'CCCCCCC',
+        'PBE',
+        'def2-SVP',
+        str(tmp_path),
+        preparation_settings={'candidates': 8, 'retained': 3},
+    )
+    assert code == expected, summary
+    assert (
+        Path(summary['summary_json']).exists() and Path(summary['summary_csv']).exists()
+    )
+    rows = summary['conformers']
+    successes = [r for r in rows if r['status'] == 'success']
+    assert len(summary['ranking']) == len(successes)
+    for row in successes:
+        opt = json.loads(Path(row['artifacts']['optimization']).read_text())
+        import numpy as np
+
+        assert np.allclose(
+            read(row['artifacts']['optimized_xyz']).positions,
+            opt['final_structure']['positions'],
+            atol=1e-8,
+        )
+        assert row['descriptors']['conformer_id'] == row['conformer_id']
+        assert row['evidence']['electronic']['sha256']
+        assert any(h[0] == row['artifacts']['optimized_xyz'] for h in handoffs)
+    if scenario in {'unconverged', 'identity'}:
+        assert not handoffs
 
 
 def test_publication_error_and_real_process_timeout(structure, tmp_path, monkeypatch):

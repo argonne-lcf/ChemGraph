@@ -32,6 +32,8 @@ metadata:
      use [iri-hpc](../iri-hpc/SKILL.md).
    When inputs need construction, follow
    [local structure preparation](references/structure-preparation.md).
+   For conformers, structured ORCA electronic results and orbital descriptors,
+   follow [molecular properties](references/molecular-properties.md).
 4. Establish where every file lives: the agent's virtual filesystem, its shell,
    the MCP server, or the compute worker. A path readable with `read_file` need
    not exist on another host. Use existing staging tools when files must move.

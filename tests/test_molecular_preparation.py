@@ -37,7 +37,10 @@ def test_real_rdkit_identity_and_determinism(tmp_path, smiles, charge):
     ]
     for a, b in zip(first['conformers'], second['conformers']):
         assert Path(a['xyz_path']).read_bytes() == Path(b['xyz_path']).read_bytes()
+    from examples.molecular_properties.run import validate_manifest
 
+    record, _ = validate_manifest(first)
+    assert record.atom_correspondence == first['atom_correspondence']
     assert json.loads(Path(first['manifest_path']).read_text())['success']
 
 
@@ -117,3 +120,68 @@ def test_partial_and_failed_embedding_records(tmp_path, monkeypatch):
         'synthetic embedding failure' in r['reason'] for r in result['candidates']
     )
     assert Path(result['manifest_path']).exists()
+
+
+def test_mirrored_defined_stereo_fails_and_manifest_tampering(tmp_path):
+    from examples.molecular_properties.run import validate_manifest
+
+    result = prepare_conformers('C[C@H](F)Cl', str(tmp_path), candidates=2, retained=2)
+    reference = Chem.MolFromMolBlock(result['reference_molblock'], removeHs=False)
+    coords = reference.GetConformer().GetPositions().copy()
+    coords[:, 0] *= -1
+    with pytest.raises(ValueError, match='stereochemistry'):
+        validate_geometry_identity(reference, coords)
+    for key, value in [
+        ('formal_charge', 1),
+        ('molecule_id', 'changed'),
+        ('sdf_sha256', 'changed'),
+    ]:
+        with pytest.raises(ValueError):
+            validate_manifest({**result, key: value})
+    Path(result['conformers'][0]['xyz_path']).write_text('changed')
+    with pytest.raises(ValueError, match='artifact mismatch'):
+        validate_manifest(result)
+
+
+def test_cli_errors_and_failed_preparation_summary(tmp_path, monkeypatch, capsys):
+    from examples.molecular_properties import run
+    from rdkit.Chem import AllChem
+
+    with pytest.raises(SystemExit) as exc:
+        run.main([])
+    assert exc.value.code == 2
+    assert (
+        run.main(
+            [
+                '--smiles',
+                'invalid',
+                '--functional',
+                'PBE',
+                '--basis',
+                'def2-SVP',
+                '--output-dir',
+                str(tmp_path),
+            ]
+        )
+        == 1
+    )
+    monkeypatch.setattr(AllChem, 'EmbedMultipleConfs', lambda *a, **kw: [])
+    assert (
+        run.main(
+            [
+                '--smiles',
+                'CN',
+                '--functional',
+                'PBE',
+                '--basis',
+                'def2-SVP',
+                '--output-dir',
+                str(tmp_path),
+            ]
+        )
+        == 1
+    )
+    summaries = list(tmp_path.glob('*/summary.json'))
+    assert len(summaries) == 1
+    summary = json.loads(summaries[0].read_text())
+    assert summary['exit_code'] == 1 and 'No finite' in summary['reason']
