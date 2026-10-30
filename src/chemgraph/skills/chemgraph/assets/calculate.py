@@ -26,9 +26,10 @@ def main():
     print(json.dumps(result, indent=2))
     if result.get("status") != "success":
         return 1
-    output = ASEOutputSchema.model_validate_json(
-        Path(_resolve_existing_path(params.output_results_file)).read_text()
-    )
+    data = json.loads(Path(_resolve_existing_path(params.output_results_file)).read_text())
+    if data.get("result_type") == "ase_failure":
+        return 1
+    output = ASEOutputSchema.model_validate(data)
     if not output.success:
         return 1
     return 0 if output.converged else 2

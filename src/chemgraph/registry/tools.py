@@ -113,7 +113,7 @@ class ToolSpec:
 
 
 # Bump for built-in schema, behavior, or safety changes; wording edits are compatible.
-BUILTIN_TOOL_CATALOG_VERSION = 3
+BUILTIN_TOOL_CATALOG_VERSION = 4
 
 
 BUILTIN_TOOL_SPECS: tuple[ToolSpec, ...] = (
@@ -149,7 +149,7 @@ BUILTIN_TOOL_SPECS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "run_ase",
-        "Run an ASE energy, optimization, vibration, or thermochemistry task.",
+        "Run an ASE energy, electronic-orbital, optimization, vibration, or thermochemistry task.",
         "chemgraph.tools.ase_tools:run_ase",
         frozenset({"ase", "simulation"}),
     ),

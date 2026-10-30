@@ -659,9 +659,22 @@ def run_ase_core(params: ASEInputSchema) -> dict:
     dict
         Minimal result payload (status, message, key numbers).
     """
+    if (
+        getattr(params.calculator, "dft_settings", None) is not None
+        or params.driver == "electronic"
+    ):
+        return _run_structured_orca(params)
     run_info = {}
     try:
-        result = _run_ase_core(params, run_info)
+        driver = params.driver or "opt"
+        if driver not in {"energy", "dipole", "opt", "vib", "thermo", "ir"}:
+            raise ValueError(f"Unsupported ASE driver {driver!r}")
+        if (
+            getattr(params.calculator, "calculator_type", None) == "orca"
+            and current_context() is not None
+        ):
+            raise PermissionError("ORCA supports local unscoped execution only")
+        result = _run_ase_core(params.model_copy(update={"driver": driver}), run_info)
         if run_info.get("working_directory"):
             result.update(
                 run_info, artifacts=_native_artifacts(run_info["working_directory"])
@@ -676,6 +689,216 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             **({**run_info, "artifacts": _native_artifacts(run_info["working_directory"])}
                if run_info else {}),
         }
+
+
+def _atomic_result(path, payload):
+    """Publish one complete JSON record, replacing stale results atomically."""
+    path = Path(path)
+    with tempfile.NamedTemporaryFile(
+        mode="w", dir=path.parent, prefix=".result-", suffix=".json", delete=False
+    ) as stream:
+        temporary = Path(stream.name)
+        try:
+            json.dump(payload, stream, indent=2, allow_nan=False)
+            stream.flush()
+            os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+    register_artifact(str(path))
+
+
+def _run_structured_orca(params):
+    """Bounded local structured execution with a failure record at every boundary."""
+    from ase.io import read
+    from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
+    from chemgraph.schemas.calculators.orca_calc import OrcaCalc
+    from chemgraph.schemas.electronic import ASEFailureRecord
+    from chemgraph.schemas.molecular import SUPPORTED_ELEMENTS
+    from chemgraph.parsers.orca import parse_orca_output
+    from chemgraph.tools.molecular_core import sha256_file
+    from chemgraph.utils.orca import OrcaBudget
+
+    output = None
+    directory = None
+    atoms = None
+    budget = None
+    stage = "validation"
+    provenance = {}
+    try:
+        if current_context() is not None:
+            raise PermissionError(
+                "ORCA/electronic calculations support local unscoped execution only"
+            )
+        if not params.output_results_file.endswith(".json"):
+            raise ValueError("Output results file must end with .json")
+        output = Path(_resolve_path(params.output_results_file)).resolve()
+        output.parent.mkdir(parents=True, exist_ok=True)
+        # Revalidate constructed models as well as dictionaries; never trust a
+        # model_construct bypass for executable/scientific input.
+        config = params.calculator
+        if not isinstance(config, OrcaCalc) or config.dft_settings is None:
+            raise ValueError("Electronic driver requires ORCA with dft_settings")
+        config.structured_contract()
+        config = OrcaCalc.model_validate(config.model_dump())
+        driver = params.driver or "opt"
+        if driver not in {"energy", "opt", "electronic"}:
+            raise ValueError("Structured ORCA supports energy, opt and electronic only")
+        if (
+            not isinstance(params.steps, int)
+            or params.steps < 1
+            or not np.isfinite(params.fmax)
+            or params.fmax <= 0
+        ):
+            raise ValueError(
+                "Optimization requires positive steps and finite positive fmax"
+            )
+        optimizers = {
+            "bfgs": BFGS,
+            "lbfgs": LBFGS,
+            "gpmin": GPMin,
+            "fire": FIRE,
+            "mdmin": MDMin,
+        }
+        if params.optimizer.lower() not in optimizers:
+            raise ValueError("Unsupported optimizer")
+        budget = OrcaBudget()
+        stage = "input"
+        input_path = _resolve_existing_path(params.input_structure_file)
+        atoms = read(input_path)
+        if not len(atoms) or atoms.pbc.any() or not np.isfinite(atoms.positions).all():
+            raise ValueError(
+                "Structured ORCA requires a finite, nonperiodic molecular geometry"
+            )
+        if any(int(n) not in SUPPORTED_ELEMENTS for n in atoms.numbers):
+            raise ValueError("Unsupported element in structured ORCA input")
+        nel = int(sum(atoms.numbers)) - config.charge
+        if nel <= 0 or nel % 2 or config.multiplicity != 1:
+            raise ValueError(
+                "Charge/electron count is incompatible with a closed-shell singlet"
+            )
+        directory = tempfile.mkdtemp(prefix="orca-", dir=output.parent)
+        provenance['input_structure'] = {
+            "path": str(Path(input_path).resolve()),
+            "sha256": sha256_file(input_path),
+        }
+        stage = "identity_probe"
+        calc = config.get_calculator(driver=driver, directory=directory, budget=budget)
+        atoms.calc = calc
+        stage = "optimization" if driver == "opt" else "evaluation"
+        converged, optimization_steps = True, 0
+        if driver == "opt":
+            dyn = optimizers[params.optimizer.lower()](
+                atoms,
+                trajectory=str(Path(directory) / "optimization.traj"),
+                logfile=str(Path(directory) / "optimization.log"),
+            )
+            dyn.attach(budget.remaining, interval=1)
+            budget.remaining()
+            converged = bool(dyn.run(fmax=params.fmax, steps=params.steps))
+            optimization_steps = dyn.nsteps
+        budget.remaining()
+        energy = float(atoms.get_potential_energy())
+        active = calc.template.active_directory
+        electronic = None
+        provenance.update(
+            engine="ORCA",
+            engine_version=calc.template.version,
+            generated_input=(active / "orca.inp").read_text(),
+            native_settings=calc.template.evidence['native_settings'],
+            native_artifacts={
+                name: {"path": str(active / name), "sha256": sha256_file(active / name)}
+                for name in ("orca.inp", "orca.out", "orca.engrad")
+                if (active / name).exists()
+            },
+            **budget.metadata(),
+        )
+        if driver == "electronic":
+            stage = "electronic_parsing"
+            electronic = parse_orca_output(
+                (active / "orca.out").read_text(),
+                charge=config.charge,
+                multiplicity=1,
+                symbols=atoms.get_chemical_symbols(),
+                positions=atoms.positions,
+                method=config.dft_settings.functional,
+                basis=config.dft_settings.basis,
+                input_path=active / "orca.inp",
+                output_path=active / "orca.out",
+                convergence_policy="TightSCF; ConvForced 1",
+            )
+            if electronic.source != "orbital_energy_table":
+                raise ValueError(
+                    "Generated electronic input requires the full P_OrbEn=2 energy table"
+                )
+            if abs(electronic.total_energy - energy) > 1e-7:
+                raise ValueError("Parsed electronic and ASE energies disagree")
+        budget.remaining()
+        provenance.update(budget.metadata())
+        artifacts = _native_artifacts(directory)
+        simulation_output = ASEOutputSchema(
+            input_structure_file=str(input_path),
+            simulation_input=params,
+            final_structure=atoms_to_atomsdata(atoms),
+            converged=converged,
+            success=True,
+            potential_energy=energy,
+            single_point_energy=energy,
+            wall_time=budget.metadata()['elapsed_s'],
+            electronic_structure=electronic,
+            provenance=provenance,
+            artifacts=artifacts,
+            working_directory=directory,
+        )
+        stage = "publication"
+        _atomic_result(output, simulation_output.model_dump(mode="json"))
+        return {
+            "status": "success",
+            "message": f"{driver} completed; results saved to {output}",
+            **_energy_result_metadata(
+                driver,
+                energy,
+                str(output),
+                converged=converged,
+                optimization_steps=optimization_steps,
+            ),
+            "artifacts": artifacts,
+            "working_directory": directory,
+            "electronic_structure": electronic.model_dump() if electronic else None,
+        }
+    except Exception as exc:
+        if isinstance(exc, TimeoutError):
+            stage = "timeout"
+        if budget:
+            provenance.update(budget.metadata())
+        artifacts = _native_artifacts(directory)
+        try:
+            simulation_input = params.model_dump(mode="json")
+        except Exception:
+            simulation_input = None
+        record = ASEFailureRecord(
+            driver=params.driver,
+            stage=stage,
+            error_type=type(exc).__name__,
+            message=str(exc),
+            artifacts=artifacts,
+            simulation_input=simulation_input,
+            final_structure=atoms_to_atomsdata(atoms).model_dump()
+            if atoms is not None and np.isfinite(atoms.positions).all()
+            else None,
+            provenance=provenance,
+        )
+        result = record.model_dump()
+        if output is not None:
+            try:
+                _atomic_result(output, result)
+                result['results_file'] = str(output)
+            except Exception as publication_error:
+                result['publication_error'] = str(publication_error)
+                result['message'] += (
+                    f"; failure record publication failed: {publication_error}"
+                )
+        return result
 
 
 def _run_ase_core(params: ASEInputSchema, run_info: dict) -> dict:

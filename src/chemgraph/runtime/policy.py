@@ -227,6 +227,8 @@ def _prepare_run_ase(context, arguments) -> tuple[dict, list, list, dict]:
     params = arguments.get("params")
     if params is not None and not isinstance(params, Mapping):
         raise PreparationError("run_ase 'params' must be an object.")
+    if not params or params.get("driver") is None:
+        raise PreparationError("Scoped run_ase requires an explicit non-null driver.")
     params, calculator, resources = _calculator(policy, dict(params or {}))
     if params["driver"] not in _DRIVERS:
         raise PreparationError(f"Unsupported ASE driver {params['driver']!r}.")

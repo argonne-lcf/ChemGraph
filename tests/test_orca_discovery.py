@@ -112,3 +112,22 @@ def test_legacy_configured_child(tmp_path):
         timeout=60,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_configured_schemas_execution_and_serialization_in_child(tmp_path):
+    env = {
+        **os.environ,
+        'ASE_ORCA_COMMAND': shutil.which('false'),
+        'CHEMGRAPH_ORCA_CHILD': '1',
+        'PYTHONNOUSERSITE': '1',
+        'PYTHONPATH': str(Path(__file__).parents[1] / 'src'),
+        'CHEMGRAPH_LOG_DIR': str(tmp_path),
+    }
+    result = subprocess.run(
+        [sys.executable, '-m', 'pytest', 'tests/test_orca_configured.py', '-q'],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

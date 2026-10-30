@@ -3,7 +3,8 @@ import json
 import os
 import shutil
 from pydantic import BaseModel, Field, model_validator, field_validator
-from typing import Union, Optional, Any, List, Type
+from typing import Union, Optional, Any, List, Type, Literal
+from chemgraph.schemas.electronic import ElectronicStructureResult
 from chemgraph.schemas.atomsdata import AtomsData
 
 from chemgraph.schemas.calculators.emt_calc import EMTCalc
@@ -310,9 +311,9 @@ class ASEInputSchema(BaseModel):
         default="output.json",
         description="Path to a JSON file where simulation results will be saved.",
     )
-    driver: str = Field(
-        default=None,
-        description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'dipole' for dipole moment calculation, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, 'ir' for calculating infrared spectrum, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
+    driver: Literal["energy", "electronic", "dipole", "opt", "vib", "ir", "thermo"] = Field(
+        default="opt",
+        description="Specifies the type of simulation to run. Options: 'energy' for total energy, 'electronic' for structured ORCA orbitals, 'dipole' for dipole moment calculation, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, 'ir' for calculating infrared spectrum, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
     )
     optimizer: str = Field(
         default="bfgs",
@@ -340,6 +341,11 @@ class ASEInputSchema(BaseModel):
         default=101325.0,
         description="Pressure for thermochemistry calculations in Pascal (Pa).",
     )
+
+    @field_validator("driver", mode="before")
+    @classmethod
+    def _default_driver(cls, value):
+        return "opt" if value is None else value
 
     @field_validator("temperature", mode="before")
     @classmethod
@@ -392,9 +398,9 @@ class ase_input_schema_ensemble(BaseModel):
         default="output.json",
         description="Path to a JSON file where simulation results will be saved.",
     )
-    driver: str = Field(
-        default=None,
-        description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'dipole' for dipole moment calculation, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, 'ir' for calculating infrared spectrum, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
+    driver: Literal["energy", "electronic", "dipole", "opt", "vib", "ir", "thermo"] = Field(
+        default="opt",
+        description="Specifies the type of simulation to run. Options: 'energy' for total energy, 'electronic' for structured ORCA orbitals, 'dipole' for dipole moment calculation, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, 'ir' for calculating infrared spectrum, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
     )
     optimizer: str = Field(
         default="bfgs",
@@ -423,6 +429,11 @@ class ase_input_schema_ensemble(BaseModel):
         description="Pressure for thermochemistry calculations in Pascal (Pa).",
     )
 
+    @field_validator("driver", mode="before")
+    @classmethod
+    def _default_driver(cls, value):
+        return "opt" if value is None else value
+
     @field_validator("temperature", mode="before")
     @classmethod
     def _default_temperature(cls, value: Any) -> Any:
@@ -441,6 +452,8 @@ class ASEOutputSchema(BaseModel):
     Schema for defining outputs from ASE-based molecular simulations.
     """
 
+    electronic_structure: ElectronicStructureResult | None = None
+    provenance: dict = Field(default_factory=dict)
     artifacts: list[str] = Field(default_factory=list)
     working_directory: str | None = None
 
@@ -452,7 +465,7 @@ class ASEOutputSchema(BaseModel):
     )
     converged: bool = Field(
         default=False,
-        description="Indicates if the optimization successfully converged.",
+        description="Geometry convergence for optimization; successful evaluation for energy/electronic.",
     )
     final_structure: AtomsData = Field(description="Final structure.")
     simulation_input: ASEInputSchema = Field(

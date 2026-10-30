@@ -377,6 +377,9 @@ def generate_html(
             "The file may be corrupted or not valid JSON."
         )
 
+    if data.get("result_type") == "ase_failure":
+        return f"Error: Calculation failed at {data.get('stage')}: {data.get('message')}. Inspect native artifacts before retrying."
+
     # Validate the data against ASEOutputSchema
     try:
         ase_output = ASEOutputSchema(**data)
@@ -487,7 +490,7 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
     driver = ase_output.simulation_input.driver
     energy_label = (
         "Single Point Energy"
-        if driver in {"energy", "dipole"}
+        if driver in {"energy", "electronic", "dipole"}
         else "Final Potential Energy"
     )
     if energy_ev is not None:
