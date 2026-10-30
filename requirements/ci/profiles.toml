@@ -1,0 +1,38 @@
+resolver = "0.8.18"
+pip = "26.2.2"
+ruff = "0.17.3"
+seed_run = "https://github.com/argonne-lcf/ChemGraph/actions/runs/40886492994"
+
+[platforms.linux-x64]
+target = "x86_64-unknown-linux-gnu"
+system = "Linux"
+machine = "x86_64"
+sys_platform = "linux"
+
+[platforms.windows-x64]
+target = "x86_64-pc-windows-msvc"
+system = "Windows"
+machine = "AMD64"
+sys_platform = "win32"
+
+[platforms.macos-arm64]
+target = "aarch64-apple-darwin"
+deployment_target = "14.0"
+system = "Darwin"
+machine = "arm64"
+sys_platform = "darwin"
+
+[jobs.test]
+python = ["3.11", "3.12", "3.13"]
+platforms = ["linux-x64", "windows-x64", "macos-arm64"]
+extras = []
+
+[jobs.lint]
+python = ["3.11"]
+platforms = ["linux-x64"]
+extras = []
+
+[jobs.test-extras]
+python = ["3.11", "3.12"]
+platforms = ["linux-x64"]
+extras = ["test", "academy", "parsl", "globus_compute", "codex"]

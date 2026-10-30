@@ -19,11 +19,16 @@ jobs:
         python-version: "3.11"
 
     - name: Install lint dependencies
+      shell: bash
       run: |
-        python -m pip install --upgrade pip
-        pip install -e .
-        pip install ruff
+        python -m pip install "pip==26.2.2"
+        constraints="$(python scripts/ci_constraints.py path --job lint)"
+        python -m pip install -c "$constraints" -e . ruff
         python -m pip check
+        python scripts/ci_constraints.py check --job lint --installed
+
+    - name: Check all CI constraint profiles
+      run: python scripts/ci_constraints.py check
 
     - name: Run ruff
       run: |
@@ -47,10 +52,13 @@ jobs:
         python-version: ${{ matrix.python-version }}
     
     - name: Install dependencies
+      shell: bash
       run: |
-        python -m pip install --upgrade pip
-        pip install -e .
+        python -m pip install "pip==26.2.2"
+        constraints="$(python scripts/ci_constraints.py path --job test)"
+        python -m pip install -c "$constraints" -e .
         python -m pip check
+        python scripts/ci_constraints.py check --job test --installed
             
     - name: Run tests
       run: |
@@ -108,10 +116,13 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install dependencies (tests + academy + execution backends + codex)
+      shell: bash
       run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[test,academy,parsl,globus_compute,codex]"
+        python -m pip install "pip==26.2.2"
+        constraints="$(python scripts/ci_constraints.py path --job test-extras)"
+        python -m pip install -c "$constraints" -e ".[test,academy,parsl,globus_compute,codex]"
         python -m pip check
+        python scripts/ci_constraints.py check --job test-extras --installed
 
     - name: Verify QuickJS and Codex SDK are installed
       run: python -c "import quickjs; import openai_codex.generated.v2_all"

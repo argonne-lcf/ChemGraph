@@ -84,6 +84,10 @@ uv pip install -e .            # core
 uv pip install -e ".[academy,parsl,globus_compute]"
 ```
 
+To reproduce the dependency versions used by CI, use the
+[CI constraints instructions](requirements/ci/README.md). They include matching
+platform profiles, installation checks, and the explicit update procedure.
+
 ## Before you open a PR
 
 Run the same gates CI runs:
