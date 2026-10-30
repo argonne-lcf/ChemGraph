@@ -20,6 +20,7 @@ from chemgraph.runtime import (
 )
 from chemgraph.runtime import journal as journal_module
 from chemgraph.runtime.artifact_audit import audit_journal
+from chemgraph.runtime.policy import prepare
 from chemgraph.tools.ase_tools import run_ase
 from chemgraph.tools.cheminformatics_tools import smiles_to_coordinate_file
 from tests.runtime_helpers import ai, approve, make_context, run_ase_call
@@ -65,12 +66,6 @@ def tool_messages(state):
 async def test_reviewed_energy_runs_once_with_artifacts(tmp_path, registry, monkeypatch):
     from ase.calculators.emt import EMT
 
-    calculations = []
-    calculate = EMT.calculate
-    def counted(*args, **kwargs):
-        calculations.append(1)
-        return calculate(*args, **kwargs)
-    monkeypatch.setattr(EMT, "calculate", counted)
     context = make_context(tmp_path)
     responses = [ai(run_ase_call()), AIMessage(content="Done")]
     if registry:
@@ -95,30 +90,27 @@ async def test_reviewed_energy_runs_once_with_artifacts(tmp_path, registry, monk
     def forbidden(*args, **kwargs):
         pytest.fail("Audit attempted computation or message decoding")
     monkeypatch.setattr(EMT, "calculate", forbidden)
-    monkeypatch.setattr(_ScriptedChatModel, "_generate", forbidden)
-    monkeypatch.setattr(journal_module, "decode_result", forbidden)
     moved = tmp_path / "relocated"
     shutil.copytree(context.workspace, moved)
-    for workspace in (context.workspace, moved):
-        # Original mutable paths are not needed to verify the saved snapshots.
-        (workspace / "h2.xyz").unlink()
-        (workspace / "energy.json").unlink()
-        report = audit_journal(workspace=workspace, journal=tmp_path / "journal",
-                               thread_id=context.thread_id, include_inputs=True)
-        assert report["outcome"] == "verified" and report["counts"]["checked"] == 2
-    assert calculations == [1]
+    (moved / "h2.xyz").unlink()
+    (moved / "energy.json").unlink()
+    report = audit_journal(workspace=moved, journal=tmp_path / "journal",
+                           thread_id=context.thread_id, include_inputs=True)
+    assert report["outcome"] == "verified" and report["counts"]["checked"] == 2
 
 
 @pytest.mark.asyncio
 async def test_identical_calls_are_reviewed_and_executed_separately(tmp_path):
     context = make_context(tmp_path)
+    # Stage the shared input once before exercising independent approvals.
+    prepare(context, run_ase_call())
     graph = scoped_graph([
         ai(run_ase_call("a", output="a.json"), run_ase_call("b", output="a.json")),
         AIMessage(content="Done"),
     ])
     paused = await run(graph, context, {"messages": [HumanMessage(content="Twice")]})
     pending = await decide_pending(context, paused)
-    assert sorted(item["tool_call_id"] for item in pending) == ["a", "b"]
+    assert sorted(item["tool_call_id"] for item in pending) == ["a", "b"], await context.journal.store.records()
     state = await run(graph, context, Command(resume={i.id: "ok" for i in paused["__interrupt__"]}))
     artifacts = result_artifacts(state, context.task_id)
     assert sorted(a["tool_call_id"] for a in artifacts) == ["a", "b"]

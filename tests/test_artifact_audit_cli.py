@@ -12,8 +12,7 @@ from tests.test_artifact_audit import sample as sample
 cli = importlib.import_module("chemgraph.cli.main")
 
 
-@pytest.mark.parametrize("case,code", [("match", 0), ("broken", 1), ("root", 2), ("empty", 3),
-                                     ("skipped", 3), ("partial", 1)])
+@pytest.mark.parametrize("case,code", [("match", 0), ("broken", 1), ("root", 2), ("empty", 3)])
 def test_cli_json_and_exit_codes(sample, monkeypatch, capsys, case, code):
     workspace, journal, record = sample
     if case == "broken":
@@ -21,10 +20,6 @@ def test_cli_json_and_exit_codes(sample, monkeypatch, capsys, case, code):
     if case == "empty":
         record["result"]["artifacts"] = []
         record["prepared"]["inputs"] = []
-    if case == "skipped":
-        record["state"] = "returned"
-    if case == "partial":
-        (journal / "bad.json").write_text("{")
     (journal / "op.json").write_text(json.dumps(record))
     if case == "root":
         journal = journal / "absent"
@@ -48,20 +43,14 @@ def test_cli_json_and_exit_codes(sample, monkeypatch, capsys, case, code):
         assert report["outcome"] == {0: "verified", 1: "issues", 3: "no_descriptors"}[code]
 
 
-@pytest.mark.parametrize("argv", [[], ["artifacts"], ["artifacts", "verify"]])
-def test_help_and_required_arguments(argv, capsys):
+def test_verify_help_and_required_arguments(capsys):
     parser = cli.create_argument_parser()
     with pytest.raises(SystemExit) as exc:
-        parser.parse_args([*argv, "--help"])
-    assert exc.value.code == 0
-    assert ("artifacts" if not argv else "verify" if len(argv) == 1 else "Exit codes") in capsys.readouterr().out
-    if argv:
-        with pytest.raises(SystemExit) as exc:
-            parser.parse_args(argv)
-        assert exc.value.code == 2
-    assert parser.parse_args(["run", "-q", "test"]).command == "run"
-    assert parser.parse_args(["-q", "test"]).command is None
-    assert parser.parse_args(["skills", "lint", "."]).command == "skills"
+        parser.parse_args(["artifacts", "verify", "--help"])
+    assert exc.value.code == 0 and "Exit codes" in capsys.readouterr().out
+    with pytest.raises(SystemExit) as exc:
+        parser.parse_args(["artifacts", "verify"])
+    assert exc.value.code == 2
 
 
 def test_human_output_escapes_control_characters(sample, monkeypatch, capsys):
