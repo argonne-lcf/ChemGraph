@@ -9,6 +9,7 @@ chemgraph run        Run an agent query or interactive session
 chemgraph eval       Evaluate a dataset
 chemgraph session    List, inspect, or delete saved sessions
 chemgraph models     List registered model identifiers
+chemgraph artifacts  Inspect scoped-run artifact integrity
 chemgraph ui         Launch the Streamlit web interface
 chemgraph dashboard  Launch the trace dashboard
 chemgraph academy    Run Academy campaigns and workers
@@ -16,6 +17,40 @@ chemgraph academy    Run Academy campaigns and workers
 
 Use `chemgraph <command> --help` for the options supported by your installed
 version.
+
+## Verify scoped artifacts
+
+Inspect existing scoped-run outputs without starting an agent or replaying a
+calculation. Select the workspace, FileOperationStore journal directory, and
+thread explicitly:
+
+```bash
+chemgraph artifacts verify --workspace ./workspace --journal ./operations --thread-id THREAD
+chemgraph artifacts verify --workspace ./workspace --journal ./operations --thread-id THREAD --include-inputs --json
+```
+
+Outputs are checked by default; `--include-inputs` also checks prepared input
+snapshots. Only finalized records are audited; other known states are reported
+as skipped. `--json` emits one versioned report on stdout, including selection,
+completeness, per-record/descriptor findings, counts, and outcome.
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | Complete audit, at least one descriptor checked, all requested bytes match |
+| `1` | Missing/changed/unreadable bytes, malformed records/descriptors, invalid paths, or an incomplete read |
+| `2` | Invalid arguments or unusable workspace/journal roots; diagnostic on stderr |
+| `3` | Complete valid selection with no requested descriptors |
+
+Codes `0`, `1`, and `3` always include a report. Issues take precedence over an
+empty selection. Matching artifacts can coexist with skipped records: exit `0`
+does not mean the run completed successfully. A finalized record with empty
+descriptor lists verifies no bytes. Missing roots are never created.
+
+Matching bytes establish agreement with local descriptors, not authenticated
+provenance, convergence, or scientific validity. Execution outcome stays
+`unknown` and scientific acceptance stays `unassessed`. See
+[scoped artifact inspection](scoped_runtime.md#read-only-artifact-inspection)
+for the Python API and limitations.
 
 ## Run a query
 

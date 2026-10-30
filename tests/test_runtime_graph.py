@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import shutil
 import time
 from types import SimpleNamespace
 
@@ -18,6 +19,7 @@ from chemgraph.runtime import (
     run_context,
 )
 from chemgraph.runtime import journal as journal_module
+from chemgraph.runtime.artifact_audit import audit_journal
 from chemgraph.tools.ase_tools import run_ase
 from chemgraph.tools.cheminformatics_tools import smiles_to_coordinate_file
 from tests.runtime_helpers import ai, approve, make_context, run_ase_call
@@ -60,7 +62,15 @@ def tool_messages(state):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("registry", [False, True])
-async def test_reviewed_energy_runs_once_with_artifacts(tmp_path, registry):
+async def test_reviewed_energy_runs_once_with_artifacts(tmp_path, registry, monkeypatch):
+    from ase.calculators.emt import EMT
+
+    calculations = []
+    calculate = EMT.calculate
+    def counted(*args, **kwargs):
+        calculations.append(1)
+        return calculate(*args, **kwargs)
+    monkeypatch.setattr(EMT, "calculate", counted)
     context = make_context(tmp_path)
     responses = [ai(run_ase_call()), AIMessage(content="Done")]
     if registry:
@@ -81,6 +91,22 @@ async def test_reviewed_energy_runs_once_with_artifacts(tmp_path, registry):
     assert saved["input_structure_file"].startswith(str(context.workspace / ".chemgraph-inputs"))
     record = await context.journal.get(pending[0]["operation_id"])
     assert record["state"] == "finalized"
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Audit attempted computation or message decoding")
+    monkeypatch.setattr(EMT, "calculate", forbidden)
+    monkeypatch.setattr(_ScriptedChatModel, "_generate", forbidden)
+    monkeypatch.setattr(journal_module, "decode_result", forbidden)
+    moved = tmp_path / "relocated"
+    shutil.copytree(context.workspace, moved)
+    for workspace in (context.workspace, moved):
+        # Original mutable paths are not needed to verify the saved snapshots.
+        (workspace / "h2.xyz").unlink()
+        (workspace / "energy.json").unlink()
+        report = audit_journal(workspace=workspace, journal=tmp_path / "journal",
+                               thread_id=context.thread_id, include_inputs=True)
+        assert report["outcome"] == "verified" and report["counts"]["checked"] == 2
+    assert calculations == [1]
 
 
 @pytest.mark.asyncio

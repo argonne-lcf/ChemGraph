@@ -14,6 +14,7 @@ from chemgraph.runtime import (
 )
 from chemgraph.runtime import artifacts as artifact_store
 from chemgraph.runtime import journal as journal_module
+from chemgraph.runtime.artifact_audit import audit_records
 from chemgraph.runtime.context import invocation, register_artifact, run_context
 from chemgraph.runtime.journal import ARTIFACT_KEY
 from tests.runtime_helpers import approve, make_context, run_ase_call
@@ -91,6 +92,11 @@ async def test_tool_exception_is_a_returned_outcome(tmp_path):
     assert (await context.journal.get(record["id"]))["state"] == "finalized"
     # Outputs registered before the failure are still published.
     assert [a["source_path"] for a in result.additional_kwargs[ARTIFACT_KEY]] == ["energy.json"]
+    audit = audit_records(await context.journal.store.records(), workspace=context.workspace,
+                         thread_id=context.thread_id, include_inputs=True)
+    assert audit["outcome"] == "verified" and audit["counts"]["checked"] == 2
+    assert audit["records"][0]["execution_outcome"] == "unknown"
+    assert audit["records"][0]["scientific_acceptance"] == "unassessed" and len(calls) == 1
     # The workspace is not blocked by an observed failure.
     other, _ = await approved(context, run_ase_call("second"))
     assert (await context.journal.execute(context, other, writer(context, calls))).status != "error"
