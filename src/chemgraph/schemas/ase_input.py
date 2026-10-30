@@ -14,6 +14,7 @@ from chemgraph.schemas.calculators.mace_calc import MaceCalc
 from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
 from chemgraph.schemas.calculators.aimnet2_calc import AIMNET2Calc
 from chemgraph.utils.calculator_defaults import mace_polar_available
+from chemgraph.utils.orca import orca_available
 
 # Gate optional calculators on whether their engine package is installed.
 # Schema classes are always importable (internal to ChemGraph), so we must
@@ -73,7 +74,7 @@ if not _engine_available("aimnet2calc"):
 if not _command_available("nwchem", "ASE_NWCHEM_COMMAND"):
     NWChemCalc = None
 
-if not _command_available("orca", "ASE_ORCA_COMMAND"):
+if not orca_available():
     OrcaCalc = None
 
 
@@ -439,6 +440,9 @@ class ASEOutputSchema(BaseModel):
     """
     Schema for defining outputs from ASE-based molecular simulations.
     """
+
+    artifacts: list[str] = Field(default_factory=list)
+    working_directory: str | None = None
 
     input_structure_file: str = Field(
         description=(

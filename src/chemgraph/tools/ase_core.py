@@ -407,7 +407,7 @@ def get_symmetry_number(atomsdata: AtomsData) -> int:
 # ---------------------------------------------------------------------------
 
 def load_calculator(calculator: dict) -> tuple[object, dict, object]:
-    """Instantiate an ASE calculator from a config dictionary.
+    """Instantiate from a config dict or preserve a validated Python ORCA profile.
 
     Parameters
     ----------
@@ -424,6 +424,10 @@ def load_calculator(calculator: dict) -> tuple[object, dict, object]:
     ValueError
         If the calculator type is unsupported.
     """
+    from chemgraph.schemas.calculators.orca_calc import OrcaCalc
+
+    if isinstance(calculator, OrcaCalc):
+        return calculator.get_calculator(), {}, calculator
     calc_type = calculator["calculator_type"].lower()
 
     if "emt" in calc_type:
@@ -627,6 +631,17 @@ def _energy_result_metadata(
 # Unified ASE simulation core
 # ---------------------------------------------------------------------------
 
+def _native_artifacts(directory):
+    paths = (
+        sorted(str(p.resolve()) for p in Path(directory).rglob("*") if p.is_file())
+        if directory
+        else []
+    )
+    for path in paths:
+        register_artifact(path)
+    return paths
+
+
 def run_ase_core(params: ASEInputSchema) -> dict:
     """Run an ASE simulation — the single implementation for all call methods.
 
@@ -644,18 +659,26 @@ def run_ase_core(params: ASEInputSchema) -> dict:
     dict
         Minimal result payload (status, message, key numbers).
     """
+    run_info = {}
     try:
-        return _run_ase_core(params)
+        result = _run_ase_core(params, run_info)
+        if run_info.get("working_directory"):
+            result.update(
+                run_info, artifacts=_native_artifacts(run_info["working_directory"])
+            )
+        return result
     except Exception as e:
         logger.exception("run_ase_core failed with %s: %s", type(e).__name__, e)
         return {
             "status": "failure",
             "error_type": type(e).__name__,
             "message": str(e),
+            **({**run_info, "artifacts": _native_artifacts(run_info["working_directory"])}
+               if run_info else {}),
         }
 
 
-def _run_ase_core(params: ASEInputSchema) -> dict:
+def _run_ase_core(params: ASEInputSchema, run_info: dict) -> dict:
     """Execute a simulation inside the shared public error boundary."""
     from ase.io import read
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
@@ -721,6 +744,14 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
         os.makedirs(output_parent, exist_ok=True)
 
     logger.info("Loading calculator: %s", calculator)
+    working_directory = None
+    if calculator.get("calculator_type") == "orca":
+        calc_config = params.calculator.model_copy()
+        if calc_config.directory == ".":
+            calc_config.directory = tempfile.mkdtemp(prefix="orca-", dir=output_parent)
+        working_directory = str(Path(calc_config.directory).resolve())
+        run_info["working_directory"] = working_directory
+        calculator = calc_config
     calc, system_info, calc_model = load_calculator(calculator)
 
     if calc is None:
@@ -784,6 +815,8 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
         wall_time = end_time - start_time
 
         simulation_output = ASEOutputSchema(
+            working_directory=working_directory,
+            artifacts=_native_artifacts(working_directory),
             input_structure_file=input_structure_file,
             converged=True,
             final_structure=final_structure,
@@ -1082,6 +1115,8 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
         logger.info("Simulation finished (driver=%s, wall_time=%.2fs, converged=%s)", driver, wall_time, converged)
 
         simulation_output = ASEOutputSchema(
+            working_directory=working_directory,
+            artifacts=_native_artifacts(working_directory),
             input_structure_file=input_structure_file,
             converged=converged,
             final_structure=final_structure,

@@ -4,9 +4,10 @@
 from typing import Optional
 from pydantic import BaseModel, Field
 from ase.calculators.orca import ORCA, OrcaProfile
-import warnings
-import os
-import shutil
+import logging
+import shlex
+from pydantic.json_schema import SkipJsonSchema
+from chemgraph.utils.orca import resolve_orca
 
 
 class OrcaCalc(BaseModel):
@@ -56,8 +57,8 @@ class OrcaCalc(BaseModel):
     directory: str = Field(
         default=".", description="Working directory for ORCA calculations."
     )
-    profile: Optional[OrcaProfile] = Field(
-        default=None, description="Optional ORCA profile configuration."
+    profile: SkipJsonSchema[Optional[OrcaProfile]] = Field(
+        default=None, exclude=True, description="Optional Python-only ORCA profile configuration."
     )
 
     def get_calculator(self):
@@ -82,38 +83,15 @@ class OrcaCalc(BaseModel):
                 "Invalid calculator_type. The only valid option is 'orca'."
             )
 
-        # Check if profile is provided, otherwise try to find orca executable
-        if self.profile is None:
-            # First check if orca is in PATH
-            orca_path = shutil.which("orca")
-
-            # If not in PATH, check common installation directories
-            if not orca_path:
-                common_paths = [
-                    "/opt/orca",
-                    "/usr/local/orca",
-                    os.path.expanduser("~/orca"),
-                ]
-
-                for path in common_paths:
-                    potential_path = os.path.join(path, "orca")
-                    if os.path.isfile(potential_path) and os.access(
-                        potential_path, os.X_OK
-                    ):
-                        orca_path = potential_path
-                        break
-
-            if orca_path:
-                profile = OrcaProfile(command=orca_path)
-                print(f"Found ORCA executable at: {orca_path}")
-            else:
-                warnings.warn(
-                    "ORCA executable not found in PATH or common paths. Please provide the path "
-                    "using profile=OrcaProfile(command='/path/to/orca')"
-                )
-                profile = None
-        else:
-            profile = self.profile
+        profile = self.profile
+        if profile is None:
+            try:
+                executable = resolve_orca()
+            except FileNotFoundError as exc:
+                from ase.calculators.calculator import BadConfiguration
+                raise BadConfiguration(str(exc)) from exc
+            logging.getLogger(__name__).debug("ORCA executable: %s", executable)
+            profile = OrcaProfile(command=shlex.quote(executable))
 
         return ORCA(
             charge=self.charge,
