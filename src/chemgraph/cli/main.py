@@ -341,6 +341,10 @@ Examples:
 
     add_skill_args(subparsers.add_parser("skills", help="Inspect and validate skills."))
 
+    from chemgraph.cli.artifacts import add_artifact_args
+
+    add_artifact_args(subparsers.add_parser("artifacts", help="Inspect scoped-run artifact bytes."))
+
     # ---- "session" subcommand --------------------------------------------
     session_parser = subparsers.add_parser(
         "session",
@@ -1016,6 +1020,11 @@ def main() -> None:
         from chemgraph.skills.cli import run_skills
 
         raise SystemExit(run_skills(args))
+
+    elif args.command == "artifacts":
+        from chemgraph.cli.artifacts import run_artifacts
+
+        raise SystemExit(run_artifacts(args))
 
     elif args.command == "session":
         sc = getattr(args, "session_command", None)
