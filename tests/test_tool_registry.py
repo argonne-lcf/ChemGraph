@@ -20,6 +20,7 @@ EXPECTED_TOOLS = (
     "get_symmetry_number",
     "is_linear_molecule",
     "run_ase",
+    "prepare_conformers",
     "molecule_name_to_smiles",
     "smiles_to_atomsdata",
     "smiles_to_coordinate_file",

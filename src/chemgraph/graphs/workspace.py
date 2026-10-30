@@ -16,7 +16,7 @@ from chemgraph.skills.runtime import ChemGraphSkillsMiddleware, prepare_skill_ba
 
 
 # Bump when approval semantics change, including removal of reviewed tools.
-WORKSPACE_REVIEW_POLICY_VERSION = 4
+WORKSPACE_REVIEW_POLICY_VERSION = 5
 
 
 DEFAULT_WORKSPACE_INTERRUPT_ON = {
@@ -34,6 +34,7 @@ _REGISTRY_REVIEW_TOOLS = {
     "run_ase", "run_docking", "run_graspa", "run_xanes", "generate_html",
     "fetch_xanes_data", "plot_xanes_data",
     "load_document", "file_to_atomsdata", "extract_output_json",
+    "prepare_conformers",
 }
 
 
