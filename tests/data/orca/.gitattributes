@@ -1,0 +1,3 @@
+# Upstream evidence is hashed byte-for-byte; do not normalize line endings or spaces.
+*.out -text -whitespace
+*.inp -text -whitespace

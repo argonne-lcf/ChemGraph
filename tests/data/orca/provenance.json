@@ -1,0 +1,23 @@
+{
+  "repository": "https://github.com/cclib/cclib",
+  "commit": "0c6e08e0a0d04b308201666793030ef3b77b2973",
+  "license": "BSD-3-Clause",
+  "files": {
+    "dvb_coupling_nmr.out": {
+      "sha256": "988d0549c7eca4c4bcde6ed06d661c6a944819e6014b0d74190d0011ba17b592",
+      "source": "https://github.com/cclib/cclib/blob/0c6e08e0a0d04b308201666793030ef3b77b2973/data/ORCA/basicORCA6.1/dvb_coupling_nmr.out"
+    },
+    "dvb_coupling_nmr.inp": {
+      "sha256": "b353ce05a36556f53e857f9a0121cd53178d22d6568865cd641b3abbda1517e3",
+      "source": "https://github.com/cclib/cclib/blob/0c6e08e0a0d04b308201666793030ef3b77b2973/data/ORCA/basicORCA6.1/dvb_coupling_nmr.inp"
+    },
+    "dvb_sp_dft.inp": {
+      "sha256": "d391f45029b0d0c2dec61135d333e2ea56c0f6fa90e40c3091ab9a2871d69b09",
+      "source": "https://github.com/cclib/cclib/blob/0c6e08e0a0d04b308201666793030ef3b77b2973/data/ORCA/basicORCA6.0/dvb_sp_dft.inp"
+    },
+    "dvb_sp_dft.out": {
+      "sha256": "992b0ddb02cf6abb937c7dae8b5a741eb7d1b4acae79a2e4d22162974542c469",
+      "source": "https://github.com/cclib/cclib/blob/0c6e08e0a0d04b308201666793030ef3b77b2973/data/ORCA/basicORCA6.0/dvb_sp_dft.out"
+    }
+  }
+}
