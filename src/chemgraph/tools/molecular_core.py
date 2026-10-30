@@ -280,3 +280,58 @@ def prepare_conformers(
         if records
         else "No finite, converged, identity-preserving conformers survived",
     }
+
+
+def calculate_reactivity_descriptors(result_file: str) -> dict:
+    """Orbital estimates in eV; hardness eta=I-A (not the half-gap convention)."""
+    require_unscoped()
+    import json
+    from chemgraph.schemas.electronic import ElectronicStructureResult
+    from chemgraph.tools.ase_core import _resolve_existing_path
+
+    path = Path(_resolve_existing_path(result_file)).resolve()
+    data = json.loads(path.read_text())
+    if data.get('result_type') == 'ase_failure':
+        raise ValueError(
+            f"Calculation failed at {data.get('stage')}: {data.get('message')}"
+        )
+    if 'electronic_structure' in data and data.get('success') is not True:
+        raise ValueError("Failed ASE result cannot supply descriptors")
+    record = ElectronicStructureResult.model_validate(
+        data.get('electronic_structure', data)
+    )
+    if record.gap <= 0:
+        raise ValueError("Nonpositive HOMO-LUMO gap cannot supply descriptors")
+    if record.homo >= 0:
+        raise ValueError(
+            "Nonpositive orbital estimate of ionization energy (HOMO >= 0 eV)"
+        )
+    ionization, affinity = -record.homo, -record.lumo
+    warnings = list(record.warnings)
+    if (
+        record.charge < 0
+        and record.basis.lower() != 'def2-tzvpd'
+        and not any("diffuse basis" in warning for warning in warnings)
+    ):
+        warnings.append(
+            "Anion calculation lacks a diffuse basis; electron binding is not established"
+        )
+    return dict(
+        schema_version=1,
+        success=True,
+        approximation="orbital energies; not experimental IP/EA",
+        hardness_convention="eta=I-A",
+        energy_unit="eV",
+        homo=record.homo,
+        lumo=record.lumo,
+        gap=record.gap,
+        ionization_energy=ionization,
+        electron_affinity=affinity,
+        chemical_potential=-(ionization + affinity) / 2,
+        hardness=ionization - affinity,
+        electrophilicity=(ionization + affinity) ** 2 / (8 * (ionization - affinity)),
+        source_result={"path": str(path), "sha256": sha256_file(path)},
+        molecule_id=record.molecule_id,
+        conformer_id=record.conformer_id,
+        warnings=warnings,
+    )

@@ -113,7 +113,7 @@ class ToolSpec:
 
 
 # Bump for built-in schema, behavior, or safety changes; wording edits are compatible.
-BUILTIN_TOOL_CATALOG_VERSION = 4
+BUILTIN_TOOL_CATALOG_VERSION = 5
 
 
 BUILTIN_TOOL_SPECS: tuple[ToolSpec, ...] = (
@@ -158,6 +158,12 @@ BUILTIN_TOOL_SPECS: tuple[ToolSpec, ...] = (
         "Prepare molecular conformers with specified stereochemistry and save SDF/XYZ artifacts (local unscoped).",
         "chemgraph.tools.molecular_tools:prepare_conformers",
         frozenset({"cheminformatics", "structure", "files"}),
+    ),
+    ToolSpec(
+        "calculate_reactivity_descriptors",
+        "Read saved electronic results for orbital estimates of global reactivity (local unscoped).",
+        "chemgraph.tools.molecular_tools:calculate_reactivity_descriptors",
+        frozenset({"cheminformatics", "analysis", "files"}),
     ),
     ToolSpec(
         "molecule_name_to_smiles",

@@ -257,11 +257,14 @@ def test_failures_replace_prior_success(
         assert saved['artifacts']
     assert ase_core.extract_output_json_core(str(output)) == saved
     from chemgraph.tools.report_tools import generate_html
+    from chemgraph.tools.molecular_core import calculate_reactivity_descriptors
 
     assert 'Calculation failed at' in generate_html.invoke(
         {'results_json_path': str(output), 'output_path': str(tmp_path / 'report.html')}
     )
     assert not (tmp_path / 'report.html').exists()
+    with pytest.raises(ValueError, match='Calculation failed at'):
+        calculate_reactivity_descriptors(str(output))
 
 
 def test_stale_gradient_cannot_satisfy_next_evaluation(

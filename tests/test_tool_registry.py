@@ -21,6 +21,7 @@ EXPECTED_TOOLS = (
     "is_linear_molecule",
     "run_ase",
     "prepare_conformers",
+    "calculate_reactivity_descriptors",
     "molecule_name_to_smiles",
     "smiles_to_atomsdata",
     "smiles_to_coordinate_file",

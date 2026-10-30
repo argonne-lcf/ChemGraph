@@ -10,6 +10,7 @@ from ase.io import read
 from ase.units import Hartree
 
 from chemgraph.parsers.orca import OrcaParseError, parse_orca_output
+from chemgraph.tools.molecular_core import calculate_reactivity_descriptors
 
 DATA = Path(__file__).parent / 'data' / 'orca'
 
@@ -171,10 +172,79 @@ def test_full_synthetic_table_preferred_and_consistency(native, tmp_path):
             parse_orca_output(corrupt, **{**kwargs, 'output_path': output})
 
 
+def test_descriptors_and_independent_record_validation(native, tmp_path):
+    from chemgraph.schemas.electronic import ElectronicStructureResult
+
+    record = parse_orca_output(native[0], **native[1])
+    path = tmp_path / 'electronic.json'
+    path.write_text(record.model_dump_json())
+    descriptors = calculate_reactivity_descriptors(str(path))
+    ion, affinity = -record.homo, -record.lumo
+    assert descriptors['hardness'] == pytest.approx(ion - affinity)
+    assert descriptors['electrophilicity'] == pytest.approx(
+        (ion + affinity) ** 2 / (8 * (ion - affinity))
+    )
+    assert (
+        descriptors['source_result']['sha256']
+        == hashlib.sha256(path.read_bytes()).hexdigest()
+    )
+    for field, value in [
+        ('schema_version', 2),
+        ('success', False),
+        ('scf_converged', False),
+        ('energy_unit', 'Hartree'),
+        ('homo', 20),
+        ('gap', float('nan')),
+        ('nmo', 59),
+    ]:
+        data = record.model_dump()
+        data[field] = value
+        path.write_text(json.dumps(data))
+        with pytest.raises(ValueError):
+            calculate_reactivity_descriptors(str(path))
+    data = record.model_dump()
+    for orbital in data['orbitals']:
+        orbital['energy'] += 10
+    data.update(homo=record.homo + 10, lumo=record.lumo + 10)
+    path.write_text(ElectronicStructureResult.model_validate(data).model_dump_json())
+    with pytest.raises(ValueError, match='HOMO >= 0'):
+        calculate_reactivity_descriptors(str(path))
 
 
+def test_descriptor_anion_warning_and_nonpositive_gap(native, tmp_path):
+    from chemgraph.schemas.electronic import ElectronicStructureResult
+
+    record = parse_orca_output(native[0], **native[1]).model_dump()
+    record.update(charge=-1, warnings=['Other protocol limitation'])
+    path = tmp_path / 'anion.json'
+    path.write_text(json.dumps(record))
+    result = calculate_reactivity_descriptors(str(path))
+    assert any('diffuse basis' in warning for warning in result['warnings'])
+    record['basis'] = 'def2-TZVPD'
+    path.write_text(json.dumps(record))
+    assert not any(
+        'diffuse basis' in warning
+        for warning in calculate_reactivity_descriptors(str(path))['warnings']
+    )
+    record['orbitals'][35]['energy'] = record['homo']
+    record.update(lumo=record['homo'], gap=0)
+    path.write_text(ElectronicStructureResult.model_validate(record).model_dump_json())
+    with pytest.raises(ValueError, match='Nonpositive'):
+        calculate_reactivity_descriptors(str(path))
 
 
+def test_input_provenance_mismatch_and_missing_scf_evidence(native, tmp_path):
+    text, kwargs = native
+    wrong = tmp_path / 'wrong.inp'
+    wrong.write_text('! PBE def2-SVP SP\n')
+    with pytest.raises(ValueError, match='provenance_mismatch'):
+        parse_orca_output(text, **{**kwargs, 'input_path': wrong})
+    record = parse_orca_output(text, **kwargs).model_dump()
+    record['scf_evidence'] = {}
+    path = tmp_path / 'bad.json'
+    path.write_text(json.dumps(record))
+    with pytest.raises(ValueError, match='evidence'):
+        calculate_reactivity_descriptors(str(path))
 
 
 @pytest.mark.parametrize(

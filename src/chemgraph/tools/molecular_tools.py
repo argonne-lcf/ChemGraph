@@ -30,3 +30,13 @@ def prepare_conformers(
         rmsd_threshold,
         mmff_max_iters,
     )
+
+
+@tool
+def calculate_reactivity_descriptors(result_file: str) -> dict:
+    """Read saved electronic results and estimate global reactivity from orbitals.
+
+    Uses eta=I-A; these are orbital estimates, not experimental IP/EA or
+    atom-specific reactivity. No installed engine is required. Local unscoped only.
+    """
+    return molecular_core.calculate_reactivity_descriptors(result_file)

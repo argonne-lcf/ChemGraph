@@ -131,3 +131,37 @@ def test_configured_schemas_execution_and_serialization_in_child(tmp_path):
         timeout=180,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_no_engine_descriptor_consumption_in_clean_child(tmp_path):
+    code = '''
+import shutil
+original = shutil.which
+shutil.which = lambda name, *a, **kw: None if str(name).endswith('orca') else original(name, *a, **kw)
+from chemgraph.utils.orca import orca_available
+assert not orca_available()
+from chemgraph.schemas.ase_input import get_available_calculator_names
+assert 'OrcaCalc' not in get_available_calculator_names()
+from chemgraph.tools.molecular_core import calculate_reactivity_descriptors
+from chemgraph.parsers.orca import parse_orca_output
+from pathlib import Path
+from ase.io import read
+p=Path('tests/data/orca/dvb_sp_dft.out'); a=read(p,format='orca-output')
+r=parse_orca_output(p.read_text(),charge=0,multiplicity=1,symbols=a.get_chemical_symbols(),positions=a.positions,method='B3LYP',basis='STO-3G',input_path=p.with_suffix('.inp'),output_path=p)
+p=Path(__import__('sys').argv[1])/'result.json';p.write_text(r.model_dump_json())
+assert calculate_reactivity_descriptors(str(p))['success']
+'''
+    env = {
+        **os.environ,
+        'PYTHONNOUSERSITE': '1',
+        'PYTHONPATH': str(Path(__file__).parents[1] / 'src'),
+    }
+    env.pop('ASE_ORCA_COMMAND', None)
+    result = subprocess.run(
+        [sys.executable, '-c', code, str(tmp_path)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
