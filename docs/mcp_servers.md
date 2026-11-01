@@ -1,5 +1,9 @@
 # MCP servers
 
+For an always-on endpoint shared by a trusted research group, see the
+[persistent MCP service](persistent_mcp.md). It adds bearer authentication,
+private workspaces, durable jobs and supervised ASE processes.
+
 ChemGraph can expose chemistry tools to Model Context Protocol clients or load
 tools from an MCP server into a ChemGraph agent.
 

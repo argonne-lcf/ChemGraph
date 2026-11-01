@@ -1,0 +1,29 @@
+[Unit]
+Description=ChemGraph authenticated MCP service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=chemgraph
+Group=chemgraph
+WorkingDirectory=/opt/chemgraph
+ExecStart=/opt/chemgraph/.venv/bin/python -m chemgraph.mcp.service --config /etc/chemgraph/service.toml serve
+Environment=PYTHONNOUSERSITE=1
+Environment=OMP_NUM_THREADS=1
+UMask=0077
+StateDirectory=chemgraph
+StateDirectoryMode=0700
+Restart=on-failure
+RestartSec=3
+# A service restart must terminate old calculation children before recovery.
+KillMode=control-group
+TimeoutStopSec=45
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/chemgraph
+
+[Install]
+WantedBy=multi-user.target

@@ -216,6 +216,14 @@ class OperationJournal:
                 changed.append(await self._put(record, UNCERTAIN))
         return changed
 
+    async def uncertain(self, identifier: str, *, reason: str) -> dict:
+        """Record loss of an invocation without claiming its work did not happen."""
+        record = await self.store.get(identifier)
+        if record is None or record["state"] != INVOKING:
+            raise ScopedExecutionError("Only invoking operations can become uncertain.")
+        record["history"].append({"event": "interrupted", "reason": reason, "at": time.time()})
+        return await self._put(record, UNCERTAIN, error=reason)
+
     async def confirm_nonexecution(self, identifier: str, *, decided_by: str, evidence: str) -> dict:
         """Operator evidence that an uncertain operation did not run; it needs a new approval."""
         record = await self.store.get(identifier)
@@ -265,27 +273,10 @@ class OperationJournal:
                 "The invocation outcome is uncertain; an operator must reconcile it."
             )
         if record["state"] != RETURNED:
-            if not self.authorized(record):
-                raise ApprovalRequired("The operation has no valid approval.")
+            record = await self.begin(context, call, record)
+            if record["state"] == BLOCKED:
+                return error_message(call, f"Not executed: {record['error']} Propose the action again.")
             action = PreparedAction.from_dict(record["prepared"])
-            try:
-                await asyncio.to_thread(validate, context, call, action)
-            except (PreparationError, PermissionError, OSError) as exc:
-                failure = exc
-            else:
-                failure = None
-            # A decision may have changed or expired meanwhile: transition from
-            # the saved record, and only while it is still authorized.
-            record = await self.store.get(record["id"])
-            if not self.authorized(record):
-                raise ApprovalRequired("The approval changed or expired before invocation.")
-            changes = {"error": str(failure)} if failure else {}
-            try:
-                await self._put(record, BLOCKED if failure else INVOKING, **changes)
-            except OperationConflict as exc:
-                raise ApprovalRequired("The operation changed before invocation.") from exc
-            if failure:
-                return error_message(call, f"Not executed: {failure} Propose the action again.")
             outputs = set()
             try:
                 message = await invoke(action, outputs)
@@ -294,17 +285,62 @@ class OperationJournal:
             except Exception as exc:
                 # The tool raised: its failure is known, unlike a crash.
                 message = error_message(call, f"Error: {exc!r}")
-            await self._put(record, RETURNED, returned={
-                "message": encode_result(message), "registered": sorted(outputs), "outputs": None,
-            })
-        returned = record["returned"]
-        message = decode_result(returned["message"])
+            record = await self.record_return(record, message, outputs)
+        return await self.finalize(context, call, record)
+
+    async def begin(self, context, call: dict, record: dict) -> dict:
+        """Validate an approval and durably claim invocation before dispatch."""
+        if not self.authorized(record):
+            raise ApprovalRequired("The operation has no valid approval.")
+        action = PreparedAction.from_dict(record["prepared"])
         try:
-            # Identify outputs once; a retry publishes exactly the saved manifest.
-            if returned["outputs"] is None:
+            await asyncio.to_thread(validate, context, call, action)
+        except (PreparationError, PermissionError, OSError) as exc:
+            failure = exc
+        else:
+            failure = None
+        # A decision may have changed or expired meanwhile: transition from
+        # the saved record, and only while it is still authorized.
+        record = await self.store.get(record["id"])
+        if not self.authorized(record):
+            raise ApprovalRequired("The approval changed or expired before invocation.")
+        changes = {"error": str(failure)} if failure else {}
+        try:
+            await self._put(record, BLOCKED if failure else INVOKING, **changes)
+        except OperationConflict as exc:
+            raise ApprovalRequired("The operation changed before invocation.") from exc
+        return record
+
+    async def record_return(self, record: dict, message, outputs) -> dict:
+        """Save an observed outcome before attempting artifact publication."""
+        return await self._put(record, RETURNED, returned={
+            "message": encode_result(message), "registered": sorted(outputs), "outputs": None,
+        })
+
+    async def bind_outputs(self, context, record: dict) -> dict:
+        """Identify outputs once; a retry publishes exactly the saved manifest."""
+        if record["state"] != RETURNED:
+            raise ScopedExecutionError("Only returned operations can bind outputs.")
+        returned = record["returned"]
+        if returned["outputs"] is None:
+            try:
                 manifest = await asyncio.to_thread(
                     output_manifest, context.workspace, returned["registered"])
-                await self._put(record, RETURNED, returned={**returned, "outputs": manifest})
+            except (OSError, ValueError) as exc:
+                raise ScopedExecutionError(
+                    "Saving the operation's artifacts failed; retry after fixing storage. "
+                    "The calculation will not be repeated."
+                ) from exc
+            await self._put(record, RETURNED, returned={**returned, "outputs": manifest})
+        return record
+
+    async def finalize(self, context, call: dict, record: dict):
+        """Finish a returned operation without invoking its tool again."""
+        if record["state"] != RETURNED:
+            raise ScopedExecutionError("Only returned operations can be finalized.")
+        message = decode_result(record["returned"]["message"])
+        try:
+            await self.bind_outputs(context, record)
             artifacts = await asyncio.to_thread(
                 capture_artifacts, context, call["id"], record["returned"]["outputs"])
         except (OSError, ValueError) as exc:
