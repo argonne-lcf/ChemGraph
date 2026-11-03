@@ -10,6 +10,7 @@ from chemgraph.agent.deepagent_backend import host_shell_environment
 from chemgraph.agent.llm_agent import ChemGraph, PromptConfig
 from chemgraph.agent.turn import serialize_state
 from chemgraph.agent.usage import UsageCollector, combine_usage
+from chemgraph.eval.protocol import ExecutionSettings
 from chemgraph.graphs.deep_agent import DEFAULT_DEEPAGENT_PROMPT
 from chemgraph.models.loader import load_chat_model
 from chemgraph.prompt.single_agent_prompt import formatter_prompt
@@ -53,9 +54,18 @@ async def format_result(model, state, usage, attempts=None):
 
 async def run_query(config, model_name, query, query_id):
     """Run in one directory per model/thread without passing ground truth to the model."""
+    return await execute_query(
+        ExecutionSettings.from_config(config), model_name, query, query_id,
+        workspace_path=query_workspace(config, model_name, query_id),
+        base_url=config.get_base_url(model_name), argo_user=config.get_argo_user(),
+    )
+
+
+async def execute_query(settings, model_name, query, query_id, *, workspace_path,
+                        base_url, argo_user, shell_environment=None):
+    """Execute and format using only execution settings and the current question."""
     started = time.monotonic()
     previous_log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
-    workspace_path = query_workspace(config, model_name, query_id)
     workspace = str(workspace_path)
     run_config = {"configurable": {"thread_id": query_id}}
     formatting_usage = UsageCollector("eval", query_id, model=model_name)
@@ -73,18 +83,17 @@ async def run_query(config, model_name, query, query_id):
             )
         # This process-wide override requires sequential evaluation queries.
         os.environ["CHEMGRAPH_LOG_DIR"] = workspace
-        model_options = {"model_name": model_name, "base_url": config.get_base_url(model_name),
-                         "argo_user": config.get_argo_user()}
+        model_options = {"model_name": model_name, "base_url": base_url, "argo_user": argo_user}
         agent = ChemGraph(
             **model_options, workflow_type="deep_agent", return_option="state",
             structured_output=False, enable_memory=False, log_dir=workspace,
-            recursion_limit=config.recursion_limit, deepagent_discover_skills=False,
+            recursion_limit=settings.recursion_limit, deepagent_discover_skills=False,
             # Native chemistry tools use host paths, so file tools must use them too.
             deepagent_backend=LocalShellBackend(
                 root_dir=workspace, virtual_mode=False,
-                env=host_shell_environment(), inherit_env=False,
+                env={**host_shell_environment(), **(shell_environment or {})}, inherit_env=False,
             ),
-            deepagent_auto_approve=config.deepagent_auto_approve,
+            deepagent_auto_approve=settings.deepagent_auto_approve,
             prompts=PromptConfig(deepagent=DEFAULT_DEEPAGENT_PROMPT + (
                 f"\nThe working and output directory for this evaluation thread is {workspace}.\n"
                 "File tools and chemistry tools use real host paths. Shell commands start "
@@ -92,14 +101,14 @@ async def run_query(config, model_name, query, query_id):
                 "scripts, and results here; use absolute host paths in chemistry-tool arguments. "
                 f"For built-in file tools, use forward-slash paths under {file_tool_path(workspace_path)}. "
                 "On Windows, omit the drive prefix for file tools; the backend uses the workspace drive. "
-                "There is no /workspace mount for this run. Model runtime temporary "
+                "Model runtime temporary "
                 "directories are not output locations.\n"
             )),
         )
         raw["status"] = "execution_error"
         state = await agent.run(query, run_config)
         raw.update(get_workflow_from_state(state), state=state)
-        if config.structured_output:
+        if settings.structured_output:
             raw["status"] = "formatting_error"
             raw["formatter_responses"] = []
             model = load_chat_model(
