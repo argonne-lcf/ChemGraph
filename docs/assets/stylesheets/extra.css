@@ -3,3 +3,14 @@
   background-color: #fff;
   border-radius: 50%;
 }
+
+/* Material defaults to a 24px logo; give the molecular icon room to read. */
+.md-header__button.md-logo {
+  padding: 0.1rem;
+}
+
+.md-header__button.md-logo img,
+.md-nav__title .md-logo img {
+  width: 2.4rem;
+  height: 2.4rem;
+}
