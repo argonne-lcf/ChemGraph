@@ -2,6 +2,7 @@
 
 import asyncio
 from pathlib import Path
+from typing import get_type_hints
 
 import pytest
 from deepagents.backends import (
@@ -93,7 +94,9 @@ def test_inherited_skill_hooks_use_merged_sources(tmp_path, asynchronous, pin):
         AIMessage(content="Done"), AIMessage(content="Done"),
     ])
     graph = _overlapping_skill_graph(tmp_path, model, tools=[record])
-    assert "pinned_skills" in graph.get_input_jsonschema()["properties"]
+    # JSON Schema export rejects upstream SkillMetadata's typing.TypedDict on
+    # Python 3.11; inspect the accepted input type directly instead.
+    assert "pinned_skills" in get_type_hints(graph.InputType)
     config = {"configurable": {"thread_id": "skill-hooks"}}
     for turn in (1, 2):
         data = {"messages": [HumanMessage(content=f"Turn {turn}")]}
