@@ -39,7 +39,7 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "deepagents==0.7.32",
-    "wcmatch==11.2",
+    "wcmatch>=11.0",
     "langgraph==1.2.19",
     "langgraph-checkpoint==4.3.1",
     "langgraph-checkpoint-sqlite==3.1.3",
