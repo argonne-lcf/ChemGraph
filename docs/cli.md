@@ -159,6 +159,10 @@ The Python REPL removal also changes the catalog and approval policy: sessions
 created before these combined upgrades require a new session. Their transcripts
 remain readable.
 
+The main-agent compatibility fingerprint also includes the Deep Agents version.
+Upgrading Deep Agents requires a new main-agent session; existing transcripts
+remain readable, but their checkpoints cannot resume with the upgraded runtime.
+
 The development workspace Deep Agent can execute broad filesystem and shell
 actions. Call it directly with action reviews:
 
