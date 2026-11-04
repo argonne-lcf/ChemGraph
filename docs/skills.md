@@ -167,7 +167,7 @@ artifact root are retained without an extra composite layer.
 
 ## Reading skills and executing helpers
 
-Deep Agents 0.7.5 advertises names, descriptions, and paths in the prompt, then
+Deep Agents 0.7.32 advertises names, descriptions, and paths in the prompt, then
 uses **`read_file`** to load `SKILL.md` on demand. There is no separate
 `read_skill` tool. Relative references in a skill resolve against its directory
 in the file backend. See [upstream skills documentation](https://docs.langchain.com/oss/python/deepagents/skills).
@@ -309,7 +309,7 @@ it does not adopt the new home directory. To use a different personal root, star
 a new session with that configuration. Changing the root while restoring the
 existing session produces an incompatible-topology error.
 
-Missing optional directories are skipped. With Deep Agents 0.7.5, invalid YAML or
+Missing optional directories are skipped. With Deep Agents 0.7.32, invalid YAML or
 missing required metadata causes a skill to be skipped with log warnings; valid
 siblings remain available. Name/directory mismatches are accepted with warnings.
 These file-level warnings do not populate `skills_load_errors`. If a skill is
