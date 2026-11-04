@@ -16,13 +16,11 @@ workflow needs them.
 
 ## First run
 
-Install ChemGraph in a virtual environment with [uv](https://docs.astral.sh/uv/)
-(or `python -m venv` + `pip`):
+Install the CLI with [uv](https://docs.astral.sh/uv/guides/tools/), which manages
+an isolated environment (Python 3.11 or newer required):
 
 ```bash
-uv venv .venv
-source .venv/bin/activate
-uv pip install chemgraph
+uv tool install chemgraph
 ```
 
 Set one model-provider credential, then check the installation and run a query:
@@ -64,6 +62,13 @@ optional SDK and a ChatGPT login; see [Codex subscription](codex_subscription.md
 Site-specific HPC servers, gRASPA workflows, docking, XANES, and some
 distributed backends are advanced or experimental; validate them in your own
 environment before production use.
+
+## News and research
+
+Read the [news and events archive](news.md) for recent releases, presentations,
+and coverage, including the November 4 ALCF Inference Service feature.
+Find the framework, HPC orchestration, ChemGraph-XANES, and ChemGraph-IR papers
+on [Papers and citations](citation.md).
 
 ## Community
 

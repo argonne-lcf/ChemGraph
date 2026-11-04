@@ -46,6 +46,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - News and events: news.md
   - Getting started:
       - Installation: installation.md
       - Quickstart: quickstart.md
@@ -75,6 +76,6 @@ nav:
       - Project structure: project_structure.md
       - Contributing: contributing.md
       - Code formatting: code_formatting_and_linting.md
-      - Citation: citation.md
+      - Papers and citations: citation.md
       - Acknowledgements: acknowledgements.md
       - License: license.md

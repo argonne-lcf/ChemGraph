@@ -1,4 +1,4 @@
-# Citation
+# Papers and citations
 
 If ChemGraph supports your research, cite the peer-reviewed article:
 
@@ -46,3 +46,21 @@ Work using the distributed Academy/HPC orchestration features should also cite:
 
 See the [arXiv record](https://arxiv.org/abs/2604.07681) for current metadata
 and versions.
+
+## ChemGraph-XANES
+
+For XANES simulation and curation, cite
+[ChemGraph-XANES: an agentic framework for XANES simulation and curation](https://doi.org/10.1039/d6ra06166d),
+*RSC Advances* **16**, 56195–56207 (2026). DOI: `10.1039/d6ra06166d`.
+The earlier [preprint](https://arxiv.org/abs/2604.16205) is titled
+“ChemGraph-XANES: An Agentic Framework for XANES Simulation and Analysis.”
+Use the publisher's citation export for the full author list and BibTeX.
+
+## ChemGraph-IR and the LLM hackathon
+
+The community paper
+[From Knowledge to Action: Outcomes of the 2025 Large Language Model (LLM) Hackathon for Applications in Materials Science and Chemistry](https://arxiv.org/abs/2605.03205)
+includes a ChemGraph-IR section on automated infrared spectroscopy, spectrum
+visualization, and normal-mode animations (2026 preprint).
+
+See [News and events](news.md) for publication dates, presentations, and coverage.

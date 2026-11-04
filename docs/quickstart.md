@@ -6,21 +6,11 @@ calculation, and shows where results are stored.
 ## 1. Install ChemGraph
 
 ```bash
-uv venv .venv
-source .venv/bin/activate              # Windows: .venv\Scripts\activate
-uv pip install chemgraph
+uv tool install chemgraph
 ```
 
-Or with standard `venv` and `pip`:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate              # Windows: .venv\Scripts\activate
-python -m pip install --upgrade pip
-python -m pip install chemgraph
-```
-
-See [Installation](installation.md) if you need source or optional-extra setup.
+This installs the CLI in an isolated environment. See [Installation](installation.md)
+for Python/notebook use, pip, source checkouts, and optional extras.
 
 ## 2. Choose one model route
 
