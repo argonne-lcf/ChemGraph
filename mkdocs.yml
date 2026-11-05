@@ -7,8 +7,8 @@ edit_uri: edit/main/docs/
 
 theme:
   name: material
-  logo: assets/chemgraph-icon.svg
-  favicon: assets/chemgraph-favicon-32.png
+  logo: assets/chemgraph_logo.png
+  favicon: assets/chemgraph_logo.png
   features:
     - content.code.copy
     - navigation.footer
@@ -29,9 +29,6 @@ theme:
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
-
-extra_css:
-  - assets/stylesheets/extra.css
 
 plugins:
   - search
