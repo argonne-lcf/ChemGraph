@@ -1,0 +1,126 @@
+#!/bin/bash -l
+#PBS -l select=2
+#PBS -l place=scatter
+#PBS -l walltime=01:00:00
+#PBS -q debug-scaling
+#PBS -A MatSciAI
+#PBS -l filesystems=flare
+#PBS -N n3u-chemgraph
+#PBS -j oe
+#PBS -o /lus/flare/projects/MatSciAI/xiaoliyan/workdir/alcf-aurora-llm/nemotron/logs/chemgraph_two_node.out
+
+# Two-node ChemGraph + Nemotron-3-Ultra inference recipe (single serve, all-XPU, max context):
+#   Node 0: llama-server (Nemotron-3-Ultra UD-IQ2_M, all-XPU 6-tile layer split, experts on GPU,
+#           -c 262144 = native max context). No MoE->CPU offload.
+#   Node 1: ChemGraph scientific workload (aurora:nemotron-3-ultra via AURORA_BASE_URL)
+#
+# Leaves tiles 6-11 + both CPU sockets free for the science process (set its own ZE_AFFINITY_MASK).
+#
+# Usage:
+#   qsub -q debug-scaling scripts/aurora/two_node_nemotron_ultra.pbs
+#   qsub -q debug-scaling -v QUERY="Optimize water with EMT and report energy" ...
+
+set -o pipefail
+
+# ── paths ────────────────────────────────────────────────────────────────────
+NEMO=/lus/flare/projects/MatSciAI/xiaoliyan/workdir/alcf-aurora-llm/nemotron
+BIN=${BIN:-$HOME/llamacpp-sycl/build/bin}   # your llama.cpp SYCL build (see build_llamacpp_sycl.pbs)
+GGUF=${GGUF:-$(ls "$NEMO/models/gguf/UD-IQ2_M"/*-00001-of-*.gguf 2>/dev/null | head -1)}
+CG_REPO=${CG_REPO:-/lus/flare/projects/MatSciAI/xiaoliyan/workdir/ChemGraph}
+CG_VENV=${CG_VENV:-/lus/flare/projects/MatSciAI/xiaoliyan/software/venvs/chemgraph}
+CENV=${CENV:-/lus/flare/projects/MatSciAI/xiaoliyan/software/conda/envs/aurora-llm}
+LOGDIR=${LOGDIR:-$NEMO/logs}; mkdir -p "$LOGDIR"
+
+# ── tunable parameters ────────────────────────────────────────────────────────
+PORT=${PORT:-8000}; SERVED=${SERVED:-nemotron-3-ultra}
+NTILES=${NTILES:-6}                       # 6 tiles (3 GPUs); free: 6-11
+CTX=${CTX:-262144}                        # native max context
+NPAR=${NPAR:-4}; NThreads=${NThreads:-64}
+QUERY=${QUERY:-"Build water from SMILES O, optimize it with EMT, and report the final energy."}
+
+# ── node layout ───────────────────────────────────────────────────────────────
+NODE0=$(head -1 "$PBS_NODEFILE")
+NODE1=$(sed -n '2p' "$PBS_NODEFILE")
+NODE0_IP=$(ssh "$NODE0" hostname -i 2>/dev/null | awk '{print $1}')
+echo "START $(date -Is) job=$PBS_JOBID"
+echo "NODE0=$NODE0 (ip=$NODE0_IP) -> llama-server (all-XPU ${NTILES}-tile, -c $CTX)"
+echo "NODE1=$NODE1 -> ChemGraph"
+echo "GGUF=$GGUF PORT=$PORT CTX=$CTX"
+[ -e "$GGUF" ] || { echo "ERROR: GGUF not found ($GGUF)"; exit 2; }
+
+# ── launch single all-XPU server on node 0 ───────────────────────────────────
+# All weights on GPU (experts included, NO -ncmoe); layer split across NTILES tiles.
+# -sm row crashes on nemotron_h_moe, so -sm layer is required. KV @262144 is only ~3 GB
+# (hybrid: 12 attention layers, kv_heads=2), so 6 tiles hold weights+KV comfortably.
+MASK=$(seq -s, 0 $((NTILES-1)))
+ssh "$NODE0" bash -s <<SSHEOF &
+set -o pipefail
+module load oneapi/release/2025.3.1
+export ZE_FLAT_DEVICE_HIERARCHY=FLAT ZE_AFFINITY_MASK=$MASK
+export ONEAPI_DEVICE_SELECTOR=level_zero:gpu ZES_ENABLE_SYSMAN=1
+export GGML_SYCL_ENABLE_VMM=0
+JT=${PBS_JOBID:-$$}
+export TRITON_CACHE_DIR=/tmp/tc_\${JT} SYCL_CACHE_DIR=/tmp/sc_\${JT}
+mkdir -p "\$TRITON_CACHE_DIR" "\$SYCL_CACHE_DIR"
+echo "all-XPU single-serve: ${NTILES}-tile layer split (mask=$MASK) -c $CTX on \$(hostname)"
+numactl --interleave=all \
+  "$BIN/llama-server" \
+    -m "$GGUF" \
+    -c $CTX -ngl 99 --split-mode layer \
+    -fa on -t $NThreads --numa numactl --no-mmap \
+    --jinja --parallel $NPAR --cont-batching \
+    --alias $SERVED \
+    --host 0.0.0.0 --port $PORT > "$LOGDIR/n3u_server.out" 2>&1
+SSHEOF
+SRV_PID=$!
+ENDPOINT_URL="http://$NODE0_IP:$PORT/v1"
+
+# ── wait for endpoint ─────────────────────────────────────────────────────────
+READY=0
+for _ in $(seq 1 180); do
+  curl -sf "http://$NODE0_IP:$PORT/health" >/dev/null 2>&1 && { READY=1; echo "server ready $(date -Is)"; break; }
+  sleep 10
+done
+if [ "$READY" != 1 ]; then
+  echo "SERVER NOT READY — tail:"; tail -40 "$LOGDIR/n3u_server.out" 2>/dev/null
+  kill $SRV_PID 2>/dev/null; exit 4
+fi
+
+# ── publish endpoint ──────────────────────────────────────────────────────────
+cat > "$CG_REPO/ENDPOINT.txt" <<EOF
+node=$NODE0
+ip=$NODE0_IP
+url=$ENDPOINT_URL
+model=aurora:$SERVED
+tiles=$MASK
+ctx=$CTX
+job=$PBS_JOBID
+started=$(date -Is)
+EOF
+echo "ENDPOINT: $ENDPOINT_URL  model=aurora:$SERVED  tiles=$MASK  ctx=$CTX"
+
+# ── ChemGraph on node 1 ───────────────────────────────────────────────────────
+echo "=== ChemGraph run on $NODE1 ==="
+ssh "$NODE1" bash -s <<CGEOF
+set -o pipefail
+export AURORA_BASE_URL="$ENDPOINT_URL"
+export OPENAI_API_KEY=dummy
+export http_proxy=http://proxy.alcf.anl.gov:3128 https_proxy=http://proxy.alcf.anl.gov:3128
+export no_proxy="$NODE0_IP,127.0.0.1,localhost" NO_PROXY="$NODE0_IP,127.0.0.1,localhost"
+export LD_LIBRARY_PATH="$CENV/lib:\$LD_LIBRARY_PATH"
+export CHEMGRAPH_LOG_DIR="$LOGDIR/cg_logs"
+mkdir -p "\$CHEMGRAPH_LOG_DIR"
+cd "$CG_REPO"
+"$CG_VENV/bin/chemgraph" run \
+  --model aurora:$SERVED \
+  --workflow single_agent \
+  --output last_message \
+  -v \
+  -q "$QUERY" 2>&1 | tee "$LOGDIR/chemgraph_run.out"
+echo "CHEMGRAPH_RC=\${PIPESTATUS[0]}"
+CGEOF
+
+echo "=== shutting down ==="
+kill $SRV_PID 2>/dev/null
+wait $SRV_PID 2>/dev/null
+echo "DONE $(date -Is)"

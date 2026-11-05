@@ -1,0 +1,25 @@
+# ChemGraph config: Aurora Nemotron-3-Ultra inference (two-node recipe).
+# Node 0 runs llama-server (Nemotron-3-Ultra UD-IQ2_M, single-tile MoE->CPU or 3x DP).
+# Node 1 runs ChemGraph; AURORA_BASE_URL is set by the PBS script from ENDPOINT.txt.
+#
+# Usage (two-node):
+#   qsub -q debug-scaling scripts/aurora/two_node_nemotron_ultra.pbs
+#   qsub -q debug-scaling -v MODE=dp,... scripts/aurora/two_node_nemotron_ultra.pbs
+#   # or manually: source scripts/aurora/chemgraph_aurora_env.sh ENDPOINT.txt
+#   chemgraph run --config config/aurora_nemotron_ultra.toml -q "..."
+
+[general]
+model = "aurora:nemotron-3-ultra"
+workflow = "single_agent"
+output = "last_message"
+recursion_limit = 20
+
+[api.aurora]
+# Set by exporting AURORA_BASE_URL (chemgraph_aurora_env.sh reads ENDPOINT.txt).
+# Override manually: base_url = "http://<node_ip>:8000/v1"
+base_url = "http://127.0.0.1:8000/v1"
+timeout = 120
+
+[logging]
+level = "WARNING"
+console = true

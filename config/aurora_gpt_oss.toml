@@ -1,0 +1,26 @@
+# ChemGraph config: Aurora gpt-oss-120b endpoint (llama.cpp full-XPU, 2-tile, max context).
+#
+# Usage:
+#   1) Start the endpoint:  scripts/aurora/serve_llamacpp_maxctx.sh gpt-oss-120b
+#   2) Point base_url at it (co-located 127.0.0.1, or an SSH tunnel from a login node),
+#      either by editing [api.aurora].base_url below or exporting AURORA_BASE_URL.
+#   3) Run:  chemgraph run --config config/aurora_gpt_oss.toml -q "..."
+#
+# The model uses the "aurora:" provider, which sends OpenAI-compatible requests to
+# an on-node llama.cpp server. gpt-oss-120b supports tool calling, required by
+# ChemGraph's tool-driven workflows.
+
+[general]
+model = "aurora:gpt-oss-120b"
+workflow = "single_agent"
+output = "last_message"
+recursion_limit = 20
+
+[api.aurora]
+# Override per run with AURORA_BASE_URL, or set your tunnel/node URL here.
+base_url = "http://127.0.0.1:8000/v1"
+timeout = 60
+
+[logging]
+level = "WARNING"
+console = true
