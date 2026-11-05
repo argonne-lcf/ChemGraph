@@ -10,11 +10,11 @@ _LOGO_DIR = _PROJECT_ROOT / "logo"
 
 LOGO_IMAGES = (
     _ASSET_DIR / "chemgraph-logo.png",
-    _LOGO_DIR / "chemgraph-color-dark__rgb-lores.png",
+    _LOGO_DIR / "chemgraph-logo-stacked.png",
 )
 ICON_IMAGES = (
     _ASSET_DIR / "chemgraph-icon.png",
-    _LOGO_DIR / "chemgraph-icon-color-dark__rgb-lores.png",
+    _LOGO_DIR / "chemgraph-icon-512.png",
 )
 
 
