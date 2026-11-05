@@ -30,6 +30,9 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
 
+extra_css:
+  - assets/stylesheets/extra.css
+
 plugins:
   - search
   - mkdocstrings
