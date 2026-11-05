@@ -49,18 +49,60 @@ and versions.
 
 ## ChemGraph-XANES
 
-For XANES simulation and curation, cite
-[ChemGraph-XANES: an agentic framework for XANES simulation and curation](https://doi.org/10.1039/d6ra06166d),
-*RSC Advances* **16**, 56195–56207 (2026). DOI: `10.1039/d6ra06166d`.
-The earlier [preprint](https://arxiv.org/abs/2604.16205) is titled
+Work using the XANES workflow (`single_agent_xanes`) should also cite:
+
+> Vitor F. Grizzi, Thang Duc Pham, Luke N. Pretzie, Jiayi Xu, Murat Keçeli,
+> and Cong Liu. “ChemGraph-XANES: an agentic framework for XANES simulation
+> and curation.” *RSC Advances* **16**, 56195–56207 (2026).
+> <https://doi.org/10.1039/d6ra06166d>
+
+```bibtex
+@article{grizzi2026chemgraphxanes,
+  author  = {Grizzi, Vitor F. and Pham, Thang Duc and Pretzie, Luke N. and Xu, Jiayi and Keçeli, Murat and Liu, Cong},
+  title   = {ChemGraph-XANES: an agentic framework for XANES simulation and curation},
+  journal = {RSC Advances},
+  volume  = {16},
+  number  = {44},
+  pages   = {56195--56207},
+  year    = {2026},
+  doi     = {10.1039/d6ra06166d},
+  url     = {https://doi.org/10.1039/d6ra06166d}
+}
+```
+
+An earlier version appeared as the preprint
+[arXiv:2604.16205](https://arxiv.org/abs/2604.16205) under the title
 “ChemGraph-XANES: An Agentic Framework for XANES Simulation and Analysis.”
-Use the publisher's citation export for the full author list and BibTeX.
 
-## ChemGraph-IR and the LLM hackathon
+## ChemGraph-IR
 
-The community paper
-[From Knowledge to Action: Outcomes of the 2025 Large Language Model (LLM) Hackathon for Applications in Materials Science and Chemistry](https://arxiv.org/abs/2605.03205)
-includes a ChemGraph-IR section on automated infrared spectroscopy, spectrum
-visualization, and normal-mode animations (2026 preprint).
+The infrared-spectroscopy and normal-mode visualization features were developed
+at the 2025 LLM Hackathon for Applications in Materials Science and Chemistry
+and are described in the ChemGraph-IR section of the community paper:
 
-See [News and events](news.md) for publication dates, presentations, and coverage.
+> Aritra Roy *et al.* “From Knowledge to Action: Outcomes of the 2025 Large
+> Language Model (LLM) Hackathon for Applications in Materials Science and
+> Chemistry.” arXiv:2605.03205 (2026).
+
+```bibtex
+@misc{roy2026knowledgeaction,
+  author        = {Roy, Aritra and others},
+  title         = {From Knowledge to Action: Outcomes of the 2025 Large Language Model ({LLM}) Hackathon for Applications in Materials Science and Chemistry},
+  year          = {2026},
+  eprint        = {2605.03205},
+  archivePrefix = {arXiv},
+  primaryClass  = {cond-mat.mtrl-sci},
+  url           = {https://arxiv.org/abs/2605.03205}
+}
+```
+
+The paper has several hundred authors; see the
+[arXiv record](https://arxiv.org/abs/2605.03205) for the full list.
+
+## Earlier versions
+
+The framework article was first released as the preprint
+[arXiv:2506.06363](https://arxiv.org/abs/2506.06363) (June 2025). Cite the
+*Communications Chemistry* article above rather than the preprint.
+
+See [News and events](news.md) for talks, releases, and media coverage.

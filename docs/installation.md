@@ -15,9 +15,10 @@ uv tool install chemgraph
 If uv reports that its executable directory is missing from `PATH`, run
 `uv tool update-shell` and restart your shell. Upgrade with `uv tool upgrade chemgraph`.
 
-For CLI extras, install them into the same tool environment, for example
-`uv tool install "chemgraph[rag]"`. To import ChemGraph in Python or a notebook,
-use the project environment below instead.
+To add optional extras to the tool environment, reinstall with the extras you
+need, for example `uv tool install "chemgraph[rag,docking]"`. A tool install
+cannot be imported from your own Python interpreter or notebook; for that, use
+a virtual environment as described below.
 
 ## Install for Python and notebooks
 

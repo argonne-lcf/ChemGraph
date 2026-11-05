@@ -23,6 +23,9 @@ an isolated environment (Python 3.11 or newer required):
 uv tool install chemgraph
 ```
 
+To import ChemGraph from Python or a notebook, install it in a virtual
+environment instead; see [Installation](installation.md).
+
 Set one model-provider credential, then check the installation and run a query:
 
 ```bash
@@ -65,14 +68,15 @@ environment before production use.
 
 ## News and research
 
-Read the [news and events archive](news.md) for recent releases, presentations,
-and coverage, including the November 4 ALCF Inference Service feature.
-Find the framework, HPC orchestration, ChemGraph-XANES, and ChemGraph-IR papers
-on [Papers and citations](citation.md).
+Read the [news and events archive](news.md) for releases, presentations, and
+media coverage. Citations and BibTeX for the framework, HPC orchestration,
+ChemGraph-XANES, and ChemGraph-IR papers are on
+[Papers and citations](citation.md).
 
 ## Community
 
 - [Examples](example_usage.md)
 - [Contributing](contributing.md)
-- [Citation](citation.md)
+- [News and events](news.md)
+- [Papers and citations](citation.md)
 - [GitHub issues](https://github.com/argonne-lcf/ChemGraph/issues)
