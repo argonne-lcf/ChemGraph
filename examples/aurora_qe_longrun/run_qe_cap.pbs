@@ -1,0 +1,67 @@
+#!/bin/bash
+#PBS -A ChemGraph
+#PBS -q debug
+#PBS -l select=1:ncpus=208
+#PBS -l walltime=00:30:00
+#PBS -l filesystems=home:flare
+#PBS -N qe_cap_run
+#PBS -j oe
+
+# Route 1 (calc-layer) validation: drives run_ase_core directly (no LLM agent) to
+# prove the wall-clock cap -> partial-geometry seam on real QE in isolation. Runs
+# all three bulk-Si stages in one allocation (mirroring run_qe_mol.pbs):
+#   smoke  -> single-point SCF (sanity: QE produces an energy through the seam)
+#   cap    -> capped opt, leaves a resumable partial in RUN_DIR
+#   resume -> uncapped resume from that partial
+# No LLM => no proxy/token needed here.
+#
+# Submit from this directory:  qsub run_qe_cap.pbs
+#
+# ====================== EDIT ME (site-specific) ==============================
+# ALCF Aurora defaults. To port: change the #PBS directives, module loads, QE_BIN,
+# ESPRESSO_PSEUDO, PY. See README.md "Porting to another HPC".
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+
+echo "Jobid: $PBS_JOBID"
+echo "Host:  $(hostname)"
+
+for m in oneapi/release oneapi/eng-compiler; do
+  module is-loaded "$m" 2>/dev/null && module unload "$m" 2>/dev/null || true
+done
+module load oneapi/release/2025.3.1 mpich/opt/develop-git.6037a7a
+module load hdf5/1.14.6
+module list 2>&1 | tail -6
+
+export MPIR_CVAR_CH4_XPMEM_ENABLE=0
+export MPIR_CVAR_ENABLE_GPU=0
+export FI_CXI_DEFAULT_CQ_SIZE=131072
+export FI_CXI_CQ_FILL_PERCENT=20
+export OMP_NUM_THREADS=1
+
+QE_BIN=/soft/applications/quantum_espresso/7.5-oneapi2025.0.5/cpu/bin/pw.x
+NRANKS=8
+export ASE_ESPRESSO_COMMAND="mpiexec -np ${NRANKS} -ppn ${NRANKS} -d 1 ${QE_BIN}"
+export ESPRESSO_PSEUDO="${ESPRESSO_PSEUDO:-$HOME/qe_pseudo}"
+
+# Cap tuning: budget just a few SCF steps; margin > one SCF step wall time.
+# Tune QE_CAP_SECONDS from the measured smoke SCF time before submit.
+export QE_CAP_SECONDS="${QE_CAP_SECONDS:-60}"
+export CHEMGRAPH_ALLOCATION_MARGIN="${CHEMGRAPH_ALLOCATION_MARGIN:-30}"
+
+PY="${PY:-$HOME/chemgraph-env/bin/python}"
+export RUN_DIR="$PBS_O_WORKDIR/cap_run"
+mkdir -p "$RUN_DIR"
+
+echo "QE_CAP_SECONDS=$QE_CAP_SECONDS  MARGIN=$CHEMGRAPH_ALLOCATION_MARGIN"
+
+echo "########## STAGE smoke ##########"
+"$PY" "$PBS_O_WORKDIR/qe_cap_driver.py" smoke
+
+echo "########## STAGE cap ##########"
+"$PY" "$PBS_O_WORKDIR/qe_cap_driver.py" cap
+
+echo "########## STAGE resume ##########"
+"$PY" "$PBS_O_WORKDIR/qe_cap_driver.py" resume
+
+echo "=== cap job done ==="
