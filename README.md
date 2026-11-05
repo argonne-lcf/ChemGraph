@@ -1,5 +1,5 @@
 <p align="left">
-  <img src="logo/chemgraph-color-dark__rgb-hires.jpg" alt="ChemGraph logo" width="240">
+  <img src="logo/chemgraph-logo-stacked.svg" alt="ChemGraph logo" width="280">
 </p>
 
 [![Tests](https://github.com/argonne-lcf/ChemGraph/actions/workflows/tests.yml/badge.svg)](https://github.com/argonne-lcf/ChemGraph/actions/workflows/tests.yml)

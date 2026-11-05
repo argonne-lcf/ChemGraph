@@ -7,8 +7,8 @@ edit_uri: edit/main/docs/
 
 theme:
   name: material
-  logo: assets/chemgraph_logo.png
-  favicon: assets/chemgraph_logo.png
+  logo: assets/chemgraph-icon.svg
+  favicon: assets/chemgraph-favicon-32.png
   features:
     - content.code.copy
     - navigation.footer

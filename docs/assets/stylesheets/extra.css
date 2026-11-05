@@ -1,9 +1,3 @@
-/* Keep the blue and gold icon visible against both theme palettes. */
-.md-logo img {
-  background-color: #fff;
-  border-radius: 50%;
-}
-
 /* Material defaults to a 24px logo; give the molecular icon room to read. */
 .md-header__button.md-logo {
   padding: 0.1rem;

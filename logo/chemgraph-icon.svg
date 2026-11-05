@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="180 168 558 558" width="512" height="512"><rect x="198" y="186" width="540" height="540" rx="124" fill="#1A2BA8"/><rect x="180" y="168" width="540" height="540" rx="124" fill="#0B1E8F"/><g transform="translate(450 438) scale(0.72) translate(-450 -438)">
+<g stroke="#E8B400" stroke-width="20" stroke-linecap="round" fill="none"><line x1="425" y1="223" x2="475" y2="223"/><line x1="385" y1="263" x2="385" y2="348"/><line x1="515" y1="263" x2="515" y2="348"/><line x1="356.5" y1="416.1" x2="253.5" y2="517.9"/><line x1="543.5" y1="416.1" x2="646.5" y2="517.9"/></g>
+<g fill="#E8B400"><circle cx="385" cy="223" r="31"/><circle cx="515" cy="223" r="31"/><circle cx="385" cy="388" r="31"/><circle cx="515" cy="388" r="31"/></g>
+<g stroke="#22B573" stroke-width="20" stroke-linecap="round" fill="none"><line x1="265" y1="546" x2="410" y2="546"/><line x1="490" y1="546" x2="635" y2="546"/><line x1="252" y1="575.5" x2="296" y2="623.5"/><line x1="419.4" y1="571.8" x2="353.4" y2="627.2"/><line x1="480.6" y1="571.8" x2="546.6" y2="627.2"/><line x1="648" y1="575.5" x2="604" y2="623.5"/><line x1="363" y1="653" x2="537" y2="653"/></g>
+<g fill="#22B573"><circle cx="225" cy="546" r="31"/><circle cx="450" cy="546" r="31"/><circle cx="675" cy="546" r="31"/><circle cx="323" cy="653" r="31"/><circle cx="577" cy="653" r="31"/></g>
+</g></svg>
