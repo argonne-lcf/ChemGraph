@@ -204,7 +204,8 @@ def test_turn_event_callback_emits_llm_decision_for_tool_calls():
                 "token_counts": {
                     "input_tokens": None, "output_tokens": None, "total_tokens": 12,
                     "cached_input_tokens": None, "reasoning_output_tokens": None,
-                    "raw_usage": {"total_tokens": 12}, "source": "provider",
+                    "cache_creation_input_tokens": None,
+                    "raw_usage": {"total_tokens": 12}, "source": "provider_raw",
                 },
             },
         ),
