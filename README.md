@@ -23,7 +23,7 @@ TBLite, UMA, docking, XANES, retrieval, or distributed execution on systems
 such as ALCF Polaris and Aurora as your workflow grows.
 
 [Documentation](https://argonne-lcf.github.io/ChemGraph/) ·
-[News and events](https://argonne-lcf.github.io/ChemGraph/news/) ·
+[News](https://argonne-lcf.github.io/ChemGraph/news/) ·
 [Papers and citations](https://argonne-lcf.github.io/ChemGraph/citation/) ·
 [Model leaderboard](https://huggingface.co/spaces/Autonomous-Scientific-Agents/chemgraph-leaderboard)
 

@@ -68,7 +68,7 @@ environment before production use.
 
 ## News and research
 
-Read the [news and events archive](news.md) for releases, presentations, and
+Read [News](news.md) for releases, presentations, and
 media coverage. Citations and BibTeX for the framework, HPC orchestration,
 ChemGraph-XANES, and ChemGraph-IR papers are on
 [Papers and citations](citation.md).
@@ -77,6 +77,6 @@ ChemGraph-XANES, and ChemGraph-IR papers are on
 
 - [Examples](example_usage.md)
 - [Contributing](contributing.md)
-- [News and events](news.md)
+- [News](news.md)
 - [Papers and citations](citation.md)
 - [GitHub issues](https://github.com/argonne-lcf/ChemGraph/issues)

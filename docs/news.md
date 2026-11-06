@@ -1,4 +1,4 @@
-# News and events
+# News
 
 Publications, software releases, talks, and coverage from the ChemGraph community.
 

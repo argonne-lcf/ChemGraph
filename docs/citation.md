@@ -105,4 +105,4 @@ The framework article was first released as the preprint
 [arXiv:2506.06363](https://arxiv.org/abs/2506.06363) (June 2025). Cite the
 *Communications Chemistry* article above rather than the preprint.
 
-See [News and events](news.md) for talks, releases, and media coverage.
+See [News](news.md) for talks, releases, and media coverage.
