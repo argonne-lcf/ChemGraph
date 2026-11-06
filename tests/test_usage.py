@@ -54,7 +54,8 @@ def test_details_are_subsets_not_extra_tokens():
         "completion_tokens_details": {"reasoning_tokens": 15},
     })
     assert usage == {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120,
-                     "cached_input_tokens": 80, "reasoning_output_tokens": 15}
+                     "cached_input_tokens": 80, "reasoning_output_tokens": 15,
+                     "cache_creation_input_tokens": None}
 
 
 def test_message_usage_precedes_provider_fallback():
@@ -479,3 +480,57 @@ def test_usage_read_failure_keeps_subtotals_partial_until_recovery(store, monkey
     assert recovered["total_tokens"] == 24
     assert recovered["partial"] is False
     assert recovered["history_unaccounted"] is False
+
+
+@pytest.mark.parametrize("tier", ["priority", "flex"])
+def test_service_tier_details_and_cache_creation(tier):
+    counts = normalize_usage({
+        "input_tokens": 100, "output_tokens": 20,
+        "input_token_details": {f"{tier}_cache_read": 80, f"{tier}_cache_creation": 10, tier: 20},
+        "output_token_details": {f"{tier}_reasoning": 15, tier: 5},
+    }, canonical=True)
+    assert counts["cached_input_tokens"] == 80
+    assert counts["cache_creation_input_tokens"] == 10
+    assert counts["reasoning_output_tokens"] == 15
+    assert counts["total_tokens"] == 120
+    raw = normalize_usage({"prompt_tokens": 100, "completion_tokens": 20,
+                           "prompt_tokens_details": {"cache_write_tokens": 10}})
+    assert raw["cache_creation_input_tokens"] == 10
+    assert raw["total_tokens"] == 120
+
+
+def test_cumulative_adapter_updates_merge_without_double_counting():
+    collector = UsageCollector("s", "t")
+    for counts in ({"input_tokens": 10}, {"output_tokens": 7}, {"output_tokens": 7},
+                   {"input_tokens": None, "output_tokens": 0}):
+        collector.on_custom_event("chemgraph_usage", {"call_id": "call", "counts": counts})
+    assert collector.summary["input_tokens"] == 10
+    assert collector.summary["output_tokens"] == 0
+    assert collector.summary["total_tokens"] == 10
+    assert collector.summary["call_count"] == 1
+
+
+def test_usage_sink_defensive_snapshots_and_failure(caplog):
+    snapshots = []
+    def sink(record):
+        snapshots.append(record)
+        if record["status"] == "completed":
+            raise OSError("disk full")
+    collector = UsageCollector("s", "t", usage_sink=sink)
+    complete(collector)
+    assert snapshots[0]["status"] == "running" and snapshots[0]["counts"] == {}
+    assert snapshots[1]["counts"]["total_tokens"] == 12
+    snapshots[1]["counts"]["total_tokens"] = 999
+    assert collector.summary["total_tokens"] == 12
+    assert collector.summary["partial"] is True
+    assert collector.records[0]["sink_failed"] is True
+    assert caplog.text.count("Could not write usage sink") == 1
+
+
+def test_adapter_metadata_is_labeled_unverified():
+    collector = UsageCollector("s", "t", capture_evidence=True)
+    complete(collector)
+    record, = collector.records
+    assert record["source"] == "adapter_derived"
+    assert record["raw_capture"] == "unverified"
+    assert "usage_evidence" not in record
