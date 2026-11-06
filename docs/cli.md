@@ -409,7 +409,7 @@ replay uncertain operations. Stopping the CLI does not cancel external jobs.
 Serialize all operations on each session, including inspection; these flags
 provide no concurrent-writer coordination or session lock.
 
-See the [Hermes skill](../examples/chemgraph_hermes/skills/chemgraph-delegate/SKILL.md) for relaying these
+See the [Hermes skill](https://github.com/argonne-lcf/ChemGraph/blob/main/examples/chemgraph_hermes/skills/chemgraph-delegate/SKILL.md) for relaying these
 questions and answers through Discord.
 
 ## Saved sessions

@@ -3,7 +3,24 @@
 ChemGraph requires Python 3.11 or newer. Use a virtual environment because its
 scientific dependencies may conflict with packages in other projects.
 
-## Install from PyPI
+## Install the command-line application
+
+With [uv](https://docs.astral.sh/uv/guides/tools/), one command installs ChemGraph
+in its own environment and exposes the `chemgraph` command:
+
+```bash
+uv tool install chemgraph
+```
+
+If uv reports that its executable directory is missing from `PATH`, run
+`uv tool update-shell` and restart your shell. Upgrade with `uv tool upgrade chemgraph`.
+
+To add optional extras to the tool environment, reinstall with the extras you
+need, for example `uv tool install "chemgraph[rag,docking]"`. A tool install
+cannot be imported from your own Python interpreter or notebook; for that, use
+a virtual environment as described below.
+
+## Install for Python and notebooks
 
 We recommend [uv](https://docs.astral.sh/uv/) to create the virtual environment
 and install ChemGraph:
@@ -58,7 +75,8 @@ python -m pip install -e .
 
 ## Optional extras
 
-Install only the integrations needed by your workflow, in the active environment.
+For a Python or source environment, install only the integrations your workflow
+needs, in the active environment.
 The commands below use `uv pip`; with standard `venv`/`pip` or conda, replace
 `uv pip` with `python -m pip`.
 

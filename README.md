@@ -17,35 +17,37 @@ science. It connects natural-language requests to molecular construction,
 simulation, analysis, and reporting tools built with LangGraph, ASE, RDKit,
 and the Model Context Protocol (MCP).
 
-Use ChemGraph from the command line, Python, a Streamlit web interface, or as
-an MCP server. Local workflows can use ASE calculators such as EMT and MACE;
-optional integrations add TBLite, UMA, docking, XANES, retrieval-augmented
-generation, and distributed execution on systems such as ALCF Polaris and
-Aurora.
+Use it from the command line, Python, a Streamlit web interface, or as an MCP
+server. Start with local ASE calculators such as EMT and MACE, then add
+TBLite, UMA, docking, XANES, retrieval, or distributed execution on systems
+such as ALCF Polaris and Aurora as your workflow grows.
 
-> ChemGraph can launch calculations and write files. Review generated inputs,
-> calculator settings, convergence, units, and scientific conclusions before
-> relying on a result.
+[Documentation](https://argonne-lcf.github.io/ChemGraph/) ·
+[News](https://argonne-lcf.github.io/ChemGraph/news/) ·
+[Papers and citations](https://argonne-lcf.github.io/ChemGraph/citation/) ·
+[Model leaderboard](https://huggingface.co/spaces/Autonomous-Scientific-Agents/chemgraph-leaderboard)
+
+> **Review results.** ChemGraph can launch calculations, run commands, and write files. Review
+> generated inputs, calculator settings, convergence, units, and scientific
+> conclusions before relying on a result.
 
 ## Quickstart
 
-ChemGraph requires Python 3.11 or newer. Use [uv](https://docs.astral.sh/uv/)
-(or a standard `venv`) to keep its scientific dependencies separate from other
-projects:
+ChemGraph requires Python 3.11 or newer. To use the command-line application,
+install it with [uv](https://docs.astral.sh/uv/guides/tools/), which creates an
+isolated environment and puts `chemgraph` on your `PATH`:
 
 ```bash
-uv venv .venv
-source .venv/bin/activate              # Windows: .venv\Scripts\activate
-uv pip install chemgraph
+uv tool install chemgraph
 ```
 
-Or with standard `venv` and `pip`:
+To use ChemGraph from Python or a notebook, install it into a virtual
+environment instead (this also provides the CLI):
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate              # Windows: .venv\Scripts\activate
-python -m pip install --upgrade pip
-python -m pip install chemgraph
+python -m pip install chemgraph        # or: uv venv && uv pip install chemgraph
 ```
 
 Choose one model provider and set only the credential it needs. The default
@@ -61,163 +63,65 @@ model is `gpt-4o-mini`.
 | ALCF inference endpoints | `export ALCF_ACCESS_TOKEN="..."` | Use `chemgraph models` |
 | Ollama | Start Ollama locally; no API key | `llama3.2` |
 
-See [Models and authentication](https://argonne-lcf.github.io/ChemGraph/models/)
-for endpoint setup, ALCF token instructions, supported model identifiers, and
-the Codex subscription route.
-
-Check the installation and run a small tool-using query:
+Check the setup, then run a lookup and a small calculation:
 
 ```bash
-chemgraph --help
-chemgraph models
 chemgraph run --check-keys
 chemgraph run -q "What is the SMILES string for aspirin?"
+chemgraph run --output last_message \
+  -q "Build water from SMILES O, optimize it with EMT, and report the final energy."
 ```
 
-The aspirin example uses an LLM and PubChem, so it requires network access.
-For a first calculation, explicitly choose the lightweight EMT calculator:
+Both queries call the selected model; the aspirin lookup also uses PubChem.
+EMT needs no downloaded weights, which makes it a good first calculation.
+Structures, trajectories, JSON results, and reports are written to a session
+directory under `cg_logs/` (set `CHEMGRAPH_LOG_DIR` to change it).
 
-```bash
-chemgraph run \
-  -q "Build water from SMILES O, optimize it with EMT, and report the final energy." \
-  --output last_message
-```
+Next steps: the [quickstart guide](https://argonne-lcf.github.io/ChemGraph/quickstart/),
+[models and authentication](https://argonne-lcf.github.io/ChemGraph/models/),
+and [installation options](https://argonne-lcf.github.io/ChemGraph/installation/)
+for optional extras, conda, and source checkouts.
 
-ChemGraph creates a session directory under `cg_logs/` by default. Tool output
-such as XYZ structures, JSON results, trajectories, spectra, and HTML reports
-is written there. Set `CHEMGRAPH_LOG_DIR` before starting ChemGraph to choose a
-different artifact directory.
+## Choose how to work
 
-## Start here
-
-- [Install ChemGraph](https://argonne-lcf.github.io/ChemGraph/installation/)
-- [Follow the quickstart](https://argonne-lcf.github.io/ChemGraph/quickstart/)
-- [Choose a model and authenticate](https://argonne-lcf.github.io/ChemGraph/models/)
-- [Browse workflows](https://argonne-lcf.github.io/ChemGraph/workflows/)
-- [Open the full documentation](https://argonne-lcf.github.io/ChemGraph/)
-
-## Common ways to use ChemGraph
-
-### Run one query
-
-`single_agent` is the default workflow and the best starting point.
-
-```bash
-chemgraph run \
-  --model gpt-4o-mini \
-  --workflow single_agent \
-  --query "Calculate the vibrational frequencies of water with EMT."
-```
-
-Useful run options include:
-
-| Option | Purpose |
+| Goal | Start here |
 | --- | --- |
-| `-m`, `--model` | Select the LLM provider/model identifier |
-| `-w`, `--workflow` | Select an agent workflow |
-| `-o`, `--output` | Return full `state` or only `last_message` |
-| `-s`, `--structured` | Request structured final output |
-| `-r`, `--report` | Allow generation of an HTML report |
-| `--human-supervised` | Allow supported workflows to pause for input |
-| `--workspace PATH` | Enable direct main-agent host file and shell access |
-| `--skill PATH` | Add a main-agent host skill collection; repeat to layer sources |
-| `--no-discover-skills` | Disable main-agent personal/project skill discovery |
-| `--subagent NAME` | Restrict discoverable main-agent specialists; repeat for a catalog |
-| `--tool NAME` | Restrict the main-agent or standalone DeepAgent local tool catalog |
-| `--deepagent-workspace PATH` | Set the workspace for `deep_agent` or the optional main-agent worker |
-| `--no-deepagent-discover-skills` | Disable personal/project skill discovery; retain bundled and explicit skills |
-| `--deepagent-skill PATH` | Add a host Agent Skills directory, inside or outside the workspace; repeat to layer sources |
-| `--output-file` | Save the CLI response to a file |
-| `-v` / `-vv` | Enable INFO / DEBUG diagnostics |
+| Run queries, interactive sessions, and resumes | [CLI guide](https://argonne-lcf.github.io/ChemGraph/cli/) |
+| Pick an agent architecture | [Workflows](https://argonne-lcf.github.io/ChemGraph/workflows/) and [skills](https://argonne-lcf.github.io/ChemGraph/skills/) |
+| Embed an agent in Python | [Python API](https://argonne-lcf.github.io/ChemGraph/python_api/) |
+| Use the browser interface | [Streamlit interface](https://argonne-lcf.github.io/ChemGraph/streamlit_web_interface/) (source checkout required) |
+| Connect chemistry tools to another agent | [MCP servers](https://argonne-lcf.github.io/ChemGraph/mcp_servers/) |
+| Choose a calculator or add spectroscopy and docking | [Calculators](https://argonne-lcf.github.io/ChemGraph/calculators/) and [examples](https://argonne-lcf.github.io/ChemGraph/example_usage/) |
+| Scale to HPC or multi-agent campaigns | [HPC and Academy](https://argonne-lcf.github.io/ChemGraph/hpc_and_academy/) |
+| Run in a container or cluster | [Docker](https://argonne-lcf.github.io/ChemGraph/docker_support/) and [Kubernetes](https://argonne-lcf.github.io/ChemGraph/kubernetes/) |
+| Diagnose a failed run | [Troubleshooting](https://argonne-lcf.github.io/ChemGraph/troubleshooting/) |
 
-The older form `chemgraph -q "..."` remains supported, but documentation uses
-the explicit `chemgraph run` subcommand.
+### Workflows
 
-### Work interactively
+| Workflow | Use it for | Requirements |
+| --- | --- | --- |
+| `single_agent` | Molecule lookup, ASE calculations, and reports | Default; start here |
+| `main_agent` | Durable workspace sessions with skills, files, shell, and specialist delegation | Interactive, or headless with `--dangerously-skip-approvals` |
+| `multi_agent` | Planner/executor decomposition and parallel subtasks | More model calls |
+| `molecular_docking` | Ligand/receptor docking with AutoDock Vina | `docking` extra and Vina |
+| `rag_agent` | Questions over PDF/text documents plus chemistry tools | `rag` extra |
+| `single_agent_xanes` | XANES retrieval, simulation, and plotting | `xanes` extra, `MP_API_KEY` and/or `FDMNES_EXE` |
 
-```bash
-chemgraph run --interactive
-```
-
-Inside the interactive shell, use `/help` to list commands. Sessions are saved
-to `~/.chemgraph/sessions.db` and can also be inspected from the CLI:
-
-```bash
-chemgraph session list
-chemgraph session show <session-id>
-chemgraph run --resume <session-id> -q "Continue with a frequency calculation."
-```
-
-The `main_agent` workflow works directly with skills, files, shell commands, and
-on-demand chemistry tools, and can delegate to configured specialists. It has
-durable checkpoints and reviews tool actions by default:
+The [workflow guide](https://argonne-lcf.github.io/ChemGraph/workflows/) covers
+`deep_agent`, gRASPA, and development workflows.
 
 ```bash
 chemgraph run --interactive --workflow main_agent --workspace .
-chemgraph run --interactive --workflow main_agent --workspace . \
-  --skill ../shared-skills --subagent single_agent --subagent deep_agent
-chemgraph run --interactive --workflow main_agent --resume <session-id>
 ```
 
-To bypass default tool approvals, add `--dangerously-skip-approvals`. It supports
-interactive sessions and headless runs:
+Workspace sessions can run shell commands and modify host files. Tool actions
+are reviewed by default, and host shell access is not confined to the
+workspace; see the [CLI guide](https://argonne-lcf.github.io/ChemGraph/cli/)
+for approvals and session persistence.
 
-```bash
-chemgraph run -w main_agent --workspace . --dangerously-skip-approvals \
-  -q "Run the repository tests and summarize failures."
-```
+### Python
 
-Repeat the flag when resuming a bypass session. Headless runs save pending
-questions and exit with code 3; answer them by resuming interactively. Approval
-bypass does not provide execution isolation or override stricter worker policies.
-
-Without `--workspace`, file tools use checkpoint storage and no shell is exposed.
-Bundled skills and local registry tools remain available; registry tools execute
-on the host independently of the file backend. Host shell access is not confined
-to the workspace. File mutations and shell commands use action reviews.
-
-Omitting `--subagent` exposes the built-in specialist catalog without activating
-workers. The agent uses `search_agents` and `load_agents` before delegation. An
-explicit list restricts discovery; loaded workers last for one turn and survive
-interrupts and restart until that turn completes. Start a new session
-after upgrading to this graph: old transcripts remain readable, but old graph
-checkpoints cannot resume. Supported new CLI sessions restore their saved
-workspace, skills, catalog, workers, and pending approvals.
-
-See the [CLI guide](https://argonne-lcf.github.io/ChemGraph/cli/) for session
-semantics, interactive commands, MCP connections, tracing, and the
-development-only workspace Deep Agent.
-
-Call the workspace Deep Agent directly in an approval-driven interactive
-session, or attach the same workflow to `main_agent` as the legacy `deep_agent`
-worker:
-
-```bash
-chemgraph run --interactive --workflow deep_agent --deepagent-workspace .
-chemgraph run --interactive --workflow main_agent --deepagent \
-  --deepagent-workspace . \
-  --deepagent-skill ../external/AtomisticSkills/.agents/skills/
-```
-
-ChemGraph bundles `chemgraph` and `pbs-hpc` skills and automatically discovers
-`~/.chemgraph/skills/` and the workspace's `.agents/skills/`. Additional
-`--deepagent-skill` sources override earlier matching names. Use
-`--no-deepagent-discover-skills` to disable personal/project discovery. Skills
-use one directory per `SKILL.md`; their catalog refreshes each new turn. See
-[skills and filesystem backends](docs/skills.md).
-
-Main agent and standalone Deep Agent discover the built-in local tool catalog by default,
-loading tool schemas only when needed. Use repeated `--tool NAME` flags to restrict
-the catalog, or `[general] tools = []` in TOML to disable tool discovery.
-
-Headless `deep_agent` additionally requires an explicit `--deepagent-workspace`.
-Its legacy `--deepagent-dangerously-skip-approvals` flag remains supported for
-headless standalone runs. Use bypass in an externally isolated environment.
-
-### Use the Python API
-
-`ChemGraph.run()` is asynchronous. Import the class from its current public
-module path:
+`ChemGraph.run()` is asynchronous:
 
 ```python
 import asyncio
@@ -226,11 +130,7 @@ from chemgraph.agent.llm_agent import ChemGraph
 
 
 async def main():
-    agent = ChemGraph(
-        model_name="gpt-4o-mini",
-        workflow_type="single_agent",
-        return_option="last_message",
-    )
+    agent = ChemGraph(model_name="gpt-4o-mini", return_option="last_message")
     result = await agent.run("What is the SMILES string for aspirin?")
     print(result.content)
 
@@ -238,216 +138,41 @@ async def main():
 asyncio.run(main())
 ```
 
-The checkpointed `main_agent` uses `MainAgentSession` rather than
-`ChemGraph.run()`. See the [Python API guide](https://argonne-lcf.github.io/ChemGraph/python_api/)
-for state returns, thread IDs, custom tools, and durable sessions.
+### MCP
 
-### Use the Streamlit interface
-
-The Streamlit entry point currently lives in the source tree. Run it from a
-repository checkout:
-
-```bash
-git clone https://github.com/argonne-lcf/ChemGraph.git
-cd ChemGraph
-uv venv .venv
-source .venv/bin/activate
-uv pip install -e .
-chemgraph ui
-```
-
-Open `http://localhost:8501`. For an image-based setup, use the Docker command
-below. The [Streamlit guide](https://argonne-lcf.github.io/ChemGraph/streamlit_web_interface/)
-describes configuration, supported workflows, sessions, and artifacts.
-
-### Expose chemistry tools through MCP
-
-Start the general tool server over stdio:
+Expose the general chemistry tools to any MCP client over stdio, or over
+streamable HTTP at `http://localhost:9003/mcp/`:
 
 ```bash
 python -m chemgraph.mcp.mcp_tools
+python -m chemgraph.mcp.mcp_tools --transport streamable_http --host 127.0.0.1 --port 9003
 ```
 
-Or start streamable HTTP:
+With a `uv tool` install, prefix these with `uv tool run --from chemgraph`.
 
-```bash
-python -m chemgraph.mcp.mcp_tools \
-  --transport streamable_http \
-  --host 127.0.0.1 \
-  --port 9003
-```
+## News and papers
 
-MCP clients connect to `http://localhost:9003/mcp/`. ChemGraph can also load
-MCP tools into an agent:
-
-```bash
-chemgraph run \
-  --mcp-url http://localhost:9003/mcp/ \
-  -q "Build a 3D structure for methane."
-```
-
-See [MCP servers](https://argonne-lcf.github.io/ChemGraph/mcp_servers/) for
-stdio client configuration and the experimental HPC servers.
-
-## Choose a workflow
-
-| Workflow | Use it for | Important requirements |
-| --- | --- | --- |
-| `single_agent` | General molecule lookup, ASE calculations, and reports | Default and recommended first workflow |
-| `main_agent` | Durable direct workspace/chemistry work and optional delegation | Interactive, or headless with explicit approval bypass; use `MainAgentSession` in Python |
-| `deep_agent` | Workspace tasks and attached chemistry tools (`deepagent` is an alias) | Interactive approvals by default; broad local shell access |
-| `multi_agent` | Planner/executor decomposition and parallel subtasks | More model calls and orchestration overhead |
-| `molecular_docking` | Ligand/receptor docking with AutoDock Vina | `docking` extra plus Vina from conda-forge |
-| `rag_agent` | Query PDF/text documents alongside chemistry tools | `rag` extra; embedding model or OpenAI embeddings |
-| `single_agent_xanes` | XANES data retrieval, simulation, and plotting | `xanes` extra, `MP_API_KEY`, and/or `FDMNES_EXE` |
-| `graspa` | gRASPA adsorption workflows | Site-specific gRASPA executable/runtime |
-| `graspa_mcp` | Planner/executor workflow using supplied MCP tools | Advanced integration; MCP tools must be provided |
-| `mock_agent` | One-pass tool-call experiments | Primarily useful for development and evaluation |
-
-The [workflow guide](https://argonne-lcf.github.io/ChemGraph/workflows/) covers
-capabilities, limitations, and interface support in more detail.
-
-## Calculators and optional dependencies
-
-The core installation includes ASE, EMT, and MACE. ChemGraph detects calculator
-engines and external executables at startup, then exposes only the calculators
-available in that environment. Install commands use `uv pip`; in a pip or conda
-environment, use `python -m pip` instead.
-
-| Capability | Installation | Notes |
-| --- | --- | --- |
-| EMT | Core install | Lightweight; useful for setup checks, not general high-accuracy chemistry |
-| MACE | MACE-MP in core; Polar add-on optional | Defaults to MACE-Polar medium when its add-on is installed, otherwise MACE-MP. Dipole/IR require a capable calculator; Polar weights use the ASL. See [installation instructions](docs/calculators.md#mace-downloads). |
-| TBLite / xTB | `uv pip install "chemgraph[calculators]"` | May require a Fortran toolchain when no wheel is available |
-| UMA / FAIRChem | `uv pip install "chemgraph[uma]"` | Use a separate environment from MACE if `e3nn` resolution conflicts |
-| NWChem | Install the `nwchem` executable separately | Must be on `PATH` or configured through ASE |
-| ORCA | Install ORCA separately | Must be on `PATH` or configured through ASE |
-| AIMNet2 | Install `aimnet2calc` separately | Detected lazily when installed |
-
-Other extras are available for `rag`, `docking`, `xanes`, `parsl`,
-`ensemble_launcher`, `globus_compute`, `academy`, and `codex`
-support. See [Installation](https://argonne-lcf.github.io/ChemGraph/installation/)
-and [Calculators](https://argonne-lcf.github.io/ChemGraph/calculators/).
-
-## Install from source
-
-Use a source checkout for development, notebooks, the Streamlit UI, and the
-latest unreleased changes:
-
-```bash
-git clone https://github.com/argonne-lcf/ChemGraph.git
-cd ChemGraph
-uv venv .venv
-source .venv/bin/activate
-uv pip install -e .
-```
-
-Install only the extras required by the workflow you plan to run:
-
-```bash
-uv pip install -e ".[rag]"
-uv pip install -e ".[academy,parsl,globus_compute]"
-```
-
-Standard `venv`/`pip` and conda instructions are available in the
-[installation guide](https://argonne-lcf.github.io/ChemGraph/installation/).
-
-## Docker
-
-Prefer containers? The
-[published ChemGraph image](https://github.com/argonne-lcf/ChemGraph/pkgs/container/chemgraph)
-supports the CLI, Streamlit, MCP, and JupyterLab. See
-[Docker support](https://argonne-lcf.github.io/ChemGraph/docker_support/) for
-commands, Compose profiles, credential forwarding, ports, and artifact mounts.
-
-## Kubernetes
-
-The repository includes deployment templates for the Streamlit UI and general
-MCP server. They require cluster-specific review: the manifests default to the
-`dev` image tag, include ALCF proxy settings, expose LoadBalancer services, and
-do not configure persistent storage or application authentication. See the
-[Kubernetes guide](https://argonne-lcf.github.io/ChemGraph/kubernetes/) before
-applying files under [`k8s/`](k8s/README.md).
-
-## Distributed and HPC execution
-
-ChemGraph includes pluggable execution backends for local processes, Parsl,
-Ensemble Launcher, and Globus Compute, plus an Academy-based persistent
-multi-agent campaign runtime. These paths require additional dependencies,
-site configuration, allocations, endpoints, or credentials and are not part
-of the first-run workflow.
-
-Start with:
-
-- [HPC and Academy](https://argonne-lcf.github.io/ChemGraph/hpc_and_academy/)
-- [`scripts/demo/`](scripts/demo/README.md) for execution-backend demos
-- [Academy MACE screening example](examples/academy/example-002-mace-ensemble-screening/README.md)
-- [Connecting to Argo from an ALCF compute node](examples/connecting_to_argo/README.md)
-
-## Configuration
-
-Most first runs need only command-line flags and environment variables. A TOML
-file is useful for provider endpoints, MCP connections, logging, UI settings,
-evaluation profiles, and execution backends:
-
-```bash
-chemgraph run --config config.toml -q "What is the SMILES string for water?"
-```
-
-The CLI and Streamlit UI do not consume every historical key in the repository
-example identically. Use the [configuration reference](https://argonne-lcf.github.io/ChemGraph/configuration_with_toml/)
-to see which settings are active in each interface. Never store API keys or
-access tokens in a committed TOML file.
-
-## Troubleshooting
-
-```bash
-chemgraph --help
-chemgraph models
-chemgraph run --check-keys
-chemgraph run -vv -q "What is the SMILES string for water?"
-```
-
-- Calculator warnings at startup mean an optional engine was not detected;
-  install it only if the requested workflow needs it.
-- A first MACE or local-embedding run may pause while model weights download.
-- Headless `main_agent` requires `--dangerously-skip-approvals`.
-- Headless `deep_agent` requires an explicit workspace and the unsafe
-  skip-approvals flag.
-- The Streamlit source command must be run from a repository checkout.
-- A stale installed package can shadow a checkout; activate the intended
-  environment and use an editable install.
-
-See the [troubleshooting guide](https://argonne-lcf.github.io/ChemGraph/troubleshooting/)
-for provider, calculator, path, UI, MCP, and session diagnostics.
-
-## Documentation and examples
-
-- [Full documentation](https://argonne-lcf.github.io/ChemGraph/)
-- [Example notebooks and runnable guides](https://argonne-lcf.github.io/ChemGraph/example_usage/)
-- [Evaluation and benchmarking](https://argonne-lcf.github.io/ChemGraph/evaluation/)
-- [ChemGraph Leaderboard](https://huggingface.co/spaces/Autonomous-Scientific-Agents/chemgraph-leaderboard)
-- [Project structure](https://argonne-lcf.github.io/ChemGraph/project_structure/)
-- [Contributing guide](CONTRIBUTING.md)
-
-## Citation
+Publications, releases, talks, and media coverage are collected in the
+[news archive](https://argonne-lcf.github.io/ChemGraph/news/).
 
 If ChemGraph supports your research, cite:
 
 > Thang D. Pham, Aditya Tanikanti, and Murat Keçeli. “ChemGraph as an
 > agentic framework for computational chemistry workflows.”
-> *Communications Chemistry* 9, 33 (2026).
+> *Communications Chemistry* **9**, 33 (2026).
 > <https://doi.org/10.1038/s42004-025-01776-9>
 
-Users of the HPC orchestration features should also cite the
-[multi-agent orchestration preprint](https://arxiv.org/abs/2604.07681).
-BibTeX is available on the [citation page](https://argonne-lcf.github.io/ChemGraph/citation/).
+BibTeX for this article and for the HPC orchestration, ChemGraph-XANES, and
+ChemGraph-IR papers is on the
+[citation page](https://argonne-lcf.github.io/ChemGraph/citation/).
 
-## Contributing and license
+## Contributing and support
 
-Contributions are welcome. Branch from the latest `main`, keep each change
-focused, and run `ruff check .` plus `pytest tests/ -k "not tblite"` before
-opening a pull request. See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete
-workflow.
+Contributions are welcome. See
+[CONTRIBUTING.md](https://github.com/argonne-lcf/ChemGraph/blob/main/CONTRIBUTING.md)
+for development setup and required checks. For help, see
+[troubleshooting](https://argonne-lcf.github.io/ChemGraph/troubleshooting/) or
+[open an issue](https://github.com/argonne-lcf/ChemGraph/issues).
 
-ChemGraph is distributed under the [Apache License 2.0](LICENSE).
+ChemGraph is distributed under the
+[Apache License 2.0](https://github.com/argonne-lcf/ChemGraph/blob/main/LICENSE).

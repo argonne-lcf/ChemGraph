@@ -1,0 +1,10 @@
+/* Allow for the transparent padding around the no-circle molecular icon. */
+.md-header__button.md-logo {
+  padding: 0;
+}
+
+.md-header__button.md-logo img,
+.md-nav__title .md-logo img {
+  width: 3rem;
+  height: 3rem;
+}
