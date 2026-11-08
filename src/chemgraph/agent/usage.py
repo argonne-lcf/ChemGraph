@@ -95,6 +95,36 @@ def summarize_usage(records: list[dict]) -> dict:
     return result
 
 
+def _cache_counts(usages: list[dict], cached: int | None) -> dict:
+    """Expose cache details without changing the canonical accounting fields."""
+    creations = []
+    for usage in usages:
+        creation = _count(usage, "cache_creation_input_tokens")
+        if creation is None:
+            details = _mapping(usage.get("input_token_details"))
+            aggregate = _count(details, "cache_creation")
+            ttl_counts = [
+                count for key in ("ephemeral_5m_input_tokens", "ephemeral_1h_input_tokens")
+                if (count := _count(details, key)) is not None
+            ]
+            # LangChain clears the aggregate when a positive TTL breakdown is
+            # available. Zero-valued TTL defaults must not erase the aggregate.
+            if sum(ttl_counts) > 0:
+                creation = sum(ttl_counts)
+            elif aggregate is not None:
+                creation = aggregate
+            elif ttl_counts:
+                creation = 0
+        if creation is not None:
+            creations.append(creation)
+    counts = {}
+    if creations:
+        counts["cache_creation_input_tokens"] = sum(creations)
+    if cached is not None:
+        counts["cache_read_input_tokens"] = cached
+    return counts
+
+
 def response_usage(response: Any) -> dict | None:
     """Extract per-prompt usage; alternative generations share one prompt bill."""
     try:
@@ -123,12 +153,16 @@ def response_usage(response: Any) -> dict | None:
         if fallback and (not records or any(not r["complete"] for r in records)):
             counts = normalize_usage(fallback)
             if any(counts[key] is not None for key in TOKEN_FIELDS[:3]):
-                return {**counts, "raw_usage": fallback, "source": "provider"}
+                return {
+                    **counts, **_cache_counts([fallback], counts["cached_input_tokens"]),
+                    "raw_usage": fallback, "source": "provider",
+                }
         if not raw:
             return None
         totals = summarize_usage(records)
         return {
             **{key: totals[key] for key in TOKEN_FIELDS},
+            **_cache_counts(raw, totals["cached_input_tokens"]),
             "partial": totals["partial"], "raw_usage": raw, "source": "provider",
         }
     except Exception:
