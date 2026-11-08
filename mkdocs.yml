@@ -30,6 +30,9 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
 
+extra_css:
+  - assets/stylesheets/extra.css
+
 plugins:
   - search
   - mkdocstrings
@@ -75,6 +78,7 @@ nav:
       - Project structure: project_structure.md
       - Contributing: contributing.md
       - Code formatting: code_formatting_and_linting.md
-      - Citation: citation.md
+      - Papers and citations: citation.md
       - Acknowledgements: acknowledgements.md
       - License: license.md
+  - News: news.md

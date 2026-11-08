@@ -16,14 +16,15 @@ workflow needs them.
 
 ## First run
 
-Install ChemGraph in a virtual environment with [uv](https://docs.astral.sh/uv/)
-(or `python -m venv` + `pip`):
+Install the CLI with [uv](https://docs.astral.sh/uv/guides/tools/), which manages
+an isolated environment (Python 3.11 or newer required):
 
 ```bash
-uv venv .venv
-source .venv/bin/activate
-uv pip install chemgraph
+uv tool install chemgraph
 ```
+
+To import ChemGraph from Python or a notebook, install it in a virtual
+environment instead; see [Installation](installation.md).
 
 Set one model-provider credential, then check the installation and run a query:
 
@@ -65,9 +66,17 @@ Site-specific HPC servers, gRASPA workflows, docking, XANES, and some
 distributed backends are advanced or experimental; validate them in your own
 environment before production use.
 
+## News and research
+
+Read [News](news.md) for releases, presentations, and
+media coverage. Citations and BibTeX for the framework, HPC orchestration,
+ChemGraph-XANES, and ChemGraph-IR papers are on
+[Papers and citations](citation.md).
+
 ## Community
 
 - [Examples](example_usage.md)
 - [Contributing](contributing.md)
-- [Citation](citation.md)
+- [News](news.md)
+- [Papers and citations](citation.md)
 - [GitHub issues](https://github.com/argonne-lcf/ChemGraph/issues)
