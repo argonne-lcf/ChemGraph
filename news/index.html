@@ -1,0 +1,2444 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Agentic computational chemistry workflows from the command line, Python, Streamlit, and MCP.">
+      
+      
+      
+        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/news/">
+      
+      
+        <link rel="prev" href="../license/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/chemgraph_logo.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>News - ChemGraph</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../assets/stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#news" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="ChemGraph" class="md-header__button md-logo" aria-label="ChemGraph" data-md-component="logo">
+      
+  <img src="../assets/chemgraph_logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ChemGraph
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              News
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/argonne-lcf/ChemGraph" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    argonne-lcf/ChemGraph
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../installation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Getting started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../cli/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Using ChemGraph
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../codex_subscription/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Integrations and scale
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../evaluation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Evaluation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../project_structure/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Project
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  News
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="ChemGraph" class="md-nav__button md-logo" aria-label="ChemGraph" data-md-component="logo">
+      
+  <img src="../assets/chemgraph_logo.png" alt="logo">
+
+    </a>
+    ChemGraph
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/argonne-lcf/ChemGraph" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    argonne-lcf/ChemGraph
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models and authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using ChemGraph
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Using ChemGraph
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-line interface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../registries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool and agent registries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../calculators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calculators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../python_api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scoped_runtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoped runtime for services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skills/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deep Agent Skills
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pbs_jobs_with_skills/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PBS Jobs with Skills
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../streamlit_web_interface/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Streamlit interface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration_with_toml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../example_usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integrations and scale
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Integrations and scale
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../codex_subscription/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Codex subscription
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp_servers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP servers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docker_support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../kubernetes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kubernetes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../running_local_models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Local models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hpc_and_academy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HPC and Academy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evaluation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../project_structure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code_formatting_and_linting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code formatting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../citation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Papers and citations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../acknowledgements/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Acknowledgements
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../license/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    License
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    News
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    News
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#2026" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2026
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2026">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#november-4-2026-alcf-feature-infrastructure-news" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        November 4, 2026 — ALCF feature / infrastructure news
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#october-29-2026-conference-presentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        October 29, 2026 — Conference presentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#october-2122-2026-osi-hackathon-chemgraphsafe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        October 21–22, 2026 — OSI Hackathon / ChemGraphSafe
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#september-22-2026-peer-reviewed-publication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        September 22, 2026 — Peer-reviewed publication
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#september-11-2026-software-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        September 11, 2026 — Software release
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#august-914-2026-education-outreach" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        August 9–14, 2026 — Education / outreach
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#august-6-2026-media-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        August 6, 2026 — Media coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#august-5-2026-leaderboard-media-interview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        August 5, 2026 — Leaderboard / media interview
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#july-20-2026-media-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        July 20, 2026 — Media coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#july-19-2026-major-software-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        July 19, 2026 — Major software release
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#july-7-2026-argonnealcf-feature" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        July 7, 2026 — Argonne/ALCF feature
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#june-26-2026-workshop-presentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        June 26, 2026 — Workshop presentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#june-2-2026-major-software-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        June 2, 2026 — Major software release
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#may-27-2026-conference-presentation-poster" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        May 27, 2026 — Conference presentation (poster)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#may-26-2026-alcf-feature-infrastructure-milestone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        May 26, 2026 — ALCF feature / infrastructure milestone
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#may-4-2026-community-paper-preprint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        May 4, 2026 — Community paper / preprint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#april-17-2026-paper-preprint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        April 17, 2026 — Paper / preprint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#april-16-2026-media-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        April 16, 2026 — Media coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#april-9-2026-paper-preprint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        April 9, 2026 — Paper / preprint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#march-30-2026-alcf-outreach-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        March 30, 2026 — ALCF outreach coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#january-8-2026-peer-reviewed-publication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        January 8, 2026 — Peer-reviewed publication
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#january-2-2026-media-coverage-interview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        January 2, 2026 — Media coverage / interview
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2025" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2025
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2025">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#september-16-2025-software-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        September 16, 2025 — Software release
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#september-1112-2025-hackathon" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        September 11–12, 2025 — Hackathon
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#september-4-2025-software-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        September 4, 2025 — Software release
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#july-31-2025-conference-presentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        July 31, 2025 — Conference presentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#june-3-2025-paper-preprint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        June 3, 2025 — Paper / preprint
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#2026" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2026
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2026">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#november-4-2026-alcf-feature-infrastructure-news" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        November 4, 2026 — ALCF feature / infrastructure news
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#october-29-2026-conference-presentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        October 29, 2026 — Conference presentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#october-2122-2026-osi-hackathon-chemgraphsafe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        October 21–22, 2026 — OSI Hackathon / ChemGraphSafe
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#september-22-2026-peer-reviewed-publication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        September 22, 2026 — Peer-reviewed publication
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#september-11-2026-software-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        September 11, 2026 — Software release
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#august-914-2026-education-outreach" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        August 9–14, 2026 — Education / outreach
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#august-6-2026-media-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        August 6, 2026 — Media coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#august-5-2026-leaderboard-media-interview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        August 5, 2026 — Leaderboard / media interview
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#july-20-2026-media-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        July 20, 2026 — Media coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#july-19-2026-major-software-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        July 19, 2026 — Major software release
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#july-7-2026-argonnealcf-feature" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        July 7, 2026 — Argonne/ALCF feature
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#june-26-2026-workshop-presentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        June 26, 2026 — Workshop presentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#june-2-2026-major-software-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        June 2, 2026 — Major software release
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#may-27-2026-conference-presentation-poster" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        May 27, 2026 — Conference presentation (poster)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#may-26-2026-alcf-feature-infrastructure-milestone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        May 26, 2026 — ALCF feature / infrastructure milestone
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#may-4-2026-community-paper-preprint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        May 4, 2026 — Community paper / preprint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#april-17-2026-paper-preprint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        April 17, 2026 — Paper / preprint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#april-16-2026-media-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        April 16, 2026 — Media coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#april-9-2026-paper-preprint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        April 9, 2026 — Paper / preprint
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#march-30-2026-alcf-outreach-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        March 30, 2026 — ALCF outreach coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#january-8-2026-peer-reviewed-publication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        January 8, 2026 — Peer-reviewed publication
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#january-2-2026-media-coverage-interview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        January 2, 2026 — Media coverage / interview
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2025" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2025
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2025">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#september-16-2025-software-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        September 16, 2025 — Software release
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#september-1112-2025-hackathon" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        September 11–12, 2025 — Hackathon
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#september-4-2025-software-release" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        September 4, 2025 — Software release
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#july-31-2025-conference-presentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        July 31, 2025 — Conference presentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#june-3-2025-paper-preprint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        June 3, 2025 — Paper / preprint
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="news">News<a class="headerlink" href="#news" title="Permanent link">&para;</a></h1>
+<p>Publications, software releases, talks, and coverage from the ChemGraph community.</p>
+<p>Entries are listed newest first. See <a href="../citation/">Papers and citations</a> for
+citation text and BibTeX.</p>
+<h2 id="2026">2026<a class="headerlink" href="#2026" title="Permanent link">&para;</a></h2>
+<h3 id="november-4-2026-alcf-feature-infrastructure-news">November 4, 2026 — ALCF feature / infrastructure news<a class="headerlink" href="#november-4-2026-alcf-feature-infrastructure-news" title="Permanent link">&para;</a></h3>
+<p>“New systems boost capabilities of the ALCF Inference Service” covers the expansion of the ALCF Inference Service with Tara and Minerva and features ChemGraph as an example of agentic scientific workflows using hosted language models. <a href="https://www.alcf.anl.gov/news/new-systems-boost-capabilities-alcf-inference-service">ALCF article</a></p>
+<h3 id="october-29-2026-conference-presentation">October 29, 2026 — Conference presentation<a class="headerlink" href="#october-29-2026-conference-presentation" title="Permanent link">&para;</a></h3>
+<p>Murat Keçeli presented “Agentic AI and Supercomputers: From Quantum Chemistry to Autonomous Discovery” at Future Labs Live USA, featuring ChemGraph, foundation models, and high-performance computing. <a href="https://www.terrapinn.com/conference/future-labs-live-usa/speaker-murat-KE%C3%87ELI.stm">Conference program</a></p>
+<h3 id="october-2122-2026-osi-hackathon-chemgraphsafe">October 21–22, 2026 — OSI Hackathon / ChemGraphSafe<a class="headerlink" href="#october-2122-2026-osi-hackathon-chemgraphsafe" title="Permanent link">&para;</a></h3>
+<p>The ChemGraphSafe team participated in the Open Scientific Intelligence (OSI) Hackathon and developed a research prototype for screening potentially unsafe chemistry-related requests to scientific agents. The team evaluated decision models and LLMs using SciHazard and SciSafetyBench for request triage (ALLOW, REVIEW, or BLOCK). The longer-term goal is to improve and integrate this safety layer into ChemGraph; it is not yet a production enforcement mechanism. <a href="https://github.com/Autonomous-Scientific-Agents/ChemGraphSafe">ChemGraphSafe repository</a> · <a href="https://autonomous-scientific-agents.github.io/ChemGraphSafe/">Project website</a> · <a href="https://llmhackathon.github.io/">OSI Hackathon</a></p>
+<h3 id="september-22-2026-peer-reviewed-publication">September 22, 2026 — Peer-reviewed publication<a class="headerlink" href="#september-22-2026-peer-reviewed-publication" title="Permanent link">&para;</a></h3>
+<p>“ChemGraph-XANES: an agentic framework for XANES simulation and curation” was published in <em>RSC Advances</em> <strong>16</strong>, 56195–56207. The study reports RAG-grounded parameter selection, FDMNES/Parsl execution, and reproducible spectroscopy data curation. <a href="https://doi.org/10.1039/d6ra06166d">RSC Advances article</a> · <a href="https://pubmed.ncbi.nlm.nih.gov/42775028/">PubMed</a></p>
+<h3 id="september-11-2026-software-release">September 11, 2026 — Software release<a class="headerlink" href="#september-11-2026-software-release" title="Permanent link">&para;</a></h3>
+<p>ChemGraph v0.7.0 was released on PyPI, with persistent interactive CLI sessions, durable agent workflows, and optional integrations for XANES, molecular docking, retrieval-augmented generation, and distributed execution. <a href="https://github.com/argonne-lcf/ChemGraph/releases/tag/v0.7.0">Release notes</a> · <a href="https://pypi.org/project/chemgraph/0.7.0/">PyPI</a></p>
+<h3 id="august-914-2026-education-outreach">August 9–14, 2026 — Education / outreach<a class="headerlink" href="#august-914-2026-education-outreach" title="Permanent link">&para;</a></h3>
+<p>ChemGraph was featured as “Project 2: Introduction to Molecular Design with ChemGraph” at Argonne's 2026 Intro to HPC Bootcamp, using the framework in a hands-on molecular-design project. <a href="https://intro-hpc-bootcamp.alcf.anl.gov/project-2-introduction-molecular-design-chemgraph">ChemGraph bootcamp project</a> · <a href="https://intro-hpc-bootcamp.alcf.anl.gov/">2026 Intro to HPC Bootcamp</a></p>
+<h3 id="august-6-2026-media-coverage">August 6, 2026 — Media coverage<a class="headerlink" href="#august-6-2026-media-coverage" title="Permanent link">&para;</a></h3>
+<p>R&amp;D World published “Argonne's ChemGraph opens quantum chemistry to non-experts, tracks AI model performance,” covering both the ChemGraph framework and its model-evaluation/leaderboard work. <a href="https://www.rdworldonline.com/argonnes-chemgraph-opens-quantum-chemistry-to-non-experts-tracks-ai-model-performance/">R&amp;D World article</a></p>
+<h3 id="august-5-2026-leaderboard-media-interview">August 5, 2026 — Leaderboard / media interview<a class="headerlink" href="#august-5-2026-leaderboard-media-interview" title="Permanent link">&para;</a></h3>
+<p>Supercomputing News published “Argonne Moves ChemGraph Leaderboard to Monthly Runs as It Studies Score Variance,” discussing the public ChemGraph LLM evaluation leaderboard and responses from the ChemGraph team. <a href="https://www.supercomputing.news/ai/argonne-chemgraph-leaderboard-monthly-variance">Supercomputing News article</a> · <a href="https://huggingface.co/spaces/Autonomous-Scientific-Agents/chemgraph-leaderboard">ChemGraph Leaderboard</a></p>
+<h3 id="july-20-2026-media-coverage">July 20, 2026 — Media coverage<a class="headerlink" href="#july-20-2026-media-coverage" title="Permanent link">&para;</a></h3>
+<p>Lab Manager published “ChemGraph Uses AI Agents to Automate Chemistry Simulations.” <a href="https://www.labmanager.com/chemgraph-uses-ai-agents-to-automate-chemistry-simulations-35701">Lab Manager article</a></p>
+<h3 id="july-19-2026-major-software-release">July 19, 2026 — Major software release<a class="headerlink" href="#july-19-2026-major-software-release" title="Permanent link">&para;</a></h3>
+<p>ChemGraph v0.6.0 was released with expanded execution backends, HPC MCP servers, multi-agent campaign capabilities, and the new <code>chemgraph</code> PyPI distribution name. <a href="https://github.com/argonne-lcf/ChemGraph/releases/tag/v0.6.0">Release notes</a> · <a href="https://pypi.org/project/chemgraph/0.6.0/">PyPI</a></p>
+<h3 id="july-7-2026-argonnealcf-feature">July 7, 2026 — Argonne/ALCF feature<a class="headerlink" href="#july-7-2026-argonnealcf-feature" title="Permanent link">&para;</a></h3>
+<p>ALCF published “Argonne team's ChemGraph unlocks AI for chemistry and materials science,” a feature covering the ChemGraph framework, its scientific applications, Aurora-scale workflows, ChemGraph-XANES, and the project's development. <a href="https://www.alcf.anl.gov/news/argonne-team-s-chemgraph-unlocks-ai-chemistry-and-materials-science">ALCF feature</a> · <a href="https://phys.org/news/2026-07-ai-framework-battery-combustion-materials.html">Phys.org coverage</a></p>
+<h3 id="june-26-2026-workshop-presentation">June 26, 2026 — Workshop presentation<a class="headerlink" href="#june-26-2026-workshop-presentation" title="Permanent link">&para;</a></h3>
+<p>“Multi-Agent Orchestration for High-Throughput Materials Screening on a Leadership-Class System” was presented at the 2nd International Workshop on Foundational Large Language Models Advances for HPC (LLM4HPC 2026), held with ISC-HPC 2026 in Hamburg. <a href="https://ornl.github.io/events/llm4hpc2026/">LLM4HPC 2026 program</a></p>
+<h3 id="june-2-2026-major-software-release">June 2, 2026 — Major software release<a class="headerlink" href="#june-2-2026-major-software-release" title="Permanent link">&para;</a></h3>
+<p>ChemGraph v0.5.0 was released, expanding execution and HPC capabilities with workflow execution backends and broader multi-agent functionality. <a href="https://github.com/argonne-lcf/ChemGraph/releases/tag/v0.5.0">Release notes</a></p>
+<h3 id="may-27-2026-conference-presentation-poster">May 27, 2026 — Conference presentation (poster)<a class="headerlink" href="#may-27-2026-conference-presentation-poster" title="Permanent link">&para;</a></h3>
+<p>Poster “ChemGraph: An Agentic Framework for Computational Chemistry Workflows” at the SciFM conference, University of Chicago, Chicago, IL. <a href="https://www.scifmconferences.org/scifm26/program">Conference program</a></p>
+<h3 id="may-26-2026-alcf-feature-infrastructure-milestone">May 26, 2026 — ALCF feature / infrastructure milestone<a class="headerlink" href="#may-26-2026-alcf-feature-infrastructure-milestone" title="Permanent link">&para;</a></h3>
+<p>ALCF announces its first large-scale AI inference service for open science and features ChemGraph as a science use case, including discussion of using hosted open models for interactive scientific workflows. <a href="https://www.alcf.anl.gov/news/alcf-launches-first-large-scale-ai-inference-service-open-science">ALCF article</a></p>
+<h3 id="may-4-2026-community-paper-preprint">May 4, 2026 — Community paper / preprint<a class="headerlink" href="#may-4-2026-community-paper-preprint" title="Permanent link">&para;</a></h3>
+<p>“From Knowledge to Action: Outcomes of the 2025 Large Language Model (LLM) Hackathon for Applications in Materials Science and Chemistry” was released on arXiv. The community paper includes a dedicated ChemGraph-IR section describing automated infrared spectroscopy, spectrum visualization, and normal-mode animations. <a href="https://arxiv.org/abs/2605.03205">arXiv</a></p>
+<h3 id="april-17-2026-paper-preprint">April 17, 2026 — Paper / preprint<a class="headerlink" href="#april-17-2026-paper-preprint" title="Permanent link">&para;</a></h3>
+<p>“ChemGraph-XANES: An Agentic Framework for XANES Simulation and Analysis” was released on arXiv, extending ChemGraph to automated X-ray absorption spectroscopy simulation and analysis. <a href="https://arxiv.org/abs/2604.16205">arXiv</a></p>
+<h3 id="april-16-2026-media-coverage">April 16, 2026 — Media coverage<a class="headerlink" href="#april-16-2026-media-coverage" title="Permanent link">&para;</a></h3>
+<p>Supercomputing News published “Argonne Turns a Plain-English Prompt Into 11,182 GCMC Runs on Aurora,” covering ChemGraph's large-scale multi-agent workflow on the Aurora supercomputer. <a href="https://www.supercomputing.news/hpc/agentic-mof-screening-aurora">Supercomputing News article</a></p>
+<h3 id="april-9-2026-paper-preprint">April 9, 2026 — Paper / preprint<a class="headerlink" href="#april-9-2026-paper-preprint" title="Permanent link">&para;</a></h3>
+<p>“Multi-Agent Orchestration for High-Throughput Materials Screening on a Leadership-Class System” was released on arXiv, extending the ChemGraph approach to hierarchical multi-agent orchestration and large-scale computational campaigns on Aurora. <a href="https://arxiv.org/abs/2604.07681">arXiv</a></p>
+<h3 id="march-30-2026-alcf-outreach-coverage">March 30, 2026 — ALCF outreach coverage<a class="headerlink" href="#march-30-2026-alcf-outreach-coverage" title="Permanent link">&para;</a></h3>
+<p>ALCF published “Student training series teaches advanced AI for science applications,” highlighting the Advanced Topics in AI for Science program, including Thang Pham’s ChemGraph presentation and a hands-on LangGraph tutorial by Thang Pham and Murat Keçeli on single-agent and multi-agent scientific workflows. <a href="https://www.alcf.anl.gov/news/student-training-series-teaches-advanced-ai-science-applications">ALCF article</a></p>
+<h3 id="january-8-2026-peer-reviewed-publication">January 8, 2026 — Peer-reviewed publication<a class="headerlink" href="#january-8-2026-peer-reviewed-publication" title="Permanent link">&para;</a></h3>
+<p>“ChemGraph as an agentic framework for computational chemistry workflows” was published in <em>Communications Chemistry</em> <strong>9</strong>, 33. <a href="https://www.nature.com/articles/s42004-025-01776-9">Communications Chemistry article</a></p>
+<h3 id="january-2-2026-media-coverage-interview">January 2, 2026 — Media coverage / interview<a class="headerlink" href="#january-2-2026-media-coverage-interview" title="Permanent link">&para;</a></h3>
+<p>Chemistry World published “AI agents set to democratise computational chemistry,” discussing ChemGraph and its goal of making computational chemistry workflows accessible through natural-language interaction. <a href="https://www.chemistryworld.com/news/ai-agents-set-to-democratise-computational-chemistry/4022465.article">Chemistry World article</a></p>
+<h2 id="2025">2025<a class="headerlink" href="#2025" title="Permanent link">&para;</a></h2>
+<h3 id="september-16-2025-software-release">September 16, 2025 — Software release<a class="headerlink" href="#september-16-2025-software-release" title="Permanent link">&para;</a></h3>
+<p>The ChemGraph “LLM hackathon release” incorporated work from the ChemGraph-IR team, including IR/vibrational visualization and additional molecular-property capabilities. <a href="https://github.com/argonne-lcf/ChemGraph/releases/tag/v2025.09.12">Release notes</a></p>
+<h3 id="september-1112-2025-hackathon">September 11–12, 2025 — Hackathon<a class="headerlink" href="#september-1112-2025-hackathon" title="Permanent link">&para;</a></h3>
+<p>ChemGraph-IR was developed at the 2025 LLM Hackathon for Applications in Materials Science &amp; Chemistry, extending ChemGraph toward vibrational and infrared-spectroscopy workflows. <a href="https://github.com/llmhackathon/llmhackathon.github.io">Hackathon website</a></p>
+<h3 id="september-4-2025-software-release">September 4, 2025 — Software release<a class="headerlink" href="#september-4-2025-software-release" title="Permanent link">&para;</a></h3>
+<p>First formal ChemGraph GitHub release, “ChemGraph initial release for arxiv paper.” <a href="https://github.com/argonne-lcf/ChemGraph/releases/tag/v2025.08.04">Release notes</a></p>
+<h3 id="july-31-2025-conference-presentation">July 31, 2025 — Conference presentation<a class="headerlink" href="#july-31-2025-conference-presentation" title="Permanent link">&para;</a></h3>
+<p>“ChemGraph: Automating Computational Chemistry with Agentic AI” was presented by Thang Pham in the AI for Scientific Discovery in Materials Science session at the Trillion Parameter Consortium conference. <a href="https://tpc26.org/wp-content/uploads/2025/08/TPC25-Conference-Program-with-Lightning-Talks-Insert.pdf">Conference program</a></p>
+<h3 id="june-3-2025-paper-preprint">June 3, 2025 — Paper / preprint<a class="headerlink" href="#june-3-2025-paper-preprint" title="Permanent link">&para;</a></h3>
+<p>“ChemGraph: An Agentic Framework for Computational Chemistry Workflows,” the first public arXiv release introducing the ChemGraph framework by Thang D. Pham, Aditya Tanikanti, and Murat Keçeli. <a href="https://arxiv.org/abs/2506.06363">arXiv</a></p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../license/" class="md-footer__link md-footer__link--prev" aria-label="Previous: License">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                License
+              </div>
+            </div>
+          </a>
+        
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.footer", "navigation.indexes", "navigation.sections", "navigation.tabs", "search.highlight", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+    
+  </body>
+</html>

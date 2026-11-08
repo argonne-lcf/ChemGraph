@@ -53,6 +53,8 @@
     
       <link rel="stylesheet" href="assets/_mkdocstrings.css">
     
+      <link rel="stylesheet" href="assets/stylesheets/extra.css">
+    
     <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
@@ -346,6 +348,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="news/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  News
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -483,6 +504,17 @@
     <span class="md-ellipsis">
       
         Support levels
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#news-and-research" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        News and research
       
     </span>
   </a>
@@ -1512,7 +1544,7 @@
   <span class="md-ellipsis">
     
   
-    Citation
+    Papers and citations
   
 
     
@@ -1589,6 +1621,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="news/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    News
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1649,6 +1708,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#news-and-research" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        News and research
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#community" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1694,12 +1764,12 @@ calculator settings, convergence, units, and scientific conclusions before
 relying on a result.</p>
 </div>
 <h2 id="first-run">First run<a class="headerlink" href="#first-run" title="Permanent link">&para;</a></h2>
-<p>Install ChemGraph in a virtual environment with <a href="https://docs.astral.sh/uv/">uv</a>
-(or <code>python -m venv</code> + <code>pip</code>):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>venv<span class="w"> </span>.venv
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">source</span><span class="w"> </span>.venv/bin/activate
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>chemgraph
+<p>Install the CLI with <a href="https://docs.astral.sh/uv/guides/tools/">uv</a>, which manages
+an isolated environment (Python 3.11 or newer required):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span>chemgraph
 </code></pre></div>
+<p>To import ChemGraph from Python or a notebook, install it in a virtual
+environment instead; see <a href="installation/">Installation</a>.</p>
 <p>Set one model-provider credential, then check the installation and run a query:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">"..."</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--check-keys
@@ -1779,11 +1849,17 @@ optional SDK and a ChatGPT login; see <a href="codex_subscription/">Codex subscr
 Site-specific HPC servers, gRASPA workflows, docking, XANES, and some
 distributed backends are advanced or experimental; validate them in your own
 environment before production use.</p>
+<h2 id="news-and-research">News and research<a class="headerlink" href="#news-and-research" title="Permanent link">&para;</a></h2>
+<p>Read <a href="news/">News</a> for releases, presentations, and
+media coverage. Citations and BibTeX for the framework, HPC orchestration,
+ChemGraph-XANES, and ChemGraph-IR papers are on
+<a href="citation/">Papers and citations</a>.</p>
 <h2 id="community">Community<a class="headerlink" href="#community" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="example_usage/">Examples</a></li>
 <li><a href="contributing/">Contributing</a></li>
-<li><a href="citation/">Citation</a></li>
+<li><a href="news/">News</a></li>
+<li><a href="citation/">Papers and citations</a></li>
 <li><a href="https://github.com/argonne-lcf/ChemGraph/issues">GitHub issues</a></li>
 </ul>
 
