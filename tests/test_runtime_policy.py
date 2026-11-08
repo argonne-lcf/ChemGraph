@@ -107,6 +107,28 @@ def test_snapshot_reuse_syncs_with_a_writable_handle(tmp_path, monkeypatch):
     assert again.inputs[0]["path"] == first.inputs[0]["path"]
 
 
+@pytest.mark.parametrize("winner_bytes, accepted", [(None, True), (b"tampered\n", False)])
+def test_snapshot_replace_lost_to_a_concurrent_publisher(tmp_path, monkeypatch, winner_bytes,
+                                                         accepted):
+    replace = os.replace
+
+    def windows_replace(source, destination):
+        # A concurrent publisher of the same snapshot won and still holds it open.
+        replace(source, destination)
+        if winner_bytes is not None:
+            Path(destination).write_bytes(winner_bytes)
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(artifact_store.os, "replace", windows_replace)
+    context = make_context(tmp_path)
+    if accepted:
+        action = prepare(context, run_ase_call())
+        assert (context.workspace / action.inputs[0]["path"]).read_text().startswith("2\n")
+    else:
+        with pytest.raises(PreparationError, match="changed"):
+            prepare(context, run_ase_call())
+
+
 def test_calculator_selection_is_explicit_and_permitted(tmp_path):
     context = make_context(tmp_path)
     call = run_ase_call()

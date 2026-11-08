@@ -93,7 +93,15 @@ def publish_file(workspace, source, destination, expected: dict) -> None:
                 target.flush()
                 os.fsync(target.fileno())
             checked_path(workspace, destination)
-            os.replace(temporary, destination)
+            try:
+                os.replace(temporary, destination)
+            except PermissionError:
+                # Windows refuses to replace a file another handle holds open,
+                # e.g. a concurrent publisher of the same content-addressed path
+                # verifying it. Identical bytes already in place are a success.
+                if not destination.is_file():
+                    raise
+                verify_file(destination, expected)
         finally:
             Path(temporary).unlink(missing_ok=True)
     # Include newly created ancestor entries, up to the existing workspace.
