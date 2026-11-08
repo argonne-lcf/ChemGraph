@@ -80,7 +80,49 @@ directory under `cg_logs/` (set `CHEMGRAPH_LOG_DIR` to change it).
 Next steps: the [quickstart guide](https://argonne-lcf.github.io/ChemGraph/quickstart/),
 [models and authentication](https://argonne-lcf.github.io/ChemGraph/models/),
 and [installation options](https://argonne-lcf.github.io/ChemGraph/installation/)
-for optional extras, conda, and source checkouts.
+for conda and other environments.
+
+### Optional extras
+
+The core install includes ASE, EMT, and MACE-MP. ChemGraph exposes only the
+calculators available in the current environment. Add extras as needed (with
+`uv tool install`, pass them as `uv tool install "chemgraph[uma]"`):
+
+| Capability | Install | Notes |
+| --- | --- | --- |
+| TBLite / xTB | `pip install "chemgraph[calculators]"` | May need a Fortran toolchain without a wheel |
+| UMA / FAIRChem | `pip install "chemgraph[uma]"` | Use a separate environment from MACE (`e3nn` conflict) |
+| MACE-Polar | See [MACE downloads](https://argonne-lcf.github.io/ChemGraph/calculators/#mace-downloads) | Git-only add-on; enables dipole/IR workflows |
+| Docking, XANES, RAG | `docking`, `xanes`, `rag` extras | Docking also needs AutoDock Vina |
+| Distributed execution | `parsl`, `globus_compute`, `ensemble_launcher`, `academy` extras | See [HPC and Academy](https://argonne-lcf.github.io/ChemGraph/hpc_and_academy/) |
+| NWChem, ORCA | Install the executables separately | Must be on `PATH` or configured through ASE |
+
+See [optional extras](https://argonne-lcf.github.io/ChemGraph/installation/#optional-extras)
+and [calculators](https://argonne-lcf.github.io/ChemGraph/calculators/) for details.
+
+### From source or Docker
+
+Use a source checkout for development, notebooks, the Streamlit UI, and
+unreleased changes:
+
+```bash
+git clone https://github.com/argonne-lcf/ChemGraph.git
+cd ChemGraph
+uv venv .venv && source .venv/bin/activate
+uv pip install -e .
+```
+
+Or run the [published image](https://github.com/argonne-lcf/ChemGraph/pkgs/container/chemgraph),
+which supports the CLI, Streamlit, MCP, and JupyterLab:
+
+```bash
+docker run --rm -it -e OPENAI_API_KEY -v "$PWD/cg_logs:/app/cg_logs" \
+  ghcr.io/argonne-lcf/chemgraph:latest \
+  chemgraph run -q "What is the SMILES string for aspirin?"
+```
+
+See [install from source](https://argonne-lcf.github.io/ChemGraph/installation/#install-from-source)
+and [Docker support](https://argonne-lcf.github.io/ChemGraph/docker_support/).
 
 ## Choose how to work
 
@@ -93,6 +135,7 @@ for optional extras, conda, and source checkouts.
 | Connect chemistry tools to another agent | [MCP servers](https://argonne-lcf.github.io/ChemGraph/mcp_servers/) |
 | Choose a calculator or add spectroscopy and docking | [Calculators](https://argonne-lcf.github.io/ChemGraph/calculators/) and [examples](https://argonne-lcf.github.io/ChemGraph/example_usage/) |
 | Scale to HPC or multi-agent campaigns | [HPC and Academy](https://argonne-lcf.github.io/ChemGraph/hpc_and_academy/) |
+| Configure providers, MCP, and backends in TOML | [Configuration](https://argonne-lcf.github.io/ChemGraph/configuration_with_toml/) (never commit API keys) |
 | Run in a container or cluster | [Docker](https://argonne-lcf.github.io/ChemGraph/docker_support/) and [Kubernetes](https://argonne-lcf.github.io/ChemGraph/kubernetes/) |
 | Diagnose a failed run | [Troubleshooting](https://argonne-lcf.github.io/ChemGraph/troubleshooting/) |
 
