@@ -75,6 +75,7 @@ class ModelBenchmarkRunner:
             Validated benchmark configuration.
         """
         self.config = config
+        self._runtime = None
         full_dataset: List[GroundTruthItem] = load_dataset(config.dataset)
         if config.query_ids:
             missing = set(config.query_ids) - {item.id for item in full_dataset}
@@ -110,7 +111,8 @@ class ModelBenchmarkRunner:
                 self._provenance["versions"]["tblite"] = version("tblite")
             except PackageNotFoundError:
                 self._provenance["versions"]["tblite"] = None
-            self._preflight_deepagent_workspaces()
+            if config.eval_runtime == "local":
+                self._preflight_deepagent_workspaces()
 
         # Load judge model only when LLM judge is requested.
         self._judge_llm = None
@@ -501,9 +503,14 @@ class ModelBenchmarkRunner:
         started = time.monotonic()
         try:
             if workflow_type == "deep_agent":
-                llm_workflow = await deepagent.run_query(
-                    self.config, model_name, item.query, item.id,
-                )
+                if self.config.eval_runtime == "podman":
+                    if self._runtime is None:
+                        raise RuntimeError("Podman runtime has not passed startup checks")
+                    llm_workflow = await self._runtime.run_query(model_name, item.query, item.id)
+                else:
+                    llm_workflow = await deepagent.run_query(
+                        self.config, model_name, item.query, item.id,
+                    )
             else:
                 config = {"configurable": {"thread_id": str(idx)}}
                 state = await cg.run(item.query, config)
@@ -511,6 +518,10 @@ class ModelBenchmarkRunner:
             model_tool_calls = llm_workflow.get("tool_calls", [])
             model_result = llm_workflow.get("result", "")
         except Exception as e:
+            if self.config.eval_runtime == "podman":
+                # The adapter returns model failures explicitly. Escaped errors are
+                # infrastructure failures (including cleanup) and must abort.
+                raise
             logger.warning(f"Query {idx} failed for {model_name}/{workflow_type}: {e}")
             logger.debug(traceback.format_exc())
             model_tool_calls = []
@@ -520,7 +531,8 @@ class ModelBenchmarkRunner:
                 error = f"{type(e).__name__}: {e}"
                 llm_workflow.update(
                     query_id=item.id, query=item.query, status="execution_error", error=error,
-                    workspace=str(deepagent.query_workspace(self.config, model_name, item.id)),
+                    workspace=("/workspace" if self.config.eval_runtime == "podman" else
+                               str(deepagent.query_workspace(self.config, model_name, item.id))),
                     elapsed_seconds=round(time.monotonic() - started, 3),
                     structured_output={"_parse_error": error},
                     usage={"execution": None, "formatting": None,
@@ -535,14 +547,18 @@ class ModelBenchmarkRunner:
             if llm_workflow.get("error") and llm_workflow.get("status") != "formatting_error":
                 judge_result = {"score": 0, "rationale": llm_workflow["error"], "parse_error": None}
             else:
-                judge_result = await judge_single_query(
-                    judge_llm=self._judge_llm,
-                    query=item.query,
-                    expected_result=item.expected_result,
-                    model_result=model_result,
-                    expected_tool_calls=item.expected_tool_calls,
-                    model_tool_calls=model_tool_calls,
-                )
+                try:
+                    judge_result = await judge_single_query(
+                        judge_llm=self._judge_llm,
+                        query=item.query,
+                        expected_result=item.expected_result,
+                        model_result=model_result,
+                        expected_tool_calls=item.expected_tool_calls,
+                        model_tool_calls=model_tool_calls,
+                    )
+                except Exception as exc:
+                    judge_result = {"score": 0, "rationale": f"Judge failed: {exc}",
+                                    "parse_error": f"{type(exc).__name__}: {exc}"}
             judge_result["query_id"] = item.id
             judge_result["query"] = item.query
             judge_result["category"] = item.category
@@ -551,10 +567,17 @@ class ModelBenchmarkRunner:
         # --- Structured output judge ---
         if self.config.judge_type in ("structured", "both"):
             if item.expected_structured_output is not None:
-                struct_result = judge_structured_output(
-                    expected=item.expected_structured_output,
-                    actual=llm_workflow.get("structured_output", model_result),
-                )
+                if llm_workflow.get("error"):
+                    struct_result = {"score": 0, "field_scores": {}, "rationale": llm_workflow["error"]}
+                else:
+                    try:
+                        struct_result = judge_structured_output(
+                            expected=item.expected_structured_output,
+                            actual=llm_workflow.get("structured_output", model_result),
+                        )
+                    except Exception as exc:
+                        struct_result = {"score": 0, "field_scores": {},
+                                         "rationale": f"Structured judge failed: {type(exc).__name__}: {exc}"}
                 struct_result["query_id"] = item.id
                 struct_result["query"] = item.query
                 struct_result["category"] = item.category
@@ -567,7 +590,38 @@ class ModelBenchmarkRunner:
 
         return result
 
-    async def run_all(self) -> Dict[str, Dict[str, dict]]:
+    async def run_all(self, *, report_format=None) -> Dict[str, Dict[str, dict]]:
+        """Run with an exclusive output lock and fail-closed startup in Podman mode."""
+        if self.config.eval_runtime == "local":
+            results = await self._run_all()
+            if report_format is not None:
+                self.report(report_format)
+            return results
+        from chemgraph.eval.podman import PodmanRuntime, output_lock
+
+        with output_lock(self.config.output_dir):
+            runtime = PodmanRuntime(self.config)
+            try:
+                await runtime.prepare()
+                self._runtime = runtime
+                self._provenance["podman"] = runtime.provenance
+                for model in self.config.models:
+                    if self.config.resume:
+                        self._load_checkpoint(model, "deep_agent")
+                    elif Path(self._checkpoint_path(model, "deep_agent", create_dir=False)).exists():
+                        raise ValueError("Podman evaluation requires a new output directory or --resume")
+                Path(self.config.output_dir, "podman-run.json").write_text(json.dumps({
+                    "run_id": runtime.run_id, **runtime.provenance,
+                }, indent=2))
+                results = await self._run_all()
+                if report_format is not None:
+                    self.report(report_format)
+                return results
+            finally:
+                self._runtime = None
+                await runtime.close()
+
+    async def _run_all(self) -> Dict[str, Dict[str, dict]]:
         """Execute the full benchmark: all models x all workflows.
 
         Models are run **sequentially** to avoid API rate-limit issues
@@ -580,12 +634,13 @@ class ModelBenchmarkRunner:
         dict
             ``{model_name: {workflow_type: {"judge_aggregate": ..., ...}}}``
         """
-        if "deep_agent" in self.config.workflow_types:
+        if "deep_agent" in self.config.workflow_types and self.config.eval_runtime == "local":
             self._preflight_deepagent_workspaces()
         timestamp = datetime.datetime.now().isoformat()
         self._run_metadata = {
             **self._provenance,
             "timestamp": timestamp,
+            "eval_runtime": self.config.eval_runtime,
             "dataset": self.config.dataset,
             "n_queries": len(self.dataset),
             "models": self.config.models,
@@ -680,6 +735,15 @@ class ModelBenchmarkRunner:
                     logger.warning(f"Could not remove {path}: {e}")
 
     def report(self, format: str = "all") -> None:
+        """Protect standalone Python report writes with the same directory lock."""
+        if self.config.eval_runtime == "podman" and self._runtime is None:
+            from chemgraph.eval.podman import output_lock
+
+            with output_lock(self.config.output_dir):
+                return self._report(format)
+        return self._report(format)
+
+    def _report(self, format: str = "all") -> None:
         """Generate and write evaluation reports.
 
         Parameters

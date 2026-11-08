@@ -110,6 +110,13 @@ def add_eval_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Required for Deep Agent evaluation; allow unattended tools and host shell execution.",
     )
+    parser.add_argument("--eval-runtime", choices=["local", "podman"], default=None)
+    parser.add_argument("--podman-image", default=None, help="Prepared worker image (no implicit pulls).")
+    parser.add_argument("--podman-proxy-image", default=None, help="Prepared Squid image.")
+    parser.add_argument("--podman-cpus", type=float, default=None, help="Worker CPUs (default: 4).")
+    parser.add_argument("--podman-memory-gb", type=float, default=None, help="Worker memory GiB (default: 8).")
+    parser.add_argument("--query-timeout-seconds", type=float, default=None,
+                        help="Podman query timeout (default: 1800).")
     parser.add_argument(
         "--report",
         choices=["json", "markdown", "console", "all"],
@@ -259,7 +266,9 @@ def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
             overrides["judge_type"] = args.judge_type
         if args.resume:
             overrides["resume"] = True
-        for key in ("query_ids", "deepagent_workspace", "deepagent_auto_approve", "base_url"):
+        for key in ("query_ids", "deepagent_workspace", "deepagent_auto_approve", "base_url",
+                    "eval_runtime", "podman_image", "podman_proxy_image", "podman_cpus",
+                    "podman_memory_gb", "query_timeout_seconds"):
             if getattr(args, key) is not None:
                 overrides[key] = getattr(args, key)
 
@@ -294,7 +303,9 @@ def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
             kwargs["judge_model"] = args.judge_model
         if args.dataset is not None:
             kwargs["dataset"] = args.dataset
-        for key in ("query_ids", "deepagent_workspace", "deepagent_auto_approve", "base_url"):
+        for key in ("query_ids", "deepagent_workspace", "deepagent_auto_approve", "base_url",
+                    "eval_runtime", "podman_image", "podman_proxy_image", "podman_cpus",
+                    "podman_memory_gb", "query_timeout_seconds"):
             if getattr(args, key) is not None:
                 kwargs[key] = getattr(args, key)
 
@@ -334,8 +345,11 @@ def run_eval(args: argparse.Namespace) -> None:
     print(f"  Output:       {config.output_dir}")
     print()
 
-    asyncio.run(runner.run_all())
-    runner.report(format=args.report)
+    if config.eval_runtime == "podman":
+        asyncio.run(runner.run_all(report_format=args.report))
+    else:
+        asyncio.run(runner.run_all())
+        runner.report(format=args.report)
 
 
 def parse_args(argv=None) -> argparse.Namespace:
