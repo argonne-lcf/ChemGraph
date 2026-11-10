@@ -172,6 +172,11 @@ uses **`read_file`** to load `SKILL.md` on demand. There is no separate
 `read_skill` tool. Relative references in a skill resolve against its directory
 in the file backend. See [upstream skills documentation](https://docs.langchain.com/oss/python/deepagents/skills).
 
+To discover bundled skills from the composite backend root, use
+`glob("SKILL.md", "/")` or `glob("/chemgraph-skills/**/SKILL.md", "/")`.
+A root-anchored pattern such as `glob("/SKILL.md", "/")` does not search the
+bundled-skills route in Deep Agents 0.7.32.
+
 External filesystem collections also appear in the prompt's "Shell paths vs.
 virtual paths" mapping when using a local shell. Use these host paths for helper
 scripts; a command in an external skill may assume its own repository root, so

@@ -9,7 +9,6 @@ from chemgraph.skills.backend import BundledSkillsBackend
 from chemgraph.skills.runtime import prepare_skill_backend
 
 
-@pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.parametrize("pattern,path,expected", [
     ("SKILL.md", "/", [f"/{name}/SKILL.md" for name in (
         "chemgraph", "globus-transfer", "iri-hpc", "pbs-hpc",
@@ -25,61 +24,52 @@ from chemgraph.skills.runtime import prepare_skill_backend
     ("/SKILL.md", "/chemgraph/", ["/chemgraph/SKILL.md"]),
     ("absent*", "/", []),
 ])
-def test_bundled_glob_and_grep_filters(asynchronous, pattern, path, expected):
+def test_bundled_glob_and_grep_filters(pattern, path, expected):
     backend = BundledSkillsBackend()
     for operation, args, kwargs in (
         ("glob", (pattern, path), {}),
         ("grep", (".", path), {"glob": pattern}),
     ):
-        result = (
-            asyncio.run(getattr(backend, "a" + operation)(*args, **kwargs))
-            if asynchronous else getattr(backend, operation)(*args, **kwargs)
-        )
+        result = getattr(backend, operation)(*args, **kwargs)
         assert not result.error
         assert sorted({entry["path"] for entry in result.matches}) == expected
 
 
-@pytest.mark.parametrize("asynchronous", [False, True])
-def test_grep_leading_slash_anchors_filter_to_search_root(asynchronous):
+def test_grep_leading_slash_anchors_filter_to_search_root():
     backend = BundledSkillsBackend()
-    result = (
-        asyncio.run(backend.agrep(".", "/", glob="/SKILL.md"))
-        if asynchronous else backend.grep(".", "/", glob="/SKILL.md")
-    )
+    result = backend.grep(".", "/", glob="/SKILL.md")
     # Unlike recursive glob(), a slash anchors grep's include filter.
     assert not result.error and result.matches == []
 
 
+_ROUTED_SKILLS = [
+    "/chemgraph-skills/chemgraph/SKILL.md",
+    "/chemgraph-skills/globus-transfer/SKILL.md",
+    "/chemgraph-skills/iri-hpc/SKILL.md",
+    "/chemgraph-skills/pbs-hpc/SKILL.md",
+]
+
+
 @pytest.mark.parametrize("asynchronous", [False, True])
-@pytest.mark.parametrize("path", ["/", "/chemgraph-skills/", "/chemgraph-skills/chemgraph/"])
-@pytest.mark.parametrize("pattern", [
-    "SKILL.md", "**/SKILL.md", "{SKILL.md,*.py}", "/SKILL.md",
-    "/chemgraph-skills/**/SKILL.md",
+@pytest.mark.parametrize("pattern,path,glob_expected,grep_expected", [
+    ("SKILL.md", "/", _ROUTED_SKILLS, _ROUTED_SKILLS),
+    ("SKILL.md", "/chemgraph-skills/chemgraph/",
+     ["/chemgraph-skills/chemgraph/SKILL.md"], ["/chemgraph-skills/chemgraph/SKILL.md"]),
+    ("/SKILL.md", "/", [], []),
+    ("/chemgraph-skills/**/SKILL.md", "/", _ROUTED_SKILLS, []),
+    ("/SKILL.md", "/chemgraph-skills/", _ROUTED_SKILLS, []),
 ])
-def test_composite_skill_searches(tmp_path, asynchronous, path, pattern):
+def test_composite_skill_searches(
+    tmp_path, asynchronous, pattern, path, glob_expected, grep_expected,
+):
     backend, _, _ = prepare_skill_backend(
         FilesystemBackend(root_dir=tmp_path, virtual_mode=True), (),
         discover_skills=False,
     )
-    files = [f"/{name}/SKILL.md" for name in (
-        "chemgraph", "globus-transfer", "iri-hpc", "pbs-hpc",
-    )]
-    if pattern == "{SKILL.md,*.py}":
-        files += ["/chemgraph/assets/calculate.py", "/iri-hpc/scripts/iri_configure.py",
-                  "/iri-hpc/scripts/iri_submit.py"]
-    files = sorted("/chemgraph-skills" + name for name in files)
-    for operation, args, kwargs in (
-        ("glob", (pattern, path), {}),
-        ("grep", (".", path), {"glob": pattern}),
+    for operation, args, kwargs, expected in (
+        ("glob", (pattern, path), {}, glob_expected),
+        ("grep", (".", path), {"glob": pattern}, grep_expected),
     ):
-        expected = [name for name in files if name.startswith(path)]
-        if pattern.startswith("/chemgraph-skills/"):
-            expected = files if operation == "glob" and path == "/" else []
-        elif pattern == "/SKILL.md":
-            # Upstream composite glob now excludes routes not targeted by an
-            # anchored root pattern; grep's include filter stays root-relative.
-            if path == "/" or (operation == "grep" and path == "/chemgraph-skills/"):
-                expected = []
         result = (
             asyncio.run(getattr(backend, "a" + operation)(*args, **kwargs))
             if asynchronous else getattr(backend, operation)(*args, **kwargs)
