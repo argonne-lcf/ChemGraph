@@ -1,0 +1,29 @@
+[service]
+data_dir = "/var/lib/chemgraph"
+public_url = "https://chemgraph.example"
+host = "127.0.0.1"
+port = 9003
+max_workers = 4
+per_user_running = 1
+per_user_queued = 10
+max_inline_tools = 4
+max_text_bytes = 1048576
+max_upload_bytes = 104857600
+max_storage_bytes = 10737418240
+max_job_seconds = 3600
+shutdown_seconds = 30
+# PubChem shares this host's egress and upstream rate limit across users.
+enable_pubchem = false
+
+[policy]
+# EMT demonstrates the service plumbing; select a validated method for research.
+calculators = ["emt"]
+
+[policy.limits]
+max_atoms = 1000
+max_steps = 1000
+
+# To permit an installed MACE model, add its calculator to policy.calculators,
+# set model_roots under [policy], and add a resource mapping such as:
+# [policy.model_resources]
+# "mace_mp:research" = "/opt/chemgraph-models/research.model"

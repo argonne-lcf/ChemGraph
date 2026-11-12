@@ -51,6 +51,7 @@ def load_mcp_tools_from_config(
     command: Optional[str] = None,
     server_name: str = "ChemGraph General Tools",
     verbose: bool = False,
+    token_env: Optional[str] = None,
 ) -> Optional[List]:
     """Connect to an MCP server and return loaded tools.
 
@@ -86,10 +87,26 @@ def load_mcp_tools_from_config(
 
     # Build connection config
     if url:
+        headers = {}
+        if token_env:
+            from urllib.parse import urlsplit
+
+            endpoint = urlsplit(url)
+            if endpoint.scheme != "https" and not (
+                endpoint.scheme == "http" and endpoint.hostname in {"localhost", "127.0.0.1", "::1"}
+            ):
+                console.print("[red]Bearer-authenticated MCP requires HTTPS (except loopback development).[/red]")
+                return None
+            token = os.environ.get(token_env)
+            if not token:
+                console.print(f"[red]MCP token environment variable {token_env!r} is missing or empty.[/red]")
+                return None
+            headers["Authorization"] = f"Bearer {token}"
         connections = {
             server_name: {
                 "transport": "streamable_http",
                 "url": url,
+                **({"headers": headers} if headers else {}),
             }
         }
         transport_label = f"streamable_http @ {url}"
@@ -142,9 +159,12 @@ def load_mcp_tools_from_config(
 
         except Exception as e:
             progress.update(task, description="[red]MCP connection failed!")
-            console.print(f"[red]Failed to load MCP tools: {e}[/red]")
+            error_text = str(e)
+            if url and token_env:
+                error_text = error_text.replace(token, "[redacted]")
+            console.print(f"[red]Failed to load MCP tools: {error_text}[/red]")
 
-            err_str = str(e).lower()
+            err_str = error_text.lower()
             if "connection" in err_str or "refused" in err_str:
                 console.print(
                     "[dim]Check that the MCP server is running and reachable.[/dim]"
