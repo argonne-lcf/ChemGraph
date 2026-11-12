@@ -86,7 +86,8 @@ import chemgraph
 assert chemgraph.__file__.startswith(sys.argv[1]), chemgraph.__file__
 from chemgraph.skills.backend import BundledSkillsBackend
 backend = BundledSkillsBackend()
-assert backend.read('/pbs-hpc/SKILL.md').error is None
+for name in ('pbs', 'bebop', 'pbs-hpc'):
+    assert backend.read(f'/{name}/SKILL.md').error is None
 assert b'PBS' in backend.download_files(['/pbs-hpc/assets/job.pbs.template'])[0].content
 assert backend.write('/pbs-hpc/SKILL.md', 'overwrite').error
 aurora_path = '/pbs-hpc/references/aurora.md'
@@ -109,3 +110,12 @@ assert read.file_data['content'] == aurora_resource.decode('utf-8').replace('\\r
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_skill_directory_locates_portable_skills():
+    from chemgraph.skills import skill_directory
+
+    root = Path(skill_directory())
+    assert root.is_absolute()
+    assert (root / "pbs/SKILL.md").is_file()
+    assert (root / "bebop/SKILL.md").is_file()

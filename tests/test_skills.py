@@ -543,7 +543,7 @@ def test_optional_download_failure_handling(tmp_path, asynchronous, error_type):
     if error_type in (OSError, ValueError, RuntimeError):
         update = load()
         assert {s["name"] for s in update["skills_metadata"]} == {
-            "chemgraph", "globus-transfer", "iri-hpc", "pbs-hpc",
+            "bebop", "chemgraph", "globus-transfer", "iri-hpc", "pbs", "pbs-hpc",
         }
         assert len(update["skills_load_errors"]) == 1
         assert "Cannot load skills from '/.agents/skills/': Download failed" in update["skills_load_errors"]
@@ -715,9 +715,11 @@ def test_optional_permission_error_does_not_hide_bundled_catalog(caplog):
     )
     update = middleware.before_agent({}, None, {})
     assert {skill["name"] for skill in update["skills_metadata"]} == {
+        "bebop",
         "chemgraph",
         "globus-transfer",
         "iri-hpc",
+        "pbs",
         "pbs-hpc",
     }
     assert "Cannot inspect optional skills" in caplog.text
