@@ -8,11 +8,6 @@ shared-filesystem planning beyond a normal PyPI install.
 For individual PBS jobs, [Deep Agent can read skills and write batch scripts](pbs_jobs_with_skills.md)
 using its submission-host shell and the existing ASE Python engine.
 
-For Bebop, use the `pbs-hpc` skill and its
-[Bebop reference](../src/chemgraph/skills/pbs-hpc/references/bebop.md), alongside
-the existing Aurora, Polaris, and Crux references. For example: “Use pbs-hpc
-and its Bebop reference to prepare this submission.”
-
 ## Execution backends
 
 | Backend | Extra | Typical role |
