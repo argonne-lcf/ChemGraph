@@ -1,6 +1,6 @@
 ---
 name: pbs-hpc
-description: Prepare PBS HPC jobs, choose allocation and filesystem settings, submit and monitor jobs, and diagnose job output. Use for qsub, qstat, PBS scripts, allocations, and ChemGraph execution on Polaris, Aurora, or Crux; also Polaris and Aurora environments, MPI/GPU affinity, monitoring, and Aurora /soft access troubleshooting.
+description: Prepare PBS HPC jobs, choose allocation and filesystem settings, submit and monitor jobs, and diagnose job output. Use for qsub, qstat, PBS scripts, allocations, and ChemGraph execution on Polaris, Aurora, Crux, or Bebop; also Polaris and Aurora environments, MPI/GPU affinity, monitoring, and Aurora /soft access troubleshooting.
 compatibility: Submission requires PBS commands on an authorized submission host; compute execution requires an allocation and the site's application environment.
 license: Apache-2.0
 metadata:
@@ -26,9 +26,9 @@ or suitable attached HPC tools. If submission is unavailable, prepare the script
 and state where the user must submit it.
 
 Read the applicable site-reference sections before choosing launch settings:
-[Polaris](references/polaris.md), [Aurora](references/aurora.md), or
-[Crux](references/crux.md). Consult the linked official guides for current
-queue limits and site policies.
+[Polaris](references/polaris.md), [Aurora](references/aurora.md),
+[Crux](references/crux.md), or [Bebop](references/bebop.md). Consult the linked
+official guides for current queue limits and site policies.
 
 For a simple Polaris job, start with [queues](references/polaris.md#queues),
 [filesystems](references/polaris.md#filesystems),

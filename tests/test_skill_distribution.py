@@ -87,6 +87,9 @@ assert chemgraph.__file__.startswith(sys.argv[1]), chemgraph.__file__
 from chemgraph.skills.backend import BundledSkillsBackend
 backend = BundledSkillsBackend()
 assert backend.read('/pbs-hpc/SKILL.md').error is None
+assert backend.read('/pbs-hpc/references/bebop.md').error is None
+assert backend.read('/pbs/SKILL.md').error == 'file_not_found'
+assert backend.read('/bebop/SKILL.md').error == 'file_not_found'
 assert b'PBS' in backend.download_files(['/pbs-hpc/assets/job.pbs.template'])[0].content
 assert backend.write('/pbs-hpc/SKILL.md', 'overwrite').error
 aurora_path = '/pbs-hpc/references/aurora.md'
