@@ -63,7 +63,7 @@ facility-specific assumptions. See [MCP servers](mcp_servers.md).
 Never place tokens in campaign files, prompts, repository config, or job logs.
 Use facility-approved secret mechanisms and least-privilege endpoints.
 
-## PBS and machine skills
+## PBS and machine guidance
 
 Compose operational guidance as:
 
@@ -71,29 +71,27 @@ Compose operational guidance as:
 PBS operations + selected machine guidance + software guidance
 ```
 
-The packaged [pbs skill](../src/chemgraph/skills/pbs/SKILL.md) prepares and manages
-jobs through native shell commands. It works independently of ChemGraph imports
-and machine-specific skills, and can be copied into another compatible agent's
-skill directory. The [bebop skill](../src/chemgraph/skills/bebop/SKILL.md) adds
-Bebop resources, queues, accounts, storage, modules, and dated official sources.
-Neither skill prescribes a fixed submission interface or resource default.
+The packaged [pbs skill](../src/chemgraph/skills/pbs/SKILL.md) provides portable
+scheduler operations through native shell commands. It works independently of
+ChemGraph imports and can be copied into another compatible agent's skill
+directory.
+
+The [pbs-hpc skill](../src/chemgraph/skills/pbs-hpc/SKILL.md) provides ChemGraph
+batch examples and machine references for Aurora, Polaris, Crux, and
+[Bebop](../src/chemgraph/skills/pbs-hpc/references/bebop.md). Bebop is a reference
+loaded through `pbs-hpc`, not a separate skill. It covers resources, queues,
+accounts, storage, modules, and dated official sources.
 
 Example prompts:
 
 - “Use the PBS skill to inspect this job on the current machine.”
-- “Use the PBS and Bebop skills to prepare this submission.”
+- “Use pbs-hpc and its Bebop reference to prepare this submission.”
 - “Use the PBS skill with the supplied Polaris settings.”
 
-The existing `pbs-hpc` skill retains its Aurora, Polaris, and Crux references
-and ChemGraph-specific examples. Use `pbs` for portable scheduler operations and
-combine it with `bebop` on Bebop; supplied site settings can also accompany it.
-Existing execution configurations and Academy profiles remain separate and
-unchanged. Software
+Existing execution configurations and Academy profiles are unchanged. Software
 skills, including Gaussian, are future work.
 
-`chemgraph.skills.skill_directory()` locates the installed skill root; it does
-not load skills into an agent. A compatible host can discover the `pbs` and
-`bebop` subdirectories after their root is made visible to its skill loader.
-The existing bundled-skill discovery exposes these skills without runtime
-changes; see [skill discovery](skills.md).
-Native PBS IDs must not be passed to ChemGraph's Future-based backend job tools.
+`chemgraph.skills.skill_directory()` locates the installed skill root. Existing
+bundled-skill discovery exposes `pbs` and `pbs-hpc`; see
+[skill discovery](skills.md). Native PBS IDs must not be passed to ChemGraph's
+Future-based backend job tools.

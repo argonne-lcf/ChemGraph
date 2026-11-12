@@ -1,6 +1,6 @@
 ---
 name: pbs-hpc
-description: Prepare PBS HPC jobs, choose allocation and filesystem settings, submit and monitor jobs, and diagnose job output. Use for qsub, qstat, PBS scripts, allocations, and ChemGraph execution on Polaris, Aurora, or Crux; also Polaris and Aurora environments, MPI/GPU affinity, monitoring, and Aurora /soft access troubleshooting.
+description: Prepare PBS HPC jobs, choose allocation and filesystem settings, submit and monitor jobs, and diagnose job output. Use for qsub, qstat, PBS scripts, allocations, and ChemGraph execution on Polaris, Aurora, Crux, or Bebop; also Polaris and Aurora environments, MPI/GPU affinity, monitoring, and Aurora /soft access troubleshooting.
 compatibility: Submission requires PBS commands on an authorized submission host; compute execution requires an allocation and the site's application environment.
 license: Apache-2.0
 metadata:
@@ -26,9 +26,9 @@ or suitable attached HPC tools. If submission is unavailable, prepare the script
 and state where the user must submit it.
 
 Read the applicable site-reference sections before choosing launch settings:
-[Polaris](references/polaris.md), [Aurora](references/aurora.md), or
-[Crux](references/crux.md). Consult the linked official guides for current
-queue limits and site policies.
+[Polaris](references/polaris.md), [Aurora](references/aurora.md),
+[Crux](references/crux.md), or [Bebop](references/bebop.md). Consult the linked
+official guides for current queue limits and site policies.
 
 For a simple Polaris job, start with [queues](references/polaris.md#queues),
 [filesystems](references/polaris.md#filesystems),
@@ -50,10 +50,12 @@ For ASE calculations, also read the `chemgraph` skill's
 [Python batch example](../chemgraph/references/ase-batch.md). Write the calculation
 script in the workspace and run it inside PBS; no MCP server or Parsl is needed.
 
-1. Read [the PBS template](assets/job.pbs.template) and write a completed copy
-   into the execution filesystem. Replace every placeholder, keep PBS directives
-   before executable statements, and quote shell paths. Choose the launch command
-   for the target site and application.
+1. For ALCF systems, start with [the PBS template](assets/job.pbs.template).
+   For Bebop, use its [example directives](references/bebop.md#example-directives);
+   omit the template's ALCF `system` and `filesystems` directives. Write the script
+   in the execution filesystem. Replace placeholders, keep PBS directives before
+   executable statements, and quote shell paths. Choose the launch command for
+   the target site and application.
 2. Check input visibility on compute nodes. Arrange staging first when the
    submitting host and workers do not share files. Validate the script syntax
    with `bash -n` when the execution environment provides Bash.
@@ -94,7 +96,7 @@ PBS command reference: [ALCF running jobs](https://docs.alcf.anl.gov/running-job
 
 ## ChemGraph execution boundaries
 
-ChemGraph's `hpc_configs` Parsl configurations for these systems use
+ChemGraph's Aurora, Polaris, and Crux `hpc_configs` Parsl configurations use
 `LocalProvider` inside existing allocations; they do not acquire a PBS
 allocation automatically. Aurora and Crux require `PBS_NODEFILE`; Polaris has
 a local/testing fallback, which is not evidence of a valid allocation.

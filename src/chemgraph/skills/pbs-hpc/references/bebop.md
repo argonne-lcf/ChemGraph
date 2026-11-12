@@ -1,18 +1,9 @@
----
-name: bebop
-description: Supply Bebop machine guidance for PBS resources, queues, allocations, storage, and software environments at Argonne LCRC; combine with the pbs skill for job operations.
-license: Apache-2.0
-metadata:
-  authors: Thang Pham
-  maintainers: tdpham2
----
-
 # Bebop machine reference
 
 ## Machine
 
-For Argonne LCRC's Bebop cluster, combine this reference with the **pbs** skill
-for job operations and the selected software guidance for application setup.
+Use this reference for Argonne LCRC's Bebop cluster with the
+[pbs-hpc workflow](../SKILL.md) or [portable PBS skill](../../pbs/SKILL.md).
 
 ## Resources
 
