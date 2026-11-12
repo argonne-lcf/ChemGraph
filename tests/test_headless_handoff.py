@@ -356,7 +356,7 @@ def test_sigterm_leaves_running_receipt(tmp_path):
             (root / "executing").touch()
             threading.Event().wait(60)
         patch.setattr(_ScriptedChatModel, "_generate", block)
-        run(query="calculate", result_file=root / "result.json")
+        run(query="calculate", result_file=root / "result.json", preflight=False)
     ''')
     # A real model stub runs inside the real checkpoint runtime in a separate process.
     with (tmp_path / "process.log").open("w", encoding="utf-8") as log:

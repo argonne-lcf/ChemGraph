@@ -10,6 +10,8 @@ def test_switches_reuse_resolved_context(monkeypatch, tmp_path, model_loader):
     original.mkdir()
     monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(original))
     agents = []
+    reports = []
+    monkeypatch.setattr(commands, "show_report", lambda **kwargs: reports.append(kwargs))
     initialize = commands.initialize_agent
 
     def record(*args, **kwargs):
@@ -19,7 +21,7 @@ def test_switches_reuse_resolved_context(monkeypatch, tmp_path, model_loader):
         return agent
 
     replies = iter(["/model test-two", "/workflow single_agent",
-                    "/workflow main_agent", "/quit"])
+                    "/workflow main_agent", "/doctor", "/quit"])
     def ask(*args, **kwargs):
         answer = next(replies)
         if answer.startswith("/model"):
@@ -36,6 +38,7 @@ def test_switches_reuse_resolved_context(monkeypatch, tmp_path, model_loader):
         )
     mains = [agent.runtime_config.saved for agent in agents if agent.workflow_type == "main_agent"]
     assert [config.model_name for config in mains] == ["test", "test-two", "test-two"]
+    assert reports == [{}, {}, {}, {"console": commands.console}]
     assert len({agent.session_id for agent in agents}) == len(agents)
     for config in mains:
         assert config.artifact_directory == str(original)

@@ -150,6 +150,22 @@ def test_headless_restart_does_not_replay_completed_tools(headless, tmp_path, ca
     assert "Query not run:" not in captured.out + captured.err
 
 
+@pytest.mark.parametrize("preflight", [False, True])
+def test_headless_preflight_uses_launch_preference_on_resume(headless, monkeypatch, preflight):
+    run, responses, _ = headless
+    reports = []
+    monkeypatch.setattr(commands, "show_report", lambda: reports.append(True))
+    responses[:] = [AIMessage(content="done")]
+    assert run(query="calculate", preflight=False) == 0
+    saved = SessionStore().list_sessions()[0]
+    config = SessionStore().get_session_metadata(saved.session_id)[1].graph_config
+    assert not reports
+    assert run(resume_session=saved.session_id, preflight=preflight) == 0
+    assert reports == ([True] if preflight else [])
+    assert SessionStore().get_session_metadata(saved.session_id)[1].graph_config == config
+    assert "preflight" not in config.model_dump()
+
+
 def test_headless_clarification_survives_restart_and_interactive_answer(headless, monkeypatch):
     run, responses, requests = headless
     responses[:] = [call("load_tools", names=["ask_human"]), call("ask_human", question="Which calculator?"), AIMessage(content="done")]
