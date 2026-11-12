@@ -8,6 +8,11 @@ shared-filesystem planning beyond a normal PyPI install.
 For individual PBS jobs, [Deep Agent can read skills and write batch scripts](pbs_jobs_with_skills.md)
 using its submission-host shell and the existing ASE Python engine.
 
+For Bebop, use the `pbs-hpc` skill and its
+[Bebop reference](../src/chemgraph/skills/pbs-hpc/references/bebop.md), alongside
+the existing Aurora, Polaris, and Crux references. For example: “Use pbs-hpc
+and its Bebop reference to prepare this submission.”
+
 ## Execution backends
 
 | Backend | Extra | Typical role |
@@ -62,36 +67,3 @@ facility-specific assumptions. See [MCP servers](mcp_servers.md).
 
 Never place tokens in campaign files, prompts, repository config, or job logs.
 Use facility-approved secret mechanisms and least-privilege endpoints.
-
-## PBS and machine guidance
-
-Compose operational guidance as:
-
-```text
-PBS operations + selected machine guidance + software guidance
-```
-
-The packaged [pbs skill](../src/chemgraph/skills/pbs/SKILL.md) provides portable
-scheduler operations through native shell commands. It works independently of
-ChemGraph imports and can be copied into another compatible agent's skill
-directory.
-
-The [pbs-hpc skill](../src/chemgraph/skills/pbs-hpc/SKILL.md) provides ChemGraph
-batch examples and machine references for Aurora, Polaris, Crux, and
-[Bebop](../src/chemgraph/skills/pbs-hpc/references/bebop.md). Bebop is a reference
-loaded through `pbs-hpc`, not a separate skill. It covers resources, queues,
-accounts, storage, modules, and dated official sources.
-
-Example prompts:
-
-- “Use the PBS skill to inspect this job on the current machine.”
-- “Use pbs-hpc and its Bebop reference to prepare this submission.”
-- “Use the PBS skill with the supplied Polaris settings.”
-
-Existing execution configurations and Academy profiles are unchanged. Software
-skills, including Gaussian, are future work.
-
-`chemgraph.skills.skill_directory()` locates the installed skill root. Existing
-bundled-skill discovery exposes `pbs` and `pbs-hpc`; see
-[skill discovery](skills.md). Native PBS IDs must not be passed to ChemGraph's
-Future-based backend job tools.

@@ -86,9 +86,9 @@ import chemgraph
 assert chemgraph.__file__.startswith(sys.argv[1]), chemgraph.__file__
 from chemgraph.skills.backend import BundledSkillsBackend
 backend = BundledSkillsBackend()
-for name in ('pbs', 'pbs-hpc'):
-    assert backend.read(f'/{name}/SKILL.md').error is None
+assert backend.read('/pbs-hpc/SKILL.md').error is None
 assert backend.read('/pbs-hpc/references/bebop.md').error is None
+assert backend.read('/pbs/SKILL.md').error == 'file_not_found'
 assert backend.read('/bebop/SKILL.md').error == 'file_not_found'
 assert b'PBS' in backend.download_files(['/pbs-hpc/assets/job.pbs.template'])[0].content
 assert backend.write('/pbs-hpc/SKILL.md', 'overwrite').error
@@ -112,13 +112,3 @@ assert read.file_data['content'] == aurora_resource.decode('utf-8').replace('\\r
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-
-
-def test_skill_directory_locates_pbs_and_machine_reference():
-    from chemgraph.skills import skill_directory
-
-    root = Path(skill_directory())
-    assert root.is_absolute()
-    assert (root / "pbs/SKILL.md").is_file()
-    assert (root / "pbs-hpc/references/bebop.md").is_file()
-    assert not (root / "bebop").exists()

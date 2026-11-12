@@ -20,10 +20,9 @@ def test_bundled_file_protocol(asynchronous):
         "/chemgraph/",
         "/globus-transfer/",
         "/iri-hpc/",
-        "/pbs/",
         "/pbs-hpc/",
     }
-    assert len(call("glob", "**/SKILL.md").matches) == 5
+    assert len(call("glob", "**/SKILL.md").matches) == 4
     assert len(call("glob", "SKILL.md", "/chemgraph/").matches) == 1
     assert "Use ChemGraph" in call("read", "/chemgraph/SKILL.md").file_data["content"]
     assert call("grep", "PBS", "/pbs-hpc/", max_count=1).matches

@@ -50,12 +50,10 @@ For ASE calculations, also read the `chemgraph` skill's
 [Python batch example](../chemgraph/references/ase-batch.md). Write the calculation
 script in the workspace and run it inside PBS; no MCP server or Parsl is needed.
 
-1. For ALCF systems, start with [the PBS template](assets/job.pbs.template).
-   For Bebop, use its [example directives](references/bebop.md#example-directives);
-   omit the template's ALCF `system` and `filesystems` directives. Write the script
-   in the execution filesystem. Replace placeholders, keep PBS directives before
-   executable statements, and quote shell paths. Choose the launch command for
-   the target site and application.
+1. Read [the PBS template](assets/job.pbs.template) and write a completed copy
+   into the execution filesystem. Replace every placeholder, keep PBS directives
+   before executable statements, and quote shell paths. Choose the launch command
+   for the target site and application.
 2. Check input visibility on compute nodes. Arrange staging first when the
    submitting host and workers do not share files. Validate the script syntax
    with `bash -n` when the execution environment provides Bash.
@@ -96,7 +94,7 @@ PBS command reference: [ALCF running jobs](https://docs.alcf.anl.gov/running-job
 
 ## ChemGraph execution boundaries
 
-ChemGraph's Aurora, Polaris, and Crux `hpc_configs` Parsl configurations use
+ChemGraph's `hpc_configs` Parsl configurations for these systems use
 `LocalProvider` inside existing allocations; they do not acquire a PBS
 allocation automatically. Aurora and Crux require `PBS_NODEFILE`; Polaris has
 a local/testing fallback, which is not evidence of a valid allocation.

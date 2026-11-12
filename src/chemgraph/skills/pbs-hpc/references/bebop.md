@@ -3,7 +3,7 @@
 ## Machine
 
 Use this reference for Argonne LCRC's Bebop cluster with the
-[pbs-hpc workflow](../SKILL.md) or [portable PBS skill](../../pbs/SKILL.md).
+[pbs-hpc workflow](../SKILL.md).
 
 ## Resources
 
@@ -51,7 +51,9 @@ job shell. Check the executable with `command -v EXECUTABLE` after setup.
 
 ## Example directives
 
-Replace placeholders with workload settings; include units in the memory value.
+When adapting the shared PBS template, omit its ALCF `system` and `filesystems`
+directives and use the Bebop resource selection below. Replace placeholders
+with workload settings; include units in the memory value.
 Append `:bigdata=true` to the selection only when large local scratch is needed.
 
 ```text
