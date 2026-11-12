@@ -6,8 +6,9 @@ from rich.console import Console
 
 from chemgraph.agent.main_session import MainAgentTurnResult
 from chemgraph.cli.formatting import (
-    ToolEventRenderer, _content_text, action_review_summary, build_action_review, console,
-    format_action_review, format_response, list_models, summarize_tool_args, summarize_tool_result,
+    StreamMessageRenderer, ToolEventRenderer, _content_text, action_review_summary, build_action_review, console,
+    format_action_review, format_response, list_models, show_tool_output_log, summarize_tool_args,
+    summarize_tool_result, tool_output_log,
 )
 from chemgraph.models.endpoints.codex import SPEC as CODEX_SPEC
 
@@ -301,3 +302,22 @@ def test_event_renderer_summarizes_callback_payloads_and_concurrent_workers():
     results = {line.split(" · ")[0].removeprefix("  ⎿ "): line for line in lines[3:]}
     assert results[later].startswith(f"  ⎿ {later} · read_file #3 · ")
     assert results[earlier].startswith(f"  ⎿ {earlier} · read_file(/long/")
+
+
+def test_expand_pages_the_full_output_of_the_last_turn(monkeypatch):
+    from contextlib import nullcontext
+
+    from langchain_core.messages import ToolMessage
+
+    monkeypatch.setattr(console, "pager", lambda **_kwargs: nullcontext())
+    body = "\n".join(f"{n:>4}  body-{n}" for n in range(1, 301))
+    renderer = StreamMessageRenderer(console)
+    tool_output_log.start_turn()
+    with console.capture() as capture:
+        renderer.render([
+            AIMessage("", id="a", tool_calls=[{"name": "read_file", "args": {"file_path": "/S.md"}, "id": "r"}]),
+            ToolMessage(body, tool_call_id="r", name="read_file", id="t"),
+        ])
+        show_tool_output_log()
+    output = capture.get()
+    assert "⎿ Read 300 lines" in output and "body-250" in output and '"file_path": "/S.md"' in output

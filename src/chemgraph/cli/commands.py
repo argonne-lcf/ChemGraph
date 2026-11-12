@@ -70,6 +70,8 @@ from chemgraph.cli.formatting import (
     format_token_usage,
     StreamMessageRenderer,
     ToolEventRenderer,
+    show_tool_output_log,
+    tool_output_log,
 )
 
 logger = logging.getLogger(__name__)
@@ -702,7 +704,7 @@ def _run_query(agent, query, thread_id, verbose, resume_from, renderer):
         if resume_from:
             console.print(f"[blue]Resuming from session:[/blue] {resume_from}")
 
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {"configurable": {"thread_id": str(thread_id)}}
     max_interrupts = 10  # safety guard
     interrupt_count = 0
 
@@ -1393,6 +1395,7 @@ _INTERACTIVE_COMMANDS = {
     "auto",
     "clear",
     "config",
+    "expand",
     "help",
     "history",
     "model",
@@ -1406,6 +1409,7 @@ _INTERACTIVE_BARE_ALIASES = {
     "clear": "clear",
     "config": "config",
     "exit": "quit",
+    "expand": "expand",
     "help": "help",
     "history": "history",
     "q": "quit",
@@ -1873,6 +1877,7 @@ Available commands:
   /help              Show this help message
   /clear             Clear screen
   /config            Show current configuration
+  /expand            Show the full tool calls and results of the last turn
   /model <name>      Change model
   /workflow <type>   Change workflow type
   /auto \\[on|off]     Approve tool actions without asking (this session only)
@@ -1907,6 +1912,12 @@ Example queries:
                         style="blue",
                     )
                 )
+                continue
+            elif command == "expand":
+                if argument:
+                    console.print("[red]Usage: /expand[/red]")
+                    continue
+                show_tool_output_log()
                 continue
             elif command == "clear":
                 if argument:
@@ -2112,6 +2123,7 @@ Example queries:
                     "[bold cyan]Enter query to continue with[/bold cyan]"
                 )
                 if resume_query.strip():
+                    tool_output_log.start_turn()
                     run_options = {}
                     if standalone_thread_id is not None:
                         run_options["thread_id"] = standalone_thread_id
@@ -2136,6 +2148,7 @@ Example queries:
                         "workflow.[/yellow]"
                     )
                     continue
+                tool_output_log.start_turn()
                 if checkpoint_runtime is None:
                     result = retry_main_agent_session(main_session, verbose=verbose)
                 else:
@@ -2265,6 +2278,7 @@ Example queries:
                     )
                 continue
 
+            tool_output_log.start_turn()
             if main_session is not None:
                 if checkpoint_runtime is None:
                     result = run_main_agent_query(

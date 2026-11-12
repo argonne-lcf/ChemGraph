@@ -355,6 +355,50 @@ def _field(message: Any, name: str) -> Any:
     return getattr(message, name, None)
 
 
+class ToolOutputLog:
+    """Full tool calls and results of the latest REPL turn, for ``/expand``."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._entries: list[tuple[str, Any, str]] = []
+
+    def start_turn(self) -> None:
+        with self._lock:
+            self._entries.clear()
+
+    def record(self, title: str, args: Any, text: str) -> None:
+        with self._lock:
+            self._entries.append((title, args, text))
+
+    def entries(self) -> list[tuple[str, Any, str]]:
+        with self._lock:
+            return list(self._entries)
+
+
+tool_output_log = ToolOutputLog()
+
+
+def show_tool_output_log(log: ToolOutputLog = tool_output_log) -> None:
+    """Page the full, unshortened tool activity of the latest turn."""
+    entries = log.entries()
+    if not entries:
+        console.print("[dim]No tool output in the last turn.[/dim]")
+        return
+    with console.pager(styles=False, links=False):
+        for title, args, text in entries:
+            if isinstance(args, str):
+                try:
+                    args = ast.literal_eval(args) if len(args) <= 65536 else args
+                except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+                    pass
+            if not isinstance(args, str):
+                args = json.dumps(args, indent=2, ensure_ascii=False, default=str)
+            console.print(Text(f"⏺ {title}", style="bold"))
+            console.print(Text("Arguments:\n" + _safe_review_text(args)))
+            console.print(Text("Result:\n" + (_safe_review_text(text) or "(no output)")))
+            console.print()
+
+
 class StreamMessageRenderer:
     """Print new graph messages as compact tool activity.
 
@@ -371,7 +415,7 @@ class StreamMessageRenderer:
         self._seen: set[Any] = set()
         self._pending: str | None = None
         self._query_pending = False
-        self._labels: dict[str, tuple[str, str]] = {}
+        self._labels: dict[str, tuple[str, Any]] = {}
 
     def _print(self, text: Text) -> None:
         self._console.print(text, no_wrap=True, overflow="ellipsis")
@@ -420,7 +464,8 @@ class StreamMessageRenderer:
             name = str(_field(message, "name") or "tool")
             text, status, artifact = tool_result_parts(message)
             summary, failed = summarize_tool_result(name, text, status=status, artifact=artifact)
-            _, label = self._labels.pop(str(_field(message, "tool_call_id")), (name, ""))
+            label, args = self._labels.pop(str(_field(message, "tool_call_id")), ("", None))
+            tool_output_log.record(f"{name} {label}".strip(), args, text)
             self._print(tool_result_text(
                 summary, failed=failed, prefix=f"{name} {label} · " if label else "",
             ))
@@ -436,8 +481,8 @@ class StreamMessageRenderer:
         for index, call in enumerate(calls, start=1):
             name = str(call.get("name") or "tool")
             label = f"#{index}/{len(calls)}" if len(calls) > 1 else ""
-            self._labels[str(call.get("id"))] = (name, label)
             args = call.get("args")
+            self._labels[str(call.get("id"))] = (label, args)
             reason = args.get("reason") if isinstance(args, dict) else None
             self._print(tool_call_line(
                 name, args, label=label, reason=reason, width=self._console.width,
@@ -534,6 +579,10 @@ class ToolEventRenderer:
             text, status, artifact = str(payload.get("error", "")), "error", None
         else:
             text, status, artifact = tool_result_parts(payload.get("result"))
+        tool_output_log.record(
+            " ".join(filter(None, [f"{call['scope']} ·" if call["scope"] else "", name, call["label"]])),
+            call["args"], text,
+        )
         prefix = ""
         if call["label"] or ambiguous:
             worker = f"{_one_line(str(call['scope']), 40)} · " if call["scope"] else ""

@@ -1224,7 +1224,7 @@ def test_run_query_preserves_structured_deepagent_approval(monkeypatch):
         (
             {"messages": ["done"]},
             {
-                "configurable": {"thread_id": 10},
+                "configurable": {"thread_id": "10"},
                 "recursion_limit": 20,
             },
             "run lint",
@@ -1371,7 +1371,7 @@ def test_run_query_persists_chained_deepagent_interrupt(monkeypatch):
     assert prompted == payloads
     assert persisted == [
         {
-            "configurable": {"thread_id": 11},
+            "configurable": {"thread_id": "11"},
             "recursion_limit": 20,
         }
     ]

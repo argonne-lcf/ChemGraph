@@ -659,7 +659,7 @@ def test_cli_resume_persists_deepagent_logs_and_session(
     state_logs = sorted(log_dir.glob("state_thread_7_*.json"))
     assert len(state_logs) == 2
     saved_states = [json.loads(path.read_text()) for path in state_logs]
-    assert all(saved["thread_id"] == 7 for saved in saved_states)
+    assert all(saved["thread_id"] == "7" for saved in saved_states)
     assert "Result written." not in state_logs[0].read_text()
     assert "Result written." in state_logs[1].read_text()
     assert not (workspace / "cg_logs").exists()
