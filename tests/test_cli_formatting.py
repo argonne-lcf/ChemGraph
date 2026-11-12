@@ -6,8 +6,8 @@ from rich.console import Console
 
 from chemgraph.agent.main_session import MainAgentTurnResult
 from chemgraph.cli.formatting import (
-    _content_text, action_review_summary, build_action_review, console,
-    format_action_review, format_response, list_models,
+    ToolEventRenderer, _content_text, action_review_summary, build_action_review, console,
+    format_action_review, format_response, list_models, summarize_tool_args, summarize_tool_result,
 )
 from chemgraph.models.endpoints.codex import SPEC as CODEX_SPEC
 
@@ -230,3 +230,74 @@ def test_format_response_renders_main_agent_turn_result():
     output = capture.get()
     assert "ChemGraph Response" in output
     assert "Delegated calculation complete" in output
+
+
+
+@pytest.mark.parametrize("name,content,kwargs,expected", [
+    ("read_file", "\n".join(f"{n:>4}  x" for n in range(1, 143)), {}, ("Read 142 lines", False)),
+    ("execute", "a\nb\nc\n[Command failed with exit code 1]", {}, ("Exit 1 · a", True)),
+    ("execute", "partial", {"artifact": {"exit_code": 2}}, ("Exit 2 · partial", True)),
+    ("grep", "No matches found", {}, ("No matches", False)),
+    ("ls", "['/a.py', '/b.py']", {}, ("2 paths", False)),
+    ("run_ase", "\n".join(f"line {n}" for n in range(30)), {}, ("line 0\nline 1\n… +28 lines", False)),
+])
+def test_tool_result_summary_is_bounded(name, content, kwargs, expected):
+    assert summarize_tool_result(name, content, **kwargs) == expected
+
+
+def test_tool_args_summary_is_one_bounded_escaped_line():
+    summary = summarize_tool_args("write_file", str({"content": "x\x1b[2J" * 5000, "reason": "why"}))
+    assert len(summary) <= 100 and "\\x1b" in summary and "\x1b" not in summary and "why" not in summary
+
+
+def test_event_renderer_summarizes_callback_payloads_and_concurrent_workers():
+    import io
+    import threading
+
+    from langchain_core.tools import ToolException, tool
+
+    from chemgraph.agent.events import _AstreamEventCallback
+
+    @tool
+    def read_file(file_path: str) -> str:
+        """Read a file."""
+        return "\n".join(f"{n:>4}  body-{n}" for n in range(1, 301))
+
+    @tool
+    def broken(value: int) -> str:
+        """Fail."""
+        raise ToolException("bad value")
+
+    broken.handle_tool_error = True
+    output = io.StringIO()
+    render = ToolEventRenderer(Console(file=output, width=80, color_system=None))
+    config = {"callbacks": [_AstreamEventCallback(render, "t")]}
+    read_file.invoke({"name": "read_file", "args": {"file_path": "/S.md"}, "id": "1", "type": "tool_call"}, config)
+    broken.invoke({"name": "broken", "args": {"value": 1}, "id": "2", "type": "tool_call"}, config)
+    render("tool_call_started", {"tool_name": "ask_human", "arguments": "{}", "call_id": "q"})
+    render("tool_call_failed", {"error": "GraphInterrupt((Interrupt(value='?'),))", "call_id": "q"})
+    assert "⎿ Read 300 lines" in output.getvalue() and "⎿ bad value" in output.getvalue()
+    assert "Interrupt" not in output.getvalue()  # A pause for input is not a failure.
+
+    # Two workers start from executor threads while their parent `task` runs.
+    output = io.StringIO()
+    render = ToolEventRenderer(Console(file=output, width=80, color_system=None))
+    render("tool_call_started", {"tool_name": "task", "arguments": "{}", "call_id": "t"})
+    path = str({"file_path": "/long/" + "nested/" * 30})
+    threads = [threading.Thread(target=render, args=("tool_call_started", {
+        "tool_name": "read_file", "subagent_name": worker, "call_id": worker, "arguments": path,
+    })) for worker in ("alpha", "beta")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    for worker in ("beta", "alpha"):
+        render("tool_call_finished", {"call_id": worker, "result": {"content": "   1  x"}})
+    lines = output.getvalue().splitlines()
+    assert lines[0] == "⏺ task()" and all(len(line) <= 80 for line in lines)
+    assert lines[2].endswith(" #3")  # The later start is labelled; truncation keeps it.
+    later = lines[2].split(" · ")[0].removeprefix("⏺ ")
+    earlier = "beta" if later == "alpha" else "alpha"
+    results = {line.split(" · ")[0].removeprefix("  ⎿ "): line for line in lines[3:]}
+    assert results[later].startswith(f"  ⎿ {later} · read_file #3 · ")
+    assert results[earlier].startswith(f"  ⎿ {earlier} · read_file(/long/")

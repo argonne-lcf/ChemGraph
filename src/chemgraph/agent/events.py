@@ -134,6 +134,10 @@ class _BaseDashboardEventCallback(BaseCallbackHandler):
             "tool_name": _serialized_name(serialized),
             "arguments": _serialize_state(input_str),
         }
+        if kwargs.get("run_id") is not None:
+            payload["call_id"] = str(kwargs["run_id"])
+        if kwargs.get("tool_call_id"):
+            payload["tool_call_id"] = str(kwargs["tool_call_id"])
         metadata = kwargs.get("metadata")
         if isinstance(metadata, dict) and metadata.get(SUBAGENT_METADATA_KEY):
             payload["subagent_name"] = str(metadata[SUBAGENT_METADATA_KEY])
@@ -153,6 +157,8 @@ class _BaseDashboardEventCallback(BaseCallbackHandler):
 
     def on_tool_end(self, output, **kwargs) -> None:
         payload: dict[str, Any] = {"result": _serialize_state(output)}
+        if kwargs.get("run_id") is not None:
+            payload["call_id"] = str(kwargs["run_id"])
         name = kwargs.get("name")
         if name:
             payload["tool_name"] = name
@@ -160,6 +166,8 @@ class _BaseDashboardEventCallback(BaseCallbackHandler):
 
     def on_tool_error(self, error, **kwargs) -> None:
         payload = {"error": repr(error)}
+        if kwargs.get("run_id") is not None:
+            payload["call_id"] = str(kwargs["run_id"])
         name = kwargs.get("name")
         if name:
             payload["tool_name"] = name

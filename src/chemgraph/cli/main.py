@@ -31,7 +31,7 @@ from chemgraph.cli.commands import (
     ALL_WORKFLOW_TYPES,
     WORKFLOW_ALIASES,
     _anchor_skill_dirs,
-    _render_deep_agent_event,
+    make_tool_event_renderer,
     resolve_workflow,
     delete_session_cmd,
     initialize_agent,
@@ -871,8 +871,11 @@ def _handle_run(args: argparse.Namespace) -> None:
     on_event = trace.on_event if trace else None
     if args.workflow == "deep_agent":
         # Delegated tool calls are not in the printed messages; show them as events.
-        def on_event(event, payload, _trace=on_event):
-            _render_deep_agent_event(event, payload)
+        def on_event(
+            event, payload, _trace=on_event,
+            _render=make_tool_event_renderer(verbose=args.verbose > 0, subagents_only=True),
+        ):
+            _render(event, payload)
             if _trace is not None:
                 _trace(event, payload)
 

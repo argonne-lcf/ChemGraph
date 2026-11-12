@@ -272,6 +272,9 @@ class ChemGraph:
         session instance. Change it whenever those components' behavior changes.
     on_event : callable, optional
         Callback invoked with dashboard workflow events, by default None.
+    message_renderer : callable, optional
+        Called with the streamed message list instead of printing each new
+        message with ``pretty_print()``; the CLI uses it for compact output.
 
     Raises
     ------
@@ -309,6 +312,7 @@ class ChemGraph:
         deepagent_skills: Sequence[str] | None = None,
         deepagent_auto_approve: bool = False,
         on_event: Optional[EventCallback] = None,
+        message_renderer: Optional[Callable[[list], None]] = None,
         reasoning_effort: Optional[str] = None,
         checkpointer: BaseCheckpointSaver | None = None,
         deepagent_discover_skills: bool = True,
@@ -546,6 +550,7 @@ class ChemGraph:
         self.deepagent_auto_approve = deepagent_auto_approve
         self.checkpointer = checkpointer
         self.on_event = on_event
+        self.message_renderer = message_renderer
         self._usage: UsageCollector | None = None
         self._usage_turns: list[UsageCollector] = []
         self._usage_operation = 0
@@ -1269,9 +1274,12 @@ class ChemGraph:
                     if "messages" in s and s["messages"] != prev_msgs:
                         new_message = s["messages"][-1]
                         try:
-                            new_message.pretty_print()
+                            if self.message_renderer is not None:
+                                self.message_renderer(s["messages"])
+                            else:
+                                new_message.pretty_print()
                         except Exception:
-                            pass
+                            logger.debug("Could not display a message.", exc_info=True)
                         logger.info(new_message)
                         prev_msgs = s["messages"]
                     last_st = s

@@ -6,15 +6,20 @@ response formatting, and API-key status display.
 
 from __future__ import annotations
 
+import ast
 import json
+import logging
 import os
 import re
+import threading
 from difflib import unified_diff
 from typing import Any
 
 from rich.align import Align
+from rich.cells import cell_len, set_cell_size
 from rich.console import Console, Group
 from rich.markdown import Markdown
+from rich.markup import escape
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
@@ -24,6 +29,7 @@ from chemgraph.models.endpoints.registry import CATALOG_ENDPOINTS, catalog_entri
 
 # Shared console instance for the CLI package.
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 def format_token_usage(usage: dict) -> Text:
@@ -170,6 +176,376 @@ def build_action_review(
 def format_action_review(action: dict, index: int, total: int) -> Panel:
     """Preview an action using only its arguments, without reading host files."""
     return build_action_review(action, index, total)[0]
+
+
+# ---------------------------------------------------------------------------
+# Compact tool activity
+# ---------------------------------------------------------------------------
+
+_PRIMARY_ARG_KEYS = ("file_path", "path", "command", "pattern", "description", "query")
+_EXIT_TRAILER = re.compile(r"\n?\[Command (?:succeeded|failed) with exit code (-?\d+)\]")
+_READ_ROW = re.compile(r"^\s*\d+(?:  |\t)")
+
+
+def _one_line(value: str, limit: int) -> str:
+    """Return a single escaped line of at most *limit* characters."""
+    text = _safe_review_text(value).replace("\n", "⏎").replace("\t", " ")
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def summarize_tool_args(name: str, args: Any, limit: int = 100) -> str:
+    """Summarize tool arguments (a dict or its ``str``) on one bounded line."""
+    if isinstance(args, str) and len(args) <= 65536:
+        try:
+            args = ast.literal_eval(args)
+        except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+            pass
+    if not isinstance(args, dict):
+        return _one_line(str(args), limit)
+    args = {key: value for key, value in args.items() if key != "reason"}
+    for key in _PRIMARY_ARG_KEYS:
+        if isinstance(args.get(key), str):
+            return _one_line(args[key], limit)
+    parts = []
+    for key, value in args.items():
+        if not isinstance(value, str):
+            value = json.dumps(value, ensure_ascii=False, default=str)
+        parts.append(f"{key}={_one_line(value, min(40, limit))}")
+    return _one_line(", ".join(parts), limit)
+
+
+def tool_result_parts(value: Any) -> tuple[str, str | None, Any]:
+    """Return ``(text, status, artifact)`` from a tool message or its serialized form."""
+    if isinstance(value, dict) and isinstance(value.get("update"), dict):
+        # A serialized Command (e.g. the ``task`` tool) carries its ToolMessage.
+        messages = value["update"].get("messages")
+        if isinstance(messages, list) and messages and isinstance(messages[-1], dict):
+            value = messages[-1]
+    if isinstance(value, dict) and "content" in value:
+        content, status, artifact = value["content"], value.get("status"), value.get("artifact")
+    elif hasattr(value, "content") and hasattr(value, "type"):
+        content = value.content
+        status, artifact = getattr(value, "status", None), getattr(value, "artifact", None)
+    else:
+        content, status, artifact = value, None, None
+    if isinstance(content, str):
+        return content, status, artifact
+    text = _content_text(content)
+    if not text:
+        try:
+            text = json.dumps(content, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            text = repr(content)
+    return text, status, artifact
+
+
+def _first_line(text: str) -> str:
+    return next((line for line in text.splitlines() if line.strip()), "")
+
+
+def _preview(text: str) -> str:
+    """Show short output as-is; otherwise its first lines and how much is hidden."""
+    text = text.strip()
+    if not text:
+        return "(no output)"
+    lines = text.splitlines()
+    if len(lines) <= 2 and len(text) <= 160:
+        return "\n".join(_one_line(line, 160) for line in lines)
+    shown = [_one_line(line, 120) for line in lines[:2]]
+    shown.append(f"… +{len(lines) - 2} lines" if len(lines) > 2 else f"… {len(text):,} chars")
+    return "\n".join(shown)
+
+
+def _summarize_result(name: str, text: str, status: str | None, artifact: Any) -> tuple[str, bool]:
+    stripped = text.strip()
+    if status == "error":
+        return _one_line(_first_line(stripped) or "Error", 160), True
+    if name == "execute":
+        code = artifact.get("exit_code") if isinstance(artifact, dict) else None
+        trailers = list(_EXIT_TRAILER.finditer(text))
+        if not isinstance(code, int) and trailers:
+            code = int(trailers[-1].group(1))
+        body = _EXIT_TRAILER.sub("", text).strip()
+        if isinstance(code, int) and code != 0:
+            first = _first_line(body)
+            return f"Exit {code}" + (f" · {_one_line(first, 120)}" if first else ""), True
+        return _preview(body), False
+    if name == "read_file":
+        if stripped.startswith("Error"):
+            return _one_line(_first_line(stripped), 160), True
+        rows = sum(1 for line in text.splitlines() if _READ_ROW.match(line))
+        if rows or not stripped:
+            return f"Read {rows} line{'' if rows == 1 else 's'}", False
+    elif name in {"ls", "glob"}:
+        if stripped == "No files found":
+            return "No files", False
+        listing = stripped.split("\n\n", 1)[0]
+        try:
+            paths = ast.literal_eval(listing) if len(listing) <= 65536 else None
+        except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+            paths = None
+        if isinstance(paths, list):
+            more = " (truncated)" if listing != stripped else ""
+            return f"{len(paths)} path{'' if len(paths) == 1 else 's'}{more}", False
+    elif name == "grep" and stripped == "No matches found":
+        return "No matches", False
+    return _preview(text), False
+
+
+def summarize_tool_result(
+    name: str, content: Any, *, status: str | None = None, artifact: Any = None,
+) -> tuple[str, bool]:
+    """Return a ≤3-line summary of a tool result and whether it failed."""
+    text = content if isinstance(content, str) else tool_result_parts(content)[0]
+    try:
+        return _summarize_result(name, text, status, artifact)
+    except Exception:  # noqa: BLE001 - display must never break a run.
+        logger.debug("Could not summarize %s output.", name, exc_info=True)
+        return _preview(str(text)), status == "error"
+
+
+def tool_call_line(
+    name: str, args: Any, *, subagent: str | None = None, label: str = "",
+    reason: Any = None, width: int | None = None,
+) -> Text:
+    """``⏺ [subagent · ]name(args) [label]`` plus an optional reason line.
+
+    The argument budget leaves room for the label so truncation never hides it.
+    """
+    line = Text("⏺ ", style="cyan")
+    if subagent:
+        line.append(_one_line(str(subagent), 40) + " · ", style="cyan")
+    line.append(_one_line(str(name), 60), style="bold")
+    tail = f" {label}" if label else ""
+    limit = 100 if width is None else max(12, min(100, width - line.cell_len - cell_len(tail) - 2))
+    summary = summarize_tool_args(name, args, limit)
+    if cell_len(summary) > limit:  # Wide characters take two terminal cells.
+        summary = set_cell_size(summary, limit - 1) + "…"
+    line.append(f"({summary})")
+    if tail:
+        line.append(tail, style="dim")
+    if reason:
+        line.append("\n")
+        line.append_text(reason_text(reason))
+    return line
+
+
+def tool_result_text(summary: str, *, failed: bool = False, prefix: str = "") -> Text:
+    """Indent a result summary under its call with ``⎿``."""
+    lines = (prefix + summary).splitlines() or [""]
+    body = "\n".join(["  ⎿ " + lines[0], *("    " + line for line in lines[1:])])
+    return Text(body, style="red" if failed else "dim")
+
+
+def reason_text(reason: Any) -> Text:
+    return Text("  ↳ " + _one_line(str(reason), 200), style="dim")
+
+
+def _note_text(text: str) -> Text:
+    lines = text.strip().splitlines()
+    shown = [_one_line(line, 160) for line in lines[:3]]
+    if len(lines) > 3:
+        shown.append(f"… +{len(lines) - 3} lines")
+    return Text("\n".join(shown), style="dim")
+
+
+def _field(message: Any, name: str) -> Any:
+    if isinstance(message, dict):
+        return message.get(name)
+    return getattr(message, name, None)
+
+
+class StreamMessageRenderer:
+    """Print new graph messages as compact tool activity.
+
+    Seen message IDs persist across turns on one thread. The user's query (the
+    first new human message of a turn) is not echoed; later human messages are
+    graph-generated (e.g. structured JSON answers) and are printed in full. The
+    final text-only AI message is left to :func:`format_response`. With
+    ``verbose``, every new message is pretty-printed in full instead.
+    """
+
+    def __init__(self, output: Console | None = None, *, verbose: bool = False) -> None:
+        self._console = output or console
+        self._verbose = verbose
+        self._seen: set[Any] = set()
+        self._pending: str | None = None
+        self._query_pending = False
+        self._labels: dict[str, tuple[str, str]] = {}
+
+    def _print(self, text: Text) -> None:
+        self._console.print(text, no_wrap=True, overflow="ellipsis")
+
+    def begin_turn(self) -> None:
+        self._pending = None
+        self._query_pending = True
+
+    def finish(self) -> None:
+        self._pending = None
+        self._query_pending = False
+
+    def render(self, messages: Any) -> None:
+        for index, message in enumerate(messages or []):
+            # Some graphs leave human messages without IDs; a thread's history
+            # is append-only, so position plus content identifies them.
+            key = _field(message, "id") or (
+                index, _field(message, "type"), hash(_content_text(_field(message, "content"))),
+            )
+            if key in self._seen:
+                continue
+            self._seen.add(key)
+            if self._verbose:
+                message.pretty_print()
+            else:
+                self._render_one(message)
+
+    def _render_one(self, message: Any) -> None:
+        kind = _field(message, "type")
+        if kind == "human" and self._query_pending:
+            self._query_pending = False
+            return
+        if kind == "human":
+            # Graph-generated follow-ups (e.g. structured JSON after the answer)
+            # keep any pending answer pending: format_response still shows it.
+            text = _content_text(_field(message, "content")).strip()
+            if text:
+                self._console.print(Text(_safe_review_text(text)))
+            return
+        if kind not in {"ai", "tool"}:
+            return
+        if self._pending is not None:
+            self._print(_note_text(self._pending))
+            self._pending = None
+        if kind == "tool":
+            name = str(_field(message, "name") or "tool")
+            text, status, artifact = tool_result_parts(message)
+            summary, failed = summarize_tool_result(name, text, status=status, artifact=artifact)
+            _, label = self._labels.pop(str(_field(message, "tool_call_id")), (name, ""))
+            self._print(tool_result_text(
+                summary, failed=failed, prefix=f"{name} {label} · " if label else "",
+            ))
+            return
+        text = _content_text(_field(message, "content")).strip()
+        calls = [call for call in _field(message, "tool_calls") or [] if isinstance(call, dict)]
+        if not calls:
+            if text:
+                self._pending = text
+            return
+        if text:
+            self._print(_note_text(text))
+        for index, call in enumerate(calls, start=1):
+            name = str(call.get("name") or "tool")
+            label = f"#{index}/{len(calls)}" if len(calls) > 1 else ""
+            self._labels[str(call.get("id"))] = (name, label)
+            args = call.get("args")
+            reason = args.get("reason") if isinstance(args, dict) else None
+            self._print(tool_call_line(
+                name, args, label=label, reason=reason, width=self._console.width,
+            ))
+
+
+class ToolEventRenderer:
+    """Render tool callback events (main_agent and delegated workers) compactly.
+
+    LangChain may deliver these callbacks from executor threads, so bookkeeping
+    and output are serialized. Calls that overlap with another displayed call
+    get a unique ``#n`` label on their start and result lines.
+    """
+
+    def __init__(
+        self, output: Console | None = None, *, verbose: bool = False, subagents_only: bool = False,
+    ) -> None:
+        self._console = output or console
+        self._verbose = verbose
+        self._subagents_only = subagents_only
+        self._lock = threading.Lock()
+        self._batched: set[str] = set()
+        self._calls: dict[str, dict[str, Any]] = {}
+        self._sequence = 0
+
+    def _print(self, text: Any) -> None:
+        self._console.print(text, no_wrap=True, overflow="ellipsis")
+
+    def __call__(self, event: str, payload: dict[str, Any]) -> None:
+        with self._lock:
+            if event == "llm_decision":
+                calls = [call for call in payload.get("tool_calls") or [] if call.get("id")]
+                if len(calls) > 1:
+                    self._batched.update(str(call["id"]) for call in calls)
+            elif event == "tool_call_started":
+                self._started(payload)
+            elif event in {"tool_call_finished", "tool_call_failed"}:
+                self._ended(event, payload)
+
+    @staticmethod
+    def _concurrent(scope: str | None, other: str | None) -> bool:
+        # A direct call that is outstanding while a worker runs is its parent
+        # delegation, not a parallel sibling.
+        return scope == other or (scope is not None and other is not None)
+
+    def _started(self, payload: dict[str, Any]) -> None:
+        subagent = payload.get("subagent_name")
+        if self._subagents_only and not subagent:
+            return
+        name = str(payload.get("tool_name") or "unknown")
+        arguments = payload.get("arguments", "")
+        reason = payload.get("reason")
+        self._sequence += 1
+        batched = str(payload.get("tool_call_id")) in self._batched
+        self._batched.discard(str(payload.get("tool_call_id")))
+        overlapping = False
+        for other in self._calls.values():
+            if self._concurrent(subagent, other["scope"]):
+                other["overlapped"] = overlapping = True
+        label = f"#{self._sequence}" if batched or overlapping else ""
+        call = {"name": name, "scope": subagent, "label": label, "args": arguments,
+                "overlapped": overlapping}
+        if payload.get("call_id"):
+            self._calls[str(payload["call_id"])] = call
+        if self._verbose:
+            # Full arguments, as before compact rendering.
+            self._console.print(
+                (f"[dim]Subagent[/dim] [bold cyan]{escape(str(subagent))}[/bold cyan] "
+                 if subagent else "[bold cyan]main_agent[/bold cyan] ")
+                + f"[dim]→[/dim] [bold]{escape(name)}[/bold]({escape(str(arguments))})"
+                + (f"\n[dim]  ↳ {escape(_safe_review_text(str(reason)))}[/dim]" if reason else "")
+            )
+            return
+        self._print(tool_call_line(
+            name, arguments, subagent=subagent, label=label, reason=reason,
+            width=self._console.width,
+        ))
+
+    def _ended(self, event: str, payload: dict[str, Any]) -> None:
+        call = self._calls.pop(str(payload.get("call_id")), None)
+        if call is None:
+            if self._subagents_only:
+                return
+            call = {"name": str(payload.get("tool_name") or "unknown"), "scope": None, "label": "", "args": ""}
+            ambiguous = False
+        else:
+            ambiguous = call["overlapped"]
+        if event == "tool_call_failed" and str(payload.get("error", "")).startswith(
+            ("GraphInterrupt(", "NodeInterrupt("),
+        ):
+            return  # A clarification or nested approval pause, not a failure.
+        name = call["name"]
+        if event == "tool_call_failed":
+            text, status, artifact = str(payload.get("error", "")), "error", None
+        else:
+            text, status, artifact = tool_result_parts(payload.get("result"))
+        prefix = ""
+        if call["label"] or ambiguous:
+            worker = f"{_one_line(str(call['scope']), 40)} · " if call["scope"] else ""
+            identity = call["label"] or f"({summarize_tool_args(name, call['args'], 40)})"
+            prefix = f"{worker}{name} {identity} · " if call["label"] else f"{worker}{name}{identity} · "
+        if self._verbose:
+            self._console.print(tool_result_text(
+                _safe_review_text(text) or "(no output)", failed=status == "error", prefix=prefix,
+            ))
+            return
+        summary, failed = summarize_tool_result(name, text, status=status, artifact=artifact)
+        self._print(tool_result_text(summary, failed=failed, prefix=prefix))
 
 
 # ---------------------------------------------------------------------------

@@ -339,3 +339,71 @@ async def test_cli_trace_events_are_emitted_from_astream_path(monkeypatch, tmp_p
         "workflow_finished",
         "run_finished",
     ]
+
+
+def test_cli_run_query_prints_compact_activity_once_per_thread(monkeypatch, tmp_path):
+    """Skill reads are summarized, parallel results labelled, history not replayed."""
+    from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
+
+    from chemgraph.cli import commands
+    from chemgraph.cli.formatting import console
+
+    skill = "\n".join(f"{n:>6}  skill line {n}" for n in range(1, 501))
+    batch = [{"name": "run_ase", "args": {"calculator": c}, "id": f"c{c}"} for c in "ABC"]
+    turn1 = [
+        HumanMessage("q1"),
+        AIMessage("", id="a1", tool_calls=[
+            {"name": "read_file", "args": {"file_path": "/skills/x/SKILL.md"}, "id": "r"},
+        ]),
+        ToolMessage(skill, tool_call_id="r", name="read_file", id="t1"),
+        AIMessage("", id="a2", tool_calls=batch),
+        *[ToolMessage(f"energy {c}", tool_call_id=f"c{c}", name="run_ase", id=f"t{c}") for c in "BAC"],
+        AIMessage("final answer one", id="a3"),
+    ]
+    states = {"messages": turn1}
+
+    class FakeWorkflow:
+        async def astream(self, inputs, *, stream_mode, config):
+            for end in range(1, len(states["messages"]) + 1):
+                # Copies, as checkpoint deserialization produces.
+                yield {"messages": [m.model_copy() for m in states["messages"][:end]]}
+
+        async def aget_state(self, config):
+            return SimpleNamespace(values=states)
+
+    monkeypatch.setattr("chemgraph.agent.llm_agent.construct_single_agent_graph", lambda *_a, **_k: FakeWorkflow())
+    monkeypatch.setattr("chemgraph.agent.llm_agent.load_chat_model_prepared", lambda **_k: _prepared())
+    printed = []
+    monkeypatch.setattr(BaseMessage, "pretty_print", lambda message: printed.append(message.id))
+    agent = ChemGraph(workflow_type="single_agent", enable_memory=False, log_dir=str(tmp_path / "logs"))
+
+    with console.capture() as capture:
+        commands.run_query(agent, "q1", thread_id=7)
+    first = capture.get()
+    assert "⏺ read_file(/skills/x/SKILL.md)" in first and "⎿ Read 500 lines" in first
+    assert "skill line" not in first and "final answer one" not in first  # Answer is printed once later.
+    assert [line for line in first.splitlines() if "⎿ run_ase" in line] == [
+        "  ⎿ run_ase #2/3 · energy B", "  ⎿ run_ase #1/3 · energy A", "  ⎿ run_ase #3/3 · energy C",
+    ]
+
+    states["messages"] = [*turn1, HumanMessage("q2"), AIMessage("answer two", id="a4")]
+    with console.capture() as capture:
+        commands.run_query(agent, "q2", thread_id=7)
+    assert capture.get().strip() == "" and agent.message_renderer is None and printed == []
+
+    # Structured workflows return the answer as a graph-generated human message.
+    states["messages"] = [
+        HumanMessage("q3", id="h3"),
+        AIMessage("", id="a5", tool_calls=batch[:2]),
+        ToolMessage("result A", tool_call_id="cA", name="run_ase", id="x1"),
+        ToolMessage("result B", tool_call_id="cB", name="run_ase", id="x2"),
+        AIMessage("Water.", id="a6"),
+        HumanMessage('{"smiles": "O"}', id="h4"),
+    ]
+    with console.capture() as capture:
+        commands.run_query(agent, "q3", thread_id=8)
+    assert '{"smiles": "O"}' in capture.get() and "q3" not in capture.get()
+    assert "Water." not in capture.get()  # Left to format_response, so shown once.
+
+    commands.run_query(agent, "q3", thread_id=9, verbose=True)
+    assert printed == ["h3", "a5", "x1", "x2", "a6", "h4"]  # Every parallel result, in full.

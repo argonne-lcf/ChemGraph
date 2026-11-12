@@ -10,6 +10,7 @@ import logging
 import os
 import sys
 import time
+import weakref
 from asyncio import CancelledError
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from copy import deepcopy
@@ -67,7 +68,8 @@ from chemgraph.cli.formatting import (
     build_action_review,
     format_response,
     format_token_usage,
-    _safe_review_text,
+    StreamMessageRenderer,
+    ToolEventRenderer,
 )
 
 logger = logging.getLogger(__name__)
@@ -661,12 +663,38 @@ def run_query(
     Any
         Agent result, resumed graph result, or ``None`` on failure.
     """
+    if thread_id is None:
+        thread_id = _next_thread_id()
+    renderer = _stream_renderer(agent, thread_id, verbose=verbose)
+    previous = getattr(agent, "message_renderer", None)
+    renderer.begin_turn()
+    agent.message_renderer = renderer.render
+    try:
+        return _run_query(agent, query, thread_id, verbose, resume_from, renderer)
+    finally:
+        renderer.finish()
+        agent.message_renderer = previous
+
+
+# Seen message IDs outlive one query: a reused thread re-streams its history.
+_stream_renderers: weakref.WeakKeyDictionary[Any, dict[str, StreamMessageRenderer]] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _stream_renderer(agent: Any, thread_id: Any, *, verbose: bool = False) -> StreamMessageRenderer:
+    renderer = StreamMessageRenderer(console, verbose=verbose)
+    try:
+        threads = _stream_renderers.setdefault(agent, {})
+    except TypeError:
+        return renderer
+    return threads.setdefault(f"{thread_id}:{verbose}", renderer)
+
+
+def _run_query(agent, query, thread_id, verbose, resume_from, renderer):
     from langgraph.errors import GraphInterrupt
     from langgraph.types import Command
     from chemgraph.agent.llm_agent import HumanInputRequired
-
-    if thread_id is None:
-        thread_id = _next_thread_id()
 
     if verbose:
         console.print(f"[blue]Executing query:[/blue] {query}")
@@ -773,11 +801,10 @@ def run_query(
                             normalize_interrupts(s["__interrupt__"])
                         )
                     if "messages" in s and s["messages"] != prev_msgs:
-                        new_message = s["messages"][-1]
                         try:
-                            new_message.pretty_print()
+                            renderer.render(s["messages"])
                         except Exception:
-                            pass
+                            logger.debug("Could not display a message.", exc_info=True)
                         prev_msgs = s["messages"]
                     last_st = s
             except GraphInterrupt as exc:
@@ -830,6 +857,7 @@ def create_main_agent_session(
     *,
     thread_id: str | None = None,
     checkpoint_db: str | None = None,
+    verbose: bool = False,
 ):
     """Create the CLI session driver for a constructed main-agent workflow."""
     from chemgraph.agent.main_session import MainAgentSession
@@ -844,32 +872,27 @@ def create_main_agent_session(
         recursion_limit=agent.recursion_limit,
         session_store=agent.session_store,
         session_metadata=metadata,
-        on_event=_render_main_agent_event,
+        on_event=make_tool_event_renderer(verbose=verbose),
     )
+
+
+def make_tool_event_renderer(*, verbose: bool = False, subagents_only: bool = False):
+    """Return a fresh tool-event renderer; ``subagents_only`` for Deep Agent runs."""
+    return ToolEventRenderer(console, verbose=verbose, subagents_only=subagents_only)
+
+
+_main_agent_event_renderer = make_tool_event_renderer()
+_deep_agent_event_renderer = make_tool_event_renderer(subagents_only=True)
 
 
 def _render_main_agent_event(event: str, payload: dict[str, Any]) -> None:
     """Render direct and delegated tool activity during interactive execution."""
-    if event != "tool_call_started":
-        return
-    subagent_name = payload.get("subagent_name")
-    tool_name = payload.get("tool_name") or "unknown"
-    arguments = payload.get("arguments", "")
-    reason = payload.get("reason")
-    # One print keeps a reason with its call when parallel tools start together.
-    console.print(
-        (f"[dim]Subagent[/dim] [bold cyan]{escape(str(subagent_name))}[/bold cyan] "
-         if subagent_name else "[bold cyan]main_agent[/bold cyan] ")
-        + f"[dim]→[/dim] [bold]{escape(str(tool_name))}[/bold]"
-        f"({escape(str(arguments))})"
-        + (f"\n[dim]  ↳ {escape(_safe_review_text(str(reason)))}[/dim]" if reason else "")
-    )
+    _main_agent_event_renderer(event, payload)
 
 
 def _render_deep_agent_event(event: str, payload: dict[str, Any]) -> None:
-    """Render delegated tool activity; direct calls are already printed as messages."""
-    if payload.get("subagent_name"):
-        _render_main_agent_event(event, payload)
+    """Render delegated tool activity; direct calls are rendered from messages."""
+    _deep_agent_event_renderer(event, payload)
 
 
 def _clear_pending_review_input() -> None:
@@ -1752,7 +1775,10 @@ def interactive_mode(
             terminal_tool_names=terminal_tool_names,
             **(main_options if selected_workflow == "main_agent" else {}),
             approval_mode=approval_mode,
-            on_event=_render_deep_agent_event if selected_workflow == "deep_agent" else None,
+            on_event=(
+                make_tool_event_renderer(verbose=verbose, subagents_only=True)
+                if selected_workflow == "deep_agent" else None
+            ),
         )
 
     agent = initialize_selection(model, workflow, reasoning_effort)
@@ -1774,6 +1800,7 @@ def interactive_mode(
             agent,
             thread_id=restored_thread_id,
             checkpoint_db=checkpoint_db or DEFAULT_CHECKPOINT_DB,
+            verbose=verbose,
         )
         if workflow == "main_agent"
         else None
@@ -2011,6 +2038,7 @@ Example queries:
                             candidate_agent,
                             thread_id=target_id,
                             checkpoint_db=candidate_db,
+                            verbose=verbose,
                         )
                         restored = restore_main_agent_session(
                             candidate_session,
@@ -2159,6 +2187,7 @@ Example queries:
                         create_main_agent_session(
                             agent,
                             checkpoint_db=checkpoint_db or DEFAULT_CHECKPOINT_DB,
+                            verbose=verbose,
                         )
                         if workflow == "main_agent"
                         else None
@@ -2216,6 +2245,7 @@ Example queries:
                             create_main_agent_session(
                                 agent,
                                 checkpoint_db=checkpoint_db or DEFAULT_CHECKPOINT_DB,
+                                verbose=verbose,
                             )
                             if workflow == "main_agent"
                             else None
