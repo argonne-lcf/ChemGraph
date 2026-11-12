@@ -97,8 +97,3 @@ not load skills into an agent. A compatible host can discover the `pbs` and
 The existing bundled-skill discovery exposes these skills without runtime
 changes; see [skill discovery](skills.md).
 Native PBS IDs must not be passed to ChemGraph's Future-based backend job tools.
-
-The earlier local LCRC profile/preview prototype, its TOML example, and its
-dedicated tests are superseded and are not included in the package. See the [milestone handoff](handoffs/03-pbs-bebop-skills.md)
-for verification, usage, and remaining integration work. Earlier handoffs are
-historical; their removed APIs and skill names are no longer supported.
