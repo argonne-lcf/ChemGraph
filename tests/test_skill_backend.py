@@ -26,6 +26,8 @@ def test_bundled_file_protocol(asynchronous):
     assert len(call("glob", "**/SKILL.md").matches) == 5
     assert call("read", "/gaussian/SKILL.md").error is None
     assert call("read", "/gaussian/references/optimization.md").error is None
+    assert call("read", "/gaussian/references/troubleshooting.md").error is None
+    assert call("read", "/gaussian/assets/optimization.gjf.template").error is None
     assert len(call("glob", "SKILL.md", "/chemgraph/").matches) == 1
     assert "Use ChemGraph" in call("read", "/chemgraph/SKILL.md").file_data["content"]
     assert call("grep", "PBS", "/pbs-hpc/", max_count=1).matches

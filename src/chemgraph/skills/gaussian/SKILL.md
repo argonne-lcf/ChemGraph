@@ -1,6 +1,6 @@
 ---
 name: gaussian
-description: Prepare Gaussian single-point and ground-state optimization inputs, launch calculations in the selected environment, and inspect convergence and geometries.
+description: Prepare and run Gaussian single points and ground-state optimizations; diagnose input, checkpoint, SCF, geometry-convergence, and scratch failures.
 license: Apache-2.0
 metadata:
   authors: Thang Pham
@@ -9,59 +9,41 @@ metadata:
 
 # Gaussian calculations
 
-Use this skill for Gaussian input preparation, execution, and output inspection.
-Read [single points and optimization](references/optimization.md) for the
-currently supported procedures. TDDFT, recovery, and export procedures are not
-included in this version.
+Use the user's/project's geometry, method, basis/ECP, charge, multiplicity,
+solvent, and constraints. Ask for missing essentials; examples are syntax aids,
+not scientific defaults. Inspect an existing input before rebuilding it: XYZ
+conversion can discard frozen-atom flags and other Gaussian annotations.
 
-## Establish the calculation
+## Select the procedure
 
-Take the scientific setup from the user's request or the project's explicit
-instructions: geometry and units, method, basis/ECP, charge and multiplicity,
-environment/solvent, constraints, and requested task. Inspect supplied inputs
-before changing them. Ask only for missing essential information or conflicting
-settings; do not silently choose a method, solvent, spin state, or constraints.
-Examples illustrate syntax and do not establish project defaults.
+- New single point or optimization: read [input and result checks](references/optimization.md).
+  Start from the [optimization template](assets/optimization.gjf.template) for
+  explicit Cartesian coordinates and a built-in basis.
+- Reuse a checkpoint, resume an optimization, or diagnose failure: read
+  [checkpoints and troubleshooting](references/troubleshooting.md). `Guess=Read`,
+  `Geom=AllCheck`, and `Opt=Restart` perform different operations.
+- TDDFT, excited-state optimization, and property-export workflows need separate
+  procedures; do not apply ground-state acceptance checks to them.
 
-Preserve atom order and atom annotations when preparing related calculations.
-Check that the charge/multiplicity and basis coverage fit the supplied model.
-Record the input geometry source and any deliberate changes to the setup.
+## Resolve Gaussian setup once
 
-## Prepare the execution environment
+Reuse the supplied executable path and initialization instructions. Otherwise
+check `command -v g16`; if unresolved, ask for the Gaussian executable/install
+path and required initialization. Do not invent an installation path. Verify
+the executable after setup and reuse this configuration.
 
-Reuse the Gaussian executable path and initialization instructions supplied by
-the user or project. If none are supplied, check whether Gaussian is already
-configured (for example, `command -v g16` in a shell). If unresolved, ask for the
-executable or installation path and any environment setup needed to use it.
-Do not guess installation directories or initialization commands. Verify the
-executable after setup and reuse that configuration for subsequent tasks.
+Resolve the run directory, CPU/memory allocation, and scratch location. Set
+`GAUSS_SCRDIR` after initialization and inspect any `%RWF` overrides. Use unique
+checkpoint/output names for independent runs. Match `%NProcShared` and `%Mem`
+to the allocation, allowing memory overhead; shell defaults do not override
+explicit Link 0 settings. Execution arrangements come from the environment.
 
-Resolve the working directory, available CPU/memory resources, and scratch
-location from the task or environment; ask for missing essential choices.
-Match Gaussian shared-memory threads and memory to those resources, leaving
-room for process overhead. Execution/submission arrangements come from the
-user's environment and are separate from this software guidance.
+Before running, resolve all template tokens and inspect the input sections.
+Preserve the process exit status through logging and stage-out. After running,
+check each intended job step: `SCF Done`, optimization completion, and normal
+termination answer different questions. A missing terminator may mean the job
+is still running; check its execution status before attempting recovery.
 
-Choose a new run directory and checkpoint/output names. Verify scratch capacity
-and visibility; set `GAUSS_SCRDIR` after software initialization, which may change
-the environment. Preserve needed checkpoints and results on durable storage
-before temporary scratch is reclaimed. Use the execution resources designated
-for the calculation.
-
-## Execute and inspect
-
-Preparation alone does not authorize a run. A request to run the calculation
-does; use the existing authorization without repeatedly asking. Inspect the
-prepared input and launch command before execution. Preserve the Gaussian exit
-status through logging, cleanup, and stage-out.
-
-Inspect the relevant calculation section for normal/error termination and the
-requested scientific result. Process exit and a printed energy alone do not
-establish success. Incomplete output may belong to an active calculation.
-
-Report the input/output paths, geometry source, scientific settings, actual
-software revision from the output banner, execution identity when available,
-convergence evidence, and unresolved limitations. Keep energies and coordinates
-labeled with units.
-The optimization reference describes manual checks; this version includes no
-inspection helper.
+Report the Gaussian revision, input/log/checkpoint paths, settings actually
+used, and convergence evidence with units. Preserve the original log and
+checkpoint when preparing a changed attempt.
