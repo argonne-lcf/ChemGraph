@@ -6,8 +6,9 @@ from rich.console import Console
 
 from chemgraph.agent.main_session import MainAgentTurnResult
 from chemgraph.cli.formatting import (
-    _content_text, action_review_summary, build_action_review, console,
-    format_action_review, format_response, list_models,
+    StreamMessageRenderer, ToolEventRenderer, _content_text, action_review_summary, build_action_review, console,
+    format_action_review, format_response, list_models, show_tool_output_log, summarize_tool_args,
+    summarize_tool_result, tool_output_log,
 )
 from chemgraph.models.endpoints.codex import SPEC as CODEX_SPEC
 
@@ -96,7 +97,7 @@ def test_action_reviews_escape_terminal_controls(monkeypatch, name, args, full):
 
 
 def test_tool_reason_is_shown_once_and_escaped_in_review_and_event_line():
-    from chemgraph.cli.commands import _render_main_agent_event
+    from chemgraph.cli.commands import make_tool_event_renderer
 
     terminal = Console(width=120, color_system=None)
     with terminal.capture() as capture:
@@ -108,7 +109,7 @@ def test_tool_reason_is_shown_once_and_escaped_in_review_and_event_line():
     assert '"reason"' not in output
 
     with console.capture() as capture:
-        _render_main_agent_event("tool_call_started", {
+        make_tool_event_renderer()("tool_call_started", {
             "tool_name": "execute", "arguments": "{'command': 'ls'}", "reason": "[red]why[/red]\x1b[2J",
         })
     output = capture.get()
@@ -230,3 +231,78 @@ def test_format_response_renders_main_agent_turn_result():
     output = capture.get()
     assert "ChemGraph Response" in output
     assert "Delegated calculation complete" in output
+
+
+
+@pytest.mark.parametrize("name,content,kwargs,expected", [
+    ("read_file", "\n".join(f"{n:>4}  x" for n in range(1, 143)), {}, ("Read 142 lines", False)),
+    ("execute", "out\n[Command failed with exit code 3]\n[Output was truncated due to size limits]", {},
+     ("Exit 3 · out", True)),
+    # A status line inside the command's own output is not its exit status.
+    ("execute", "[Command failed with exit code 1]\nok", {}, ("[Command failed with exit code 1]\nok", False)),
+    ("run_ase", "\n".join(f"line {n}" for n in range(30)), {}, ("line 0\nline 1\n… +28 lines", False)),
+])
+def test_tool_result_summary_is_bounded(name, content, kwargs, expected):
+    assert summarize_tool_result(name, content, **kwargs) == expected
+
+
+def test_tool_args_summary_is_one_bounded_escaped_line():
+    summary = summarize_tool_args("write_file", str({"content": "x\x1b[2J" * 5000, "reason": "why"}))
+    assert len(summary) <= 100 and "\\x1b" in summary and "\x1b" not in summary and "why" not in summary
+
+
+def test_parallel_call_labels_do_not_require_call_ids():
+    renderer = StreamMessageRenderer(console)
+    with console.capture() as capture:
+        renderer.render([AIMessage("", tool_calls=[
+            {"name": "ls", "args": {"path": path}, "id": None} for path in ("/a", "/b")
+        ])])
+    assert "ls(/a) #1/2" in capture.get() and "ls(/b) #2/2" in capture.get()
+
+
+def test_event_renderer_summarizes_callback_payloads():
+    import io
+
+    from langchain_core.tools import ToolException, tool
+
+    from chemgraph.agent.events import _AstreamEventCallback
+
+    @tool
+    def read_file(file_path: str) -> str:
+        """Read a file."""
+        return "\n".join(f"{n:>4}  body-{n}" for n in range(1, 301))
+
+    @tool
+    def broken(value: int) -> str:
+        """Fail."""
+        raise ToolException("bad value")
+
+    broken.handle_tool_error = True
+    output = io.StringIO()
+    render = ToolEventRenderer(Console(file=output, width=80, color_system=None))
+    config = {"callbacks": [_AstreamEventCallback(render, "t")]}
+    read_file.invoke({"name": "read_file", "args": {"file_path": "/S.md"}, "id": "1", "type": "tool_call"}, config)
+    broken.invoke({"name": "broken", "args": {"value": 1}, "id": "2", "type": "tool_call"}, config)
+    render("tool_call_started", {"tool_name": "ask_human", "arguments": "{}", "call_id": "q"})
+    render("tool_call_failed", {"error": "GraphInterrupt((Interrupt(value='?'),))", "call_id": "q"})
+    assert "⎿ Read 300 lines" in output.getvalue() and "⎿ bad value" in output.getvalue()
+    assert "Interrupt" not in output.getvalue()  # A pause for input is not a failure.
+
+
+def test_expand_pages_the_full_output_of_the_last_turn(monkeypatch):
+    from contextlib import nullcontext
+
+    from langchain_core.messages import ToolMessage
+
+    monkeypatch.setattr(console, "pager", lambda **_kwargs: nullcontext())
+    body = "\n".join(f"{n:>4}  body-{n}" for n in range(1, 301))
+    renderer = StreamMessageRenderer(console)
+    tool_output_log.start_turn()
+    with console.capture() as capture:
+        renderer.render([
+            AIMessage("", id="a", tool_calls=[{"name": "read_file", "args": {"file_path": "/S.md"}, "id": "r"}]),
+            ToolMessage(body, tool_call_id="r", name="read_file", id="t"),
+        ])
+        show_tool_output_log()
+    output = capture.get()
+    assert "⎿ Read 300 lines" in output and "body-250" in output and '"file_path": "/S.md"' in output

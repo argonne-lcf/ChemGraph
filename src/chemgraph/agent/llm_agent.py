@@ -546,6 +546,9 @@ class ChemGraph:
         self.deepagent_auto_approve = deepagent_auto_approve
         self.checkpointer = checkpointer
         self.on_event = on_event
+        # The CLI installs a callable taking the streamed message list for one
+        # run instead of printing each new message with ``pretty_print()``.
+        self.message_renderer: Callable[[list], None] | None = None
         self._usage: UsageCollector | None = None
         self._usage_turns: list[UsageCollector] = []
         self._usage_operation = 0
@@ -1269,9 +1272,12 @@ class ChemGraph:
                     if "messages" in s and s["messages"] != prev_msgs:
                         new_message = s["messages"][-1]
                         try:
-                            new_message.pretty_print()
+                            if self.message_renderer is not None:
+                                self.message_renderer(s["messages"])
+                            else:
+                                new_message.pretty_print()
                         except Exception:
-                            pass
+                            logger.debug("Could not display a message.", exc_info=True)
                         logger.info(new_message)
                         prev_msgs = s["messages"]
                     last_st = s

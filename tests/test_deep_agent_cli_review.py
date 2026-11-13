@@ -32,7 +32,6 @@ def dispatch(monkeypatch):
         ),
     )
     monkeypatch.setattr(cli_main, "run_query", lambda *args, **kwargs: "done")
-    monkeypatch.setattr(cli_main, "format_response", lambda *args, **kwargs: None)
     return received
 
 

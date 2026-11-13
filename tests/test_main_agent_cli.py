@@ -137,35 +137,25 @@ def test_interactive_removed_workflow_keeps_current_agent(monkeypatch, workflow)
 
 
 def test_interactive_event_renders_direct_and_subagent_tool_calls():
+    render = commands.make_tool_event_renderer()
     with console.capture() as capture:
-        commands._render_main_agent_event(
-            "tool_call_started",
-            {
-                "subagent_name": "chemgraph",
-                "tool_name": "run_ase",
-                "arguments": "{'calculator': 'EMT'}",
-            },
-        )
-        commands._render_main_agent_event(
-            "tool_call_started",
-            {"tool_name": "task", "arguments": "{'description': 'work'}"},
-        )
-        commands._render_main_agent_event(
-            "tool_call_finished",
-            {
-                "subagent_name": "chemgraph",
-                "tool_name": "run_ase",
-                "result": "large result",
-            },
-        )
+        render("tool_call_started", {
+            "subagent_name": "chemgraph", "tool_name": "run_ase",
+            "arguments": "{'calculator': 'EMT'}", "call_id": "a",
+        })
+        render("tool_call_started", {
+            "tool_name": "task", "arguments": "{'description': 'work'}", "call_id": "b",
+        })
+        render("tool_call_finished", {
+            "tool_name": "run_ase", "call_id": "a",
+            "result": {"content": "\n".join(f"row-{n}" for n in range(500)), "status": "success"},
+        })
 
     output = capture.get()
-    assert "chemgraph" in output
-    assert "run_ase" in output
-    assert "EMT" in output
-    assert "main_agent" in output
-    assert "task" in output
-    assert "large result" not in output
+    assert "⏺ chemgraph · run_ase(calculator=EMT)" in output
+    assert "⏺ task(work)" in output
+    assert "row-0" in output and "+498 lines" in output
+    assert "row-250" not in output
 
 
 def test_create_main_agent_session_installs_interactive_event_renderer(monkeypatch):
@@ -195,7 +185,7 @@ def test_create_main_agent_session_installs_interactive_event_renderer(monkeypat
 
     assert captured["workflow"] is agent.workflow
     assert captured["thread_id"] == "thread-1"
-    assert captured["on_event"] is commands._render_main_agent_event
+    assert "on_event" not in captured
 
 
 def test_main_agent_query_runs_each_turn_on_same_session():

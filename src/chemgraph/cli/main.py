@@ -31,7 +31,6 @@ from chemgraph.cli.commands import (
     ALL_WORKFLOW_TYPES,
     WORKFLOW_ALIASES,
     _anchor_skill_dirs,
-    _render_deep_agent_event,
     resolve_workflow,
     delete_session_cmd,
     initialize_agent,
@@ -46,7 +45,6 @@ from chemgraph.cli.formatting import (
     check_api_keys_status,
     console,
     create_banner,
-    format_response,
     list_models,
 )
 from chemgraph.cli.headless import (
@@ -869,14 +867,7 @@ def _handle_run(args: argparse.Namespace) -> None:
             )
 
     on_event = trace.on_event if trace else None
-    if args.workflow == "deep_agent":
-        # Delegated tool calls are not in the printed messages; show them as events.
-        def on_event(event, payload, _trace=on_event):
-            _render_deep_agent_event(event, payload)
-            if _trace is not None:
-                _trace(event, payload)
 
-    # Initialize agent
     agent = initialize_agent(
         args.model,
         args.workflow,
@@ -921,7 +912,6 @@ def _handle_run(args: argparse.Namespace) -> None:
         trace.finish(status="completed")
 
     if result:
-        format_response(result, verbose=(args.verbose > 0))
         print_token_usage(agent, stderr=True)
 
         # Save output if requested

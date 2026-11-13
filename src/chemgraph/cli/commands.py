@@ -12,6 +12,7 @@ import sys
 import time
 from asyncio import CancelledError
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from contextlib import contextmanager
 from copy import deepcopy
 from contextvars import ContextVar
 from functools import wraps
@@ -67,7 +68,10 @@ from chemgraph.cli.formatting import (
     build_action_review,
     format_response,
     format_token_usage,
-    _safe_review_text,
+    StreamMessageRenderer,
+    ToolEventRenderer,
+    show_tool_output_log,
+    tool_output_log,
 )
 
 logger = logging.getLogger(__name__)
@@ -633,7 +637,7 @@ def run_query(
     *,
     usage_stderr: bool = False,
 ) -> Any:
-    """Execute a query with the agent.
+    """Execute a query and display its streamed activity and remaining response.
 
     When the graph pauses for human input (``HumanInputRequired``), the
     spinner is stopped, the question is shown in a Rich panel, and the
@@ -661,12 +665,28 @@ def run_query(
     Any
         Agent result, resumed graph result, or ``None`` on failure.
     """
+    if thread_id is None:
+        thread_id = _next_thread_id()
+    renderer = StreamMessageRenderer(console, verbose=verbose)
+    previous = getattr(agent, "message_renderer", None)
+    renderer.begin_turn()
+    agent.message_renderer = renderer.render
+    try:
+        with _tool_activity(agent, verbose=verbose):
+            result = _run_query(agent, query, thread_id, verbose, resume_from, renderer)
+            if result:
+                renderer.hand_off(result)
+                format_response(result, verbose=verbose, exclude=renderer.excludes)
+            return result
+    finally:
+        renderer.finish()
+        agent.message_renderer = previous
+
+
+def _run_query(agent, query, thread_id, verbose, resume_from, renderer):
     from langgraph.errors import GraphInterrupt
     from langgraph.types import Command
     from chemgraph.agent.llm_agent import HumanInputRequired
-
-    if thread_id is None:
-        thread_id = _next_thread_id()
 
     if verbose:
         console.print(f"[blue]Executing query:[/blue] {query}")
@@ -700,6 +720,7 @@ def run_query(
             config = hir.resume_config or config
         except Exception as e:
             progress.update(task, description="[red]Query failed!")
+            renderer.flush()
             console.print(f"[red]Error processing query: {e}[/red]")
             return None
 
@@ -724,6 +745,7 @@ def run_query(
                 )
                 return None
 
+        renderer.flush()  # Prose before a question belongs above the prompt.
         try:
             answers = [
                 _prompt_for_interrupt(pending.payload)
@@ -773,11 +795,10 @@ def run_query(
                             normalize_interrupts(s["__interrupt__"])
                         )
                     if "messages" in s and s["messages"] != prev_msgs:
-                        new_message = s["messages"][-1]
                         try:
-                            new_message.pretty_print()
+                            renderer.render(s["messages"])
                         except Exception:
-                            pass
+                            logger.debug("Could not display a message.", exc_info=True)
                         prev_msgs = s["messages"]
                     last_st = s
             except GraphInterrupt as exc:
@@ -844,32 +865,45 @@ def create_main_agent_session(
         recursion_limit=agent.recursion_limit,
         session_store=agent.session_store,
         session_metadata=metadata,
-        on_event=_render_main_agent_event,
     )
 
 
-def _render_main_agent_event(event: str, payload: dict[str, Any]) -> None:
-    """Render direct and delegated tool activity during interactive execution."""
-    if event != "tool_call_started":
+def make_tool_event_renderer(*, verbose: bool = False, subagents_only: bool = False):
+    """Return a fresh tool-event renderer; ``subagents_only`` for Deep Agent runs."""
+    return ToolEventRenderer(console, verbose=verbose, subagents_only=subagents_only)
+
+
+@contextmanager
+def _tool_activity(owner: Any, *, verbose: bool, session: bool = False):
+    """Own callback display and the output log for one CLI operation, including resumes."""
+    from chemgraph.agent.events import _AstreamEventCallback
+    from chemgraph.agent.usage import add_callbacks
+
+    tool_output_log.start_turn()
+    config = getattr(owner, "config", None)
+    if (session and not isinstance(config, dict)) or (
+        not session and getattr(owner, "workflow_type", None) != "deep_agent"
+    ):
+        yield
         return
-    subagent_name = payload.get("subagent_name")
-    tool_name = payload.get("tool_name") or "unknown"
-    arguments = payload.get("arguments", "")
-    reason = payload.get("reason")
-    # One print keeps a reason with its call when parallel tools start together.
-    console.print(
-        (f"[dim]Subagent[/dim] [bold cyan]{escape(str(subagent_name))}[/bold cyan] "
-         if subagent_name else "[bold cyan]main_agent[/bold cyan] ")
-        + f"[dim]→[/dim] [bold]{escape(str(tool_name))}[/bold]"
-        f"({escape(str(arguments))})"
-        + (f"\n[dim]  ↳ {escape(_safe_review_text(str(reason)))}[/dim]" if reason else "")
-    )
-
-
-def _render_deep_agent_event(event: str, payload: dict[str, Any]) -> None:
-    """Render delegated tool activity; direct calls are already printed as messages."""
-    if payload.get("subagent_name"):
-        _render_main_agent_event(event, payload)
+    renderer = make_tool_event_renderer(verbose=verbose, subagents_only=not session)
+    previous = getattr(owner, "on_event", None)
+    if session:
+        owner.config = add_callbacks(config, [_AstreamEventCallback(renderer, owner.thread_id)])
+    else:
+        def on_event(event, payload):
+            renderer(event, payload)
+            if previous is not None:
+                previous(event, payload)
+        owner.on_event = on_event
+    try:
+        yield
+    finally:
+        renderer.finish()
+        if session:
+            owner.config = config
+        else:
+            owner.on_event = previous
 
 
 def _clear_pending_review_input() -> None:
@@ -1030,76 +1064,78 @@ def _run_main_agent_operation(
     interactive: bool = True,
     report_failure_usage: bool = True,
     restored: bool = False,
+    verbose: bool = False,
 ) -> Any:
     """Run one operation; headless callers own printing when reporting is disabled.
 
     With ``restored``, the first interrupts came from a checkpoint and are always asked.
     """
-    from chemgraph.agent.main_session import IncompatibleCheckpointError
-
-    try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True,
-        ) as progress:
-            progress.add_task(progress_description, total=None)
-            result = (
-                checkpoint_runtime.run(operation)
-                if checkpoint_runtime is not None
-                else run_async_callable(operation)
-            )
-    except IncompatibleCheckpointError as exc:
-        if not interactive:
-            raise
-        console.print(f"[red]{escape(str(exc))}[/red]")
-        return None
-    except Exception as exc:
-        console.print(f"[red]Error processing main-agent session: {exc}[/red]")
-        _main_agent_failure_hint(session)
-        return None
-
-    interrupt_count = 0
-    while interactive and result.status == "waiting_for_user" and result.interrupts:
-        interrupt_count += sum(
-            not _is_tool_review(pending.payload) for pending in result.interrupts
-        )
-        if interrupt_count > 10:
-            console.print(
-                "[red]Exceeded maximum number of nested clarifications.[/red]"
-            )
-            return None
+    with _tool_activity(session, verbose=verbose, session=True):
+        from chemgraph.agent.main_session import IncompatibleCheckpointError
 
         try:
-            answers: Any
-            if len(result.interrupts) == 1:
-                pending = result.interrupts[0]
-                answers = _prompt_for_interrupt(pending.payload, restored=restored)
-            else:
-                if any(not pending.id for pending in result.interrupts):
-                    raise ValueError("Multiple pending interrupts require stable IDs.")
-                answers = {}
-                for pending in result.interrupts:
-                    answers[pending.id] = _prompt_for_interrupt(
-                        pending.payload, restored=restored,
-                    )
-            restored = False
-
-            result = (
-                checkpoint_runtime.run(lambda: session.resume(answers))
-                if checkpoint_runtime is not None
-                else run_async_callable(lambda: session.resume(answers))
-            )
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+                transient=True,
+            ) as progress:
+                progress.add_task(progress_description, total=None)
+                result = (
+                    checkpoint_runtime.run(operation)
+                    if checkpoint_runtime is not None
+                    else run_async_callable(operation)
+                )
         except IncompatibleCheckpointError as exc:
+            if not interactive:
+                raise
             console.print(f"[red]{escape(str(exc))}[/red]")
             return None
         except Exception as exc:
-            console.print(f"[red]Error resuming main-agent session: {exc}[/red]")
+            console.print(f"[red]Error processing main-agent session: {exc}[/red]")
             _main_agent_failure_hint(session)
             return None
 
-    return result
+        interrupt_count = 0
+        while interactive and result.status == "waiting_for_user" and result.interrupts:
+            interrupt_count += sum(
+                not _is_tool_review(pending.payload) for pending in result.interrupts
+            )
+            if interrupt_count > 10:
+                console.print(
+                    "[red]Exceeded maximum number of nested clarifications.[/red]"
+                )
+                return None
+
+            try:
+                answers: Any
+                if len(result.interrupts) == 1:
+                    pending = result.interrupts[0]
+                    answers = _prompt_for_interrupt(pending.payload, restored=restored)
+                else:
+                    if any(not pending.id for pending in result.interrupts):
+                        raise ValueError("Multiple pending interrupts require stable IDs.")
+                    answers = {}
+                    for pending in result.interrupts:
+                        answers[pending.id] = _prompt_for_interrupt(
+                            pending.payload, restored=restored,
+                        )
+                restored = False
+
+                result = (
+                    checkpoint_runtime.run(lambda: session.resume(answers))
+                    if checkpoint_runtime is not None
+                    else run_async_callable(lambda: session.resume(answers))
+                )
+            except IncompatibleCheckpointError as exc:
+                console.print(f"[red]{escape(str(exc))}[/red]")
+                return None
+            except Exception as exc:
+                console.print(f"[red]Error resuming main-agent session: {exc}[/red]")
+                _main_agent_failure_hint(session)
+                return None
+
+        return result
 
 
 def run_main_agent_query(
@@ -1118,6 +1154,7 @@ def run_main_agent_query(
         session,
         lambda: session.run(query),
         progress_description="Processing main-agent turn...",
+        verbose=verbose,
         checkpoint_runtime=checkpoint_runtime,
         interactive=interactive,
         report_failure_usage=interactive,
@@ -1136,6 +1173,7 @@ def retry_main_agent_session(
         session,
         session.retry,
         progress_description="Retrying main-agent operation...",
+        verbose=verbose,
         checkpoint_runtime=checkpoint_runtime,
     )
 
@@ -1145,6 +1183,7 @@ def restore_main_agent_session(
     *,
     checkpoint_runtime: CheckpointRuntime | None = None,
     interactive: bool = True,
+    verbose: bool = False,
 ) -> Any:
     """Restore one durable thread and immediately resolve pending interrupts."""
     return _run_main_agent_operation(
@@ -1155,6 +1194,7 @@ def restore_main_agent_session(
         interactive=interactive,
         report_failure_usage=interactive,
         restored=True,
+        verbose=verbose,
     )
 
 
@@ -1370,6 +1410,7 @@ _INTERACTIVE_COMMANDS = {
     "auto",
     "clear",
     "config",
+    "expand",
     "help",
     "history",
     "model",
@@ -1383,6 +1424,7 @@ _INTERACTIVE_BARE_ALIASES = {
     "clear": "clear",
     "config": "config",
     "exit": "quit",
+    "expand": "expand",
     "help": "help",
     "history": "history",
     "q": "quit",
@@ -1752,7 +1794,6 @@ def interactive_mode(
             terminal_tool_names=terminal_tool_names,
             **(main_options if selected_workflow == "main_agent" else {}),
             approval_mode=approval_mode,
-            on_event=_render_deep_agent_event if selected_workflow == "deep_agent" else None,
         )
 
     agent = initialize_selection(model, workflow, reasoning_effort)
@@ -1787,6 +1828,7 @@ def interactive_mode(
         result = restore_main_agent_session(
             main_session,
             checkpoint_runtime=checkpoint_runtime,
+            verbose=verbose,
         )
         if result is None:
             if checkpoint_runtime is not None:
@@ -1846,6 +1888,7 @@ Available commands:
   /help              Show this help message
   /clear             Clear screen
   /config            Show current configuration
+  /expand            Show the full tool calls and results of the last turn
   /model <name>      Change model
   /workflow <type>   Change workflow type
   /auto \\[on|off]     Approve tool actions without asking (this session only)
@@ -1880,6 +1923,12 @@ Example queries:
                         style="blue",
                     )
                 )
+                continue
+            elif command == "expand":
+                if argument:
+                    console.print("[red]Usage: /expand[/red]")
+                    continue
+                show_tool_output_log()
                 continue
             elif command == "clear":
                 if argument:
@@ -2015,6 +2064,7 @@ Example queries:
                         restored = restore_main_agent_session(
                             candidate_session,
                             checkpoint_runtime=candidate_runtime,
+                            verbose=verbose,
                         )
                         if restored is None:
                             raise RuntimeError("The stored thread could not be restored.")
@@ -2095,7 +2145,6 @@ Example queries:
                         **run_options,
                     )
                     if result:
-                        format_response(result, verbose=verbose)
                         print_token_usage(main_session if main_session is not None else agent)
                 continue
             elif command == "retry":
@@ -2262,7 +2311,8 @@ Example queries:
                     **run_options,
                 )
             if result:
-                format_response(result, verbose=verbose)
+                if main_session is not None:
+                    format_response(result, verbose=verbose)
                 print_token_usage(main_session if main_session is not None else agent)
                 if main_session is not None:
                     console.print(f"[dim]Thread: {main_session.thread_id}[/dim]")
