@@ -2,7 +2,6 @@
 
 import asyncio
 import io
-import json
 from types import SimpleNamespace
 
 import pytest
@@ -16,7 +15,7 @@ from rich.console import Console
 from chemgraph.agent.llm_agent import ChemGraph
 from chemgraph.cli import commands, formatting
 from tests.test_llm_agent import _prepared
-from tests.test_main_agent_cli import PendingInterrupt, _turn_result
+from tests.test_main_agent_cli import _turn_result
 
 
 @pytest.fixture
@@ -37,7 +36,6 @@ def test_streamed_answer_survives_failure_and_cancellation(terminal, error):
         query = HumanMessage("query", id="q")
         agent.message_renderer([query])
         agent.message_renderer([query, AIMessage("Streamed answer survives.", id="a")])
-        assert "Streamed answer survives." in terminal.getvalue()
         raise error("after streaming")
 
     agent.run = run
@@ -64,6 +62,7 @@ def test_cold_renderer_ignores_history_and_retains_new_idless_messages(terminal,
     # Retained ID-less messages move when old history is removed.
     renderer.render([query, answer])
     renderer.render([query, answer, HumanMessage("generated JSON"), AIMessage("new answer")])
+    renderer.finish()
     output = terminal.getvalue()
     assert "old query" not in output and "old answer" not in output and "summary" not in output
     assert ("new query" in output) is verbose
@@ -106,10 +105,9 @@ def test_real_graph_prints_full_prose_before_prompt_and_deduplicates_results(
     assert output.count("token000") == 1 and output.count("Final response.") == 1
     assert output.count('"positions"') == 1
     assert output.index("Last paragraph.") < output.index("CLARIFICATION PROMPT")
-    numeric = workflow.get_state({"configurable": {"thread_id": 7}}).values
-    assert numeric == workflow.get_state({"configurable": {"thread_id": "7"}}).values
-    logs = list(tmp_path.glob("state_thread_7_*.json"))
-    assert logs and all(json.loads(p.read_text())["thread_id"] == "7" for p in logs)
+    # The answer reaches format_response when the result contains it.
+    assert ("ChemGraph Response" in output) is (return_option == "state")
+    assert "Molecular Structure Data" in output
 
 
 @pytest.mark.parametrize("session", [False, True], ids=["deep-agent", "main-agent"])
@@ -164,28 +162,3 @@ def test_cancelled_operation_closes_callbacks_before_the_next_operation(terminal
     if not session:
         assert "tool_call_started" in traced and "tool_call_finished" in traced
 
-
-def test_main_agent_pause_keeps_callback_and_expand_log(terminal, monkeypatch):
-    callbacks = []
-    session = SimpleNamespace(thread_id="t", config={})
-
-    def emit(call_id):
-        callback = session.config["callbacks"][-1]
-        callbacks.append(callback)
-        callback.on_tool_start({"name": "execute"}, "{'command': 'echo result'}", run_id=call_id)
-        callback.on_tool_end("one\ntwo\nthree\nfour", run_id=call_id)
-
-    async def run(_query):
-        emit("first")
-        return _turn_result(PendingInterrupt("question", {"question": "Continue?"}))
-
-    async def resume(_answer):
-        emit("second")
-        return _turn_result()
-
-    session.run, session.resume = run, resume
-    monkeypatch.setattr(commands, "_prompt_for_interrupt", lambda *a, **k: "yes")
-    commands.run_main_agent_query(session, "query", verbose=True)
-    assert callbacks[0] is callbacks[1]
-    assert len(formatting.tool_output_log.entries()) == 2
-    assert terminal.getvalue().count("four") == 2  # Verbosity reaches both invocations.

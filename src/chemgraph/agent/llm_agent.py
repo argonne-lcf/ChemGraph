@@ -272,9 +272,6 @@ class ChemGraph:
         session instance. Change it whenever those components' behavior changes.
     on_event : callable, optional
         Callback invoked with dashboard workflow events, by default None.
-    message_renderer : callable, optional
-        Called with the streamed message list instead of printing each new
-        message with ``pretty_print()``; the CLI uses it for compact output.
 
     Raises
     ------
@@ -312,7 +309,6 @@ class ChemGraph:
         deepagent_skills: Sequence[str] | None = None,
         deepagent_auto_approve: bool = False,
         on_event: Optional[EventCallback] = None,
-        message_renderer: Optional[Callable[[list], None]] = None,
         reasoning_effort: Optional[str] = None,
         checkpointer: BaseCheckpointSaver | None = None,
         deepagent_discover_skills: bool = True,
@@ -550,7 +546,9 @@ class ChemGraph:
         self.deepagent_auto_approve = deepagent_auto_approve
         self.checkpointer = checkpointer
         self.on_event = on_event
-        self.message_renderer = message_renderer
+        # The CLI installs a callable taking the streamed message list for one
+        # run instead of printing each new message with ``pretty_print()``.
+        self.message_renderer: Callable[[list], None] | None = None
         self._usage: UsageCollector | None = None
         self._usage_turns: list[UsageCollector] = []
         self._usage_operation = 0

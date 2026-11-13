@@ -158,7 +158,7 @@ def test_interactive_event_renders_direct_and_subagent_tool_calls():
     assert "row-250" not in output
 
 
-def test_create_main_agent_session_leaves_rendering_to_each_operation(monkeypatch):
+def test_create_main_agent_session_installs_interactive_event_renderer(monkeypatch):
     captured = {}
 
     class FakeSession:
@@ -1224,7 +1224,7 @@ def test_run_query_preserves_structured_deepagent_approval(monkeypatch):
         (
             {"messages": ["done"]},
             {
-                "configurable": {"thread_id": "10"},
+                "configurable": {"thread_id": 10},
                 "recursion_limit": 20,
             },
             "run lint",
@@ -1371,7 +1371,7 @@ def test_run_query_persists_chained_deepagent_interrupt(monkeypatch):
     assert prompted == payloads
     assert persisted == [
         {
-            "configurable": {"thread_id": "11"},
+            "configurable": {"thread_id": 11},
             "recursion_limit": 20,
         }
     ]

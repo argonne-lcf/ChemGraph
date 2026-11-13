@@ -675,6 +675,7 @@ def run_query(
         with _tool_activity(agent, verbose=verbose):
             result = _run_query(agent, query, thread_id, verbose, resume_from, renderer)
             if result:
+                renderer.hand_off(result)
                 format_response(result, verbose=verbose, exclude=renderer.excludes)
             return result
     finally:
@@ -693,7 +694,7 @@ def _run_query(agent, query, thread_id, verbose, resume_from, renderer):
         if resume_from:
             console.print(f"[blue]Resuming from session:[/blue] {resume_from}")
 
-    config = {"configurable": {"thread_id": str(thread_id)}}
+    config = {"configurable": {"thread_id": thread_id}}
     max_interrupts = 10  # safety guard
     interrupt_count = 0
 
@@ -719,6 +720,7 @@ def _run_query(agent, query, thread_id, verbose, resume_from, renderer):
             config = hir.resume_config or config
         except Exception as e:
             progress.update(task, description="[red]Query failed!")
+            renderer.flush()
             console.print(f"[red]Error processing query: {e}[/red]")
             return None
 
@@ -743,6 +745,7 @@ def _run_query(agent, query, thread_id, verbose, resume_from, renderer):
                 )
                 return None
 
+        renderer.flush()  # Prose before a question belongs above the prompt.
         try:
             answers = [
                 _prompt_for_interrupt(pending.payload)

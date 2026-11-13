@@ -183,19 +183,25 @@ def format_action_review(action: dict, index: int, total: int) -> Panel:
 # ---------------------------------------------------------------------------
 
 _PRIMARY_ARG_KEYS = ("file_path", "path", "command", "pattern", "description", "query")
-_EXIT_TRAILER = re.compile(r"\n?\[Command (?:succeeded|failed) with exit code (-?\d+)\]")
+# Only the status deepagents appends (optionally before its truncation note), not
+# matching text inside the command's own output.
+_EXIT_TRAILER = re.compile(
+    r"\n?\[Command (?:succeeded|failed) with exit code (-?\d+)\]"
+    r"(?=(?:\n\[Output was truncated[^\n]*\])?\s*\Z)"
+)
 _READ_ROW = re.compile(r"^\s*\d+(?:  |\t)")
 
 
 def _one_line(value: str, limit: int) -> str:
     """Return a single escaped line of at most *limit* characters."""
-    text = _safe_review_text(value).replace("\n", "⏎").replace("\t", " ")
+    # Escaping never shortens text, so one character past the limit suffices.
+    text = _safe_review_text(value[: limit + 1]).replace("\n", "⏎").replace("\t", " ")
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 def _parse_literal(value: Any) -> Any:
     """Decode small Python literals from callbacks; leave other values alone."""
-    if isinstance(value, str) and len(value) <= 65536:
+    if isinstance(value, str) and len(value) <= 65536 and value.lstrip()[:1] in ("{", "["):
         try:
             return ast.literal_eval(value)
         except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
@@ -269,10 +275,10 @@ def _summarize_result(name: str, text: str, status: str | None, artifact: Any) -
         return _one_line(_first_line(stripped) or "Error", 160), True
     if name == "execute":
         code = artifact.get("exit_code") if isinstance(artifact, dict) else None
-        trailers = list(_EXIT_TRAILER.finditer(text))
-        if not isinstance(code, int) and trailers:
-            code = int(trailers[-1].group(1))
-        body = _EXIT_TRAILER.sub("", text).strip()
+        trailer = _EXIT_TRAILER.search(text)
+        if not isinstance(code, int) and trailer:
+            code = int(trailer.group(1))
+        body = (text[: trailer.start()] + text[trailer.end():] if trailer else text).strip()
         if isinstance(code, int) and code != 0:
             first = _first_line(body)
             return f"Exit {code}" + (f" · {_one_line(first, 120)}" if first else ""), True
@@ -404,8 +410,11 @@ class StreamMessageRenderer:
     """Print new graph messages as compact tool activity.
 
     ``begin_turn`` seeds history from LangGraph's initial input-state snapshot.
-    Assistant prose and graph-generated human messages are shown immediately
-    and in full. With ``verbose``, new messages are pretty-printed instead.
+    Assistant prose and graph-generated human messages are shown in full. The
+    latest text-only AI message is held until more output follows, so a final
+    answer reaches :func:`format_response` (see :meth:`hand_off`) and atomic
+    JSON is left to its structure panel. With ``verbose``, new messages are
+    pretty-printed instead.
     """
 
     def __init__(self, output: Console | None = None, *, verbose: bool = False) -> None:
@@ -414,6 +423,7 @@ class StreamMessageRenderer:
         self._seen: set[Any] = set()
         self._handled: set[tuple] = set()
         self._initial = False
+        self._answer: Any = None
         self._labels: dict[str, tuple[str, Any]] = {}
 
     def _print(self, text: Text) -> None:
@@ -423,10 +433,33 @@ class StreamMessageRenderer:
         self._seen.clear()
         self._handled.clear()
         self._labels.clear()
+        self._answer = None
         self._initial = True
 
     def finish(self) -> None:
+        """Show a held answer the caller did not take, e.g. after a failure."""
+        self.flush()
         self._labels.clear()
+
+    def flush(self) -> None:
+        """Print the held text-only AI message before later output or a prompt."""
+        message, self._answer = self._answer, None
+        if message is None:
+            return
+        self._handled.add(_message_identity(message))
+        if self._verbose and hasattr(message, "pretty_print"):
+            message.pretty_print()
+        else:
+            text = _content_text(_field(message, "content")).strip()
+            self._console.print(Markdown(_safe_review_text(text)))
+
+    def hand_off(self, result: Any) -> None:
+        """Leave the held answer to :func:`format_response` if *result* has it."""
+        if self._answer is not None and _message_identity(self._answer) in {
+            _message_identity(message) for message in _result_messages(result)
+        }:
+            self._answer = None
+        self.flush()
 
     def excludes(self, message: Any) -> bool:
         """Exclude old history and already displayed messages from final output."""
@@ -436,27 +469,42 @@ class StreamMessageRenderer:
         if not messages:
             return
         occurrences: dict[tuple, int] = {}
-        for index, message in enumerate(messages or []):
-            identity = _message_identity(message)
-            occurrences[identity] = occurrences.get(identity, 0) + 1
-            # Occurrences distinguish repeated ID-less messages without tying
-            # them to positions that can change when history is compacted.
-            key = (identity, occurrences[identity])
-            if key in self._seen:
-                continue
-            labels = self._record(message, record_output=not self._initial)
-            if self._initial:
-                # The last input message is this turn's query. Never replay
-                # existing history, even when verbose or entering a saved thread.
-                if self._verbose and index == len(messages) - 1 and _field(message, "type") == "human":
+        try:
+            for index, message in enumerate(messages):
+                identity = _message_identity(message)
+                occurrences[identity] = occurrences.get(identity, 0) + 1
+                # Occurrences distinguish repeated ID-less messages without tying
+                # them to positions that can change when history is compacted.
+                key = (identity, occurrences[identity])
+                if key in self._seen:
+                    continue
+                self._seen.add(key)
+                labels = self._record(message, record_output=not self._initial)
+                if self._initial:
+                    # The last input message is this turn's query. Never replay
+                    # existing history, even when verbose or entering a saved thread.
+                    self._handled.add(identity)
+                    if self._verbose and index == len(messages) - 1 and _field(message, "type") == "human":
+                        message.pretty_print()
+                    continue
+                text = _content_text(_field(message, "content")).strip()
+                structure = _is_atomic_json(text)
+                calls = _field(message, "tool_calls")
+                if _field(message, "type") == "ai" and text and not structure and not calls:
+                    self.flush()
+                    self._answer = message
+                    continue
+                if not structure:
+                    self._handled.add(identity)
+                elif _field(message, "type") in {"human", "ai"} and not calls and not self._verbose:
+                    continue  # Left to format_response's structure panel.
+                self.flush()
+                if self._verbose:
                     message.pretty_print()
-            elif self._verbose:
-                message.pretty_print()
-            else:
-                self._render_one(message, labels)
-            self._seen.add(key)
-            self._handled.add(identity)
-        self._initial = False
+                else:
+                    self._render_one(message, labels)
+        finally:
+            self._initial = False
 
     def _record(self, message: Any, *, record_output: bool = True) -> list[str]:
         """Keep full tool activity for ``/expand`` and return its display labels."""
@@ -497,7 +545,7 @@ class StreamMessageRenderer:
             return
         text = _content_text(_field(message, "content")).strip()
         calls = [call for call in _field(message, "tool_calls") or [] if isinstance(call, dict)]
-        if text:
+        if text and not _is_atomic_json(text):
             self._console.print(Markdown(_safe_review_text(text)))
         for call, label in zip(calls, labels, strict=True):
             name = str(call.get("name") or "tool")
@@ -582,6 +630,7 @@ class ToolEventRenderer:
                 (f"[dim]Subagent[/dim] [bold cyan]{escape(str(subagent))}[/bold cyan] "
                  if subagent else "[bold cyan]main_agent[/bold cyan] ")
                 + f"[dim]→[/dim] [bold]{escape(name)}[/bold]({escape(str(arguments))})"
+                + (f" [dim]{label}[/dim]" if label else "")
                 + (f"\n[dim]  ↳ {escape(_safe_review_text(str(reason)))}[/dim]" if reason else "")
             )
             return
@@ -788,6 +837,15 @@ def _is_atomic_json(content: Any) -> bool:
     return bool(atomic_keys & data.keys())
 
 
+def _result_messages(result: Any) -> list[Any]:
+    """Return the messages of an agent result, message list, or single message."""
+    if isinstance(result, list):
+        return result
+    if isinstance(result, dict) and "messages" in result:
+        return result["messages"]
+    return [result]
+
+
 def format_response(
     result: Any, verbose: bool = False, *, exclude: Callable[[Any], bool] | None = None,
 ) -> None:
@@ -821,14 +879,7 @@ def format_response(
             console.print("[dim]Main agent returned no assistant text.[/dim]")
         return
 
-    # Extract messages from result
-    messages: list[Any] = []
-    if isinstance(result, list):
-        messages = result
-    elif isinstance(result, dict) and "messages" in result:
-        messages = result["messages"]
-    else:
-        messages = [result]
+    messages = _result_messages(result)
 
     # Find the final AI response
     final_answer = ""

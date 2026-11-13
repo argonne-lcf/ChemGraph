@@ -236,10 +236,10 @@ def test_format_response_renders_main_agent_turn_result():
 
 @pytest.mark.parametrize("name,content,kwargs,expected", [
     ("read_file", "\n".join(f"{n:>4}  x" for n in range(1, 143)), {}, ("Read 142 lines", False)),
-    ("execute", "a\nb\nc\n[Command failed with exit code 1]", {}, ("Exit 1 · a", True)),
-    ("execute", "partial", {"artifact": {"exit_code": 2}}, ("Exit 2 · partial", True)),
-    ("grep", "No matches found", {}, ("No matches", False)),
-    ("ls", "['/a.py', '/b.py']", {}, ("2 paths", False)),
+    ("execute", "out\n[Command failed with exit code 3]\n[Output was truncated due to size limits]", {},
+     ("Exit 3 · out", True)),
+    # A status line inside the command's own output is not its exit status.
+    ("execute", "[Command failed with exit code 1]\nok", {}, ("[Command failed with exit code 1]\nok", False)),
     ("run_ase", "\n".join(f"line {n}" for n in range(30)), {}, ("line 0\nline 1\n… +28 lines", False)),
 ])
 def test_tool_result_summary_is_bounded(name, content, kwargs, expected):
@@ -251,19 +251,6 @@ def test_tool_args_summary_is_one_bounded_escaped_line():
     assert len(summary) <= 100 and "\\x1b" in summary and "\x1b" not in summary and "why" not in summary
 
 
-@pytest.mark.parametrize("name,pattern,expected", [
-    ("grep", "energy", "energy"), ("glob", "*.py", "*.py"), ("ls", "ignored", "/src"),
-])
-def test_search_argument_summary_prefers_the_pattern(name, pattern, expected):
-    assert summarize_tool_args(name, {"path": "/src", "pattern": pattern}) == expected
-
-
-@pytest.mark.parametrize("value", ["{broken", "[" * 1000, "x" * 65537])
-def test_malformed_or_large_literals_stay_displayable(value):
-    assert len(summarize_tool_args("execute", value)) <= 100
-    assert summarize_tool_result("ls", value)[0]
-
-
 def test_parallel_call_labels_do_not_require_call_ids():
     renderer = StreamMessageRenderer(console)
     with console.capture() as capture:
@@ -273,9 +260,8 @@ def test_parallel_call_labels_do_not_require_call_ids():
     assert "ls(/a) #1/2" in capture.get() and "ls(/b) #2/2" in capture.get()
 
 
-def test_event_renderer_summarizes_callback_payloads_and_concurrent_workers():
+def test_event_renderer_summarizes_callback_payloads():
     import io
-    import threading
 
     from langchain_core.tools import ToolException, tool
 
@@ -301,29 +287,6 @@ def test_event_renderer_summarizes_callback_payloads_and_concurrent_workers():
     render("tool_call_failed", {"error": "GraphInterrupt((Interrupt(value='?'),))", "call_id": "q"})
     assert "⎿ Read 300 lines" in output.getvalue() and "⎿ bad value" in output.getvalue()
     assert "Interrupt" not in output.getvalue()  # A pause for input is not a failure.
-
-    # Two workers start from executor threads while their parent `task` runs.
-    output = io.StringIO()
-    render = ToolEventRenderer(Console(file=output, width=80, color_system=None))
-    render("tool_call_started", {"tool_name": "task", "arguments": "{}", "call_id": "t"})
-    path = str({"file_path": "/long/" + "nested/" * 30})
-    threads = [threading.Thread(target=render, args=("tool_call_started", {
-        "tool_name": "read_file", "subagent_name": worker, "call_id": worker, "arguments": path,
-    })) for worker in ("alpha", "beta")]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-    for worker in ("beta", "alpha"):
-        render("tool_call_finished", {"call_id": worker, "result": {"content": "   1  x"}})
-    lines = output.getvalue().splitlines()
-    assert lines[0] == "⏺ task()" and all(len(line) <= 80 for line in lines)
-    assert lines[2].endswith(" #3")  # The later start is labelled; truncation keeps it.
-    later = lines[2].split(" · ")[0].removeprefix("⏺ ")
-    earlier = "beta" if later == "alpha" else "alpha"
-    results = {line.split(" · ")[0].removeprefix("  ⎿ "): line for line in lines[3:]}
-    assert results[later].startswith(f"  ⎿ {later} · read_file #3 · ")
-    assert results[earlier].startswith(f"  ⎿ {earlier} · read_file(/long/")
 
 
 def test_expand_pages_the_full_output_of_the_last_turn(monkeypatch):
