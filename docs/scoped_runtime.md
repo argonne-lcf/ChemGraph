@@ -158,3 +158,65 @@ for artifact in result_artifacts(turn.state, task_id):
 Serve artifacts through the application's ownership checks rather than
 exposing the workspace. Back up the workspace, the operation store and the
 checkpoints together.
+
+## Read-only artifact inspection
+
+`chemgraph artifacts verify` checks an existing workspace and journal without
+constructing a runtime context/store, changing records, or replaying tools:
+
+```bash
+chemgraph artifacts verify --workspace ./workspace --journal ./operations --thread-id THREAD --include-inputs --json
+```
+
+The CLI reads immediate `*.json` files in the FileOperationStore layout. Each
+malformed/unreadable file is reported without hiding valid records; files whose
+thread cannot be decoded make the selection incomplete. Temporary files are
+ignored. Other threads' descriptors are excluded and non-finalized records are
+skipped. See [CLI exit codes](cli.md#verify-scoped-artifacts).
+
+Custom stores supply plain records through the synchronous Python API:
+
+```python
+from chemgraph.runtime.artifact_audit import audit_records, audit_journal
+
+report = audit_journal(workspace="./workspace", journal="./operations",
+                       thread_id="THREAD", include_inputs=True)
+# Obtain records using your store's read-only interface first.
+report = audit_records(records, workspace="./workspace", thread_id="THREAD")
+```
+
+The APIs return dictionaries with `format_version: 1`, `selection`,
+`selection_complete`, `records`, `issues`, `counts`, and `outcome` (`verified`,
+`issues`, or `no_descriptors`). Record/source issues make the selection incomplete.
+Descriptor statuses are `match`, `missing`, `mismatch`, `invalid_path`,
+`malformed_descriptor`, and `unreadable`. `counts.checked` includes only fully
+hashed files; `counts.descriptors` gives status counts. Records retain their
+journal state separately from audit status, execution outcome (`unknown`), and
+scientific acceptance (`unassessed`). Invalid arguments/roots raise `ValueError`
+or `OSError`; source iteration failures retain earlier findings in an incomplete
+report. Neither API mutates input dictionaries.
+
+The audit hashes published `.chemgraph-artifacts` bytes and, when requested,
+`.chemgraph-inputs` snapshots. It never follows mutable source paths, external
+model resources, paths inside result bytes, or serialized messages. It rejects
+symlinked journal entries and descriptor components. Explicit operator roots
+are resolved once; relocated workspaces retain relative descriptor paths.
+
+This is a local inspection of bytes observed during the read, not an atomic
+snapshot or protection against concurrent filesystem replacement. Matching
+mutable local descriptors does not authenticate historical provenance or
+establish execution success, convergence, or scientific acceptance. No repair,
+registration, archive, or computation retry occurs.
+
+| Component | Current ownership |
+| --- | --- |
+| [SessionStore](../src/chemgraph/memory/store.py) | Conversations, sessions, usage; the audit does not open or migrate it |
+| [OperationJournal / OperationStore](../src/chemgraph/runtime/journal.py) | Decisions, operation state, descriptors, serialized results; audit reads plain records only |
+| [Scoped workspace](../src/chemgraph/runtime/context.py) and [artifact helpers](../src/chemgraph/runtime/artifacts.py) | Workspace paths, registered outputs, published copies and prepared input snapshots |
+| [JobTracker](../src/chemgraph/execution/job_tracker.py) | Backend task/Future tracking; audit does not poll or reconcile jobs |
+| [UI artifacts](../src/ui/artifacts.py) | Per-exchange file attribution, not scoped-journal checksum evidence |
+
+Simulation tools resolve paths through ASE helpers and register scoped outputs
+for publication. Inspection follows only the resulting internal descriptors.
+Workspace/thread selection is a local operator choice, not authentication or
+an access grant; applications continue to enforce their own ownership checks.
