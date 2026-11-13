@@ -189,7 +189,7 @@ def test_format_response_renders_structured_ai_content():
         format_response(result)
 
     output = capture.get()
-    assert "●" in output and "ChemGraph Response" not in output
+    assert "\n" + "─" * 10 in output and "ChemGraph Response" not in output
     assert "Optimization complete" in output
 
 
@@ -211,7 +211,7 @@ def test_format_response_detects_atomic_json_in_structured_content():
         format_response(result)
 
     output = capture.get()
-    assert "●" in output and "ChemGraph Response" not in output
+    assert "\n" + "─" * 10 in output and "ChemGraph Response" not in output
     assert "Water optimized" in output
     assert "Molecular Structure Data" in output
 
@@ -229,7 +229,7 @@ def test_format_response_renders_main_agent_turn_result():
         format_response(result)
 
     output = capture.get()
-    assert "●" in output and "ChemGraph Response" not in output
+    assert "\n" + "─" * 10 in output and "ChemGraph Response" not in output
     assert "Delegated calculation complete" in output
 
 
@@ -260,12 +260,12 @@ def test_parallel_call_labels_do_not_require_call_ids():
     assert "ls(/a) #1/2" in capture.get() and "ls(/b) #2/2" in capture.get()
 
 
-def test_held_answer_replaced_by_structured_result_keeps_answer_marker():
+def test_held_answer_replaced_by_structured_result_keeps_answer_rule():
     renderer = StreamMessageRenderer(console)
     with console.capture() as capture:
         renderer.render([AIMessage("Water optimized", id="a")])
         renderer.hand_off(AIMessage('{"energy": -14.2}', id="s"))
-    assert "●" in capture.get() and "Water optimized" in capture.get()
+    assert "─\nWater optimized" in capture.get()
 
 
 def test_event_renderer_summarizes_callback_payloads():

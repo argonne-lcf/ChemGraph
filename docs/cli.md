@@ -129,7 +129,7 @@ Interactive sessions preserve conversation context and can be resumed later.
 The shell starts at the query prompt with a compact header showing the model,
 workflow, approval mode, and workspace when configured. Choose these with CLI
 flags or change them with `/model` and `/workflow`. Answers appear as borderless
-Markdown with a `●` marker. A working spinner shows elapsed time for each
+Markdown below a dim rule. A working spinner shows elapsed time for each
 execution segment; it stops for approvals and questions and restarts afterward.
 Turn token usage and the thread/session identifier share one footer line.
 

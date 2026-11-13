@@ -21,6 +21,7 @@ from rich.console import Console, Group
 from rich.markdown import Markdown
 from rich.markup import escape
 from rich.panel import Panel
+from rich.rule import Rule
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
@@ -900,12 +901,10 @@ def _result_messages(result: Any) -> list[Any]:
 def print_answer(text: str, *, output: Console | None = None) -> None:
     """Render prose consistently, including structured last-message runs."""
     destination = output or console
-    answer = Table.grid(padding=(0, 1), expand=True)
-    answer.add_column(width=1, no_wrap=True)
-    answer.add_column(ratio=1)
-    answer.add_row(Text("●", style="green"), Markdown(text))
+    # A rule, not a box, separates the answer from tool activity and keeps it copyable.
     destination.print()
-    destination.print(answer)
+    destination.print(Rule(style="dim"))
+    destination.print(Markdown(text))
 
 
 def format_response(
