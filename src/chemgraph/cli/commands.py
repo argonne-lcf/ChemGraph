@@ -1882,7 +1882,7 @@ def interactive_mode(
                 "\n[bold cyan]ChemGraph[/bold cyan]"
                 + (" [bold yellow]\\[auto][/bold yellow]" if auto_mode.enabled else "")
             )
-            _record_input.get()(query)
+            _record_input.get(lambda _value: None)(query)
             auto_mode.approved = 0
             parsed_command = _parse_interactive_input(query)
 

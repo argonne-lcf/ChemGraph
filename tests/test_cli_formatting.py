@@ -260,6 +260,14 @@ def test_parallel_call_labels_do_not_require_call_ids():
     assert "ls(/a) #1/2" in capture.get() and "ls(/b) #2/2" in capture.get()
 
 
+def test_held_answer_replaced_by_structured_result_keeps_answer_marker():
+    renderer = StreamMessageRenderer(console)
+    with console.capture() as capture:
+        renderer.render([AIMessage("Water optimized", id="a")])
+        renderer.hand_off(AIMessage('{"energy": -14.2}', id="s"))
+    assert "●" in capture.get() and "Water optimized" in capture.get()
+
+
 def test_event_renderer_summarizes_callback_payloads():
     import io
 

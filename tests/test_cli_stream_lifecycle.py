@@ -105,8 +105,8 @@ def test_real_graph_prints_full_prose_before_prompt_and_deduplicates_results(
     assert output.count("token000") == 1 and output.count("Final response.") == 1
     assert output.count('"positions"') == 1
     assert output.index("Last paragraph.") < output.index("CLARIFICATION PROMPT")
-    # The answer reaches format_response when the result contains it.
-    assert ("ChemGraph Response" in output) is (return_option == "state")
+    # The answer is marked once, by format_response or by the held-answer hand-off.
+    assert output.count("●") == 1 and "ChemGraph Response" not in output
     assert "Molecular Structure Data" in output
 
 

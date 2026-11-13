@@ -445,17 +445,23 @@ class StreamMessageRenderer:
         self.flush()
         self._labels.clear()
 
-    def flush(self) -> None:
-        """Print the held text-only AI message before later output or a prompt."""
+    def flush(self, *, answer: bool = False) -> None:
+        """Print the held text-only AI message before later output or a prompt.
+
+        With ``answer``, it is the turn's final answer and gets the answer marker.
+        """
         message, self._answer = self._answer, None
         if message is None:
             return
         self._handled.add(_message_identity(message))
         if self._verbose and hasattr(message, "pretty_print"):
             message.pretty_print()
+            return
+        text = _safe_review_text(_content_text(_field(message, "content")).strip())
+        if answer:
+            print_answer(text, output=self._console)
         else:
-            text = _content_text(_field(message, "content")).strip()
-            self._console.print(Markdown(_safe_review_text(text)))
+            self._console.print(Markdown(text))
 
     def hand_off(self, result: Any) -> None:
         """Leave the held answer to :func:`format_response` if *result* has it."""
@@ -463,7 +469,7 @@ class StreamMessageRenderer:
             _message_identity(message) for message in _result_messages(result)
         }:
             self._answer = None
-        self.flush()
+        self.flush(answer=True)
 
     def excludes(self, message: Any) -> bool:
         """Exclude old history and already displayed messages from final output."""
