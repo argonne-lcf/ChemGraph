@@ -74,3 +74,26 @@ def test_configure_logging_stops_root_duplication_and_keeps_child_file_log(
     assert terminal_output.getvalue().count("simulation completed") == 1
     assert root_output.getvalue() == ""
     assert (tmp_path / "ase_core.log").read_text().count("simulation completed") == 1
+
+
+@pytest.mark.parametrize("level", [logging.WARNING, logging.INFO, logging.DEBUG])
+def test_console_verbosity_when_child_enables_file_diagnostics(
+    isolated_chemgraph_logging, tmp_path, level,
+):
+    _, package, child = isolated_chemgraph_logging
+    configure_logging(level)
+    terminal_output = io.StringIO()
+    package.handlers[0].setStream(terminal_output)
+
+    # ASE enables detailed file logging after CLI logging is configured.
+    file_handler = logging.FileHandler(tmp_path / "ase_core.log")
+    child.addHandler(file_handler)
+    child.setLevel(logging.DEBUG)
+    for record_level in (logging.DEBUG, logging.INFO, logging.WARNING):
+        child.log(record_level, "diagnostic %s", record_level)
+    file_handler.flush()
+
+    for record_level in (logging.DEBUG, logging.INFO, logging.WARNING):
+        message = f"diagnostic {record_level}"
+        assert (message in terminal_output.getvalue()) == (record_level >= level)
+        assert message in (tmp_path / "ase_core.log").read_text()

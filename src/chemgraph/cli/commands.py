@@ -598,6 +598,7 @@ def _print_interactive_usage(owner: Any) -> None:
 @contextmanager
 def _working_progress(description: str = "Working…"):
     """Show elapsed time for one execution segment, outside user prompts."""
+    original_stdout, original_stderr = sys.stdout, sys.stderr
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -607,7 +608,26 @@ def _working_progress(description: str = "Working…"):
         transient=True,
     ) as progress:
         progress.add_task(description, total=None)
-        yield
+        # StreamHandlers retain the streams from their creation, bypassing
+        # Rich's live redirection unless we temporarily update them too.
+        redirected = {}
+        try:
+            loggers = [logging.getLogger(), *list(logging.Logger.manager.loggerDict.values())]
+            for owner in loggers:
+                if not isinstance(owner, logging.Logger):
+                    continue
+                for handler in owner.handlers:
+                    if not isinstance(handler, logging.StreamHandler) or handler in redirected:
+                        continue
+                    for original, live in ((original_stdout, sys.stdout), (original_stderr, sys.stderr)):
+                        if handler.stream is original and live is not original:
+                            redirected[handler] = original
+                            handler.setStream(live)
+                            break
+            yield
+        finally:
+            for handler, original in redirected.items():
+                handler.setStream(original)
 
 
 def _report_failed_usage(operation):
