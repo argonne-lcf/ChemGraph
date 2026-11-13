@@ -670,6 +670,7 @@ def run_query(
     renderer = _stream_renderer(agent, thread_id, verbose=verbose)
     previous = getattr(agent, "message_renderer", None)
     renderer.begin_turn()
+    renderer.answer_follows = getattr(agent, "return_option", "state") != "last_message"
     agent.message_renderer = renderer.render
     try:
         return _run_query(agent, query, thread_id, verbose, resume_from, renderer)
@@ -1815,6 +1816,7 @@ def interactive_mode(
     standalone_thread_id = _next_thread_id() if workflow == "deep_agent" else None
 
     if restored_thread_id and main_session is not None:
+        tool_output_log.start_turn()
         result = restore_main_agent_session(
             main_session,
             checkpoint_runtime=checkpoint_runtime,
@@ -2051,6 +2053,7 @@ Example queries:
                             checkpoint_db=candidate_db,
                             verbose=verbose,
                         )
+                        tool_output_log.start_turn()
                         restored = restore_main_agent_session(
                             candidate_session,
                             checkpoint_runtime=candidate_runtime,

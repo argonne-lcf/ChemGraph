@@ -416,6 +416,9 @@ class StreamMessageRenderer:
         self._pending: str | None = None
         self._query_pending = False
         self._labels: dict[str, tuple[str, Any]] = {}
+        # False when the caller's final answer is only the last message
+        # (``--output last_message``), which a structured follow-up replaces.
+        self.answer_follows = True
 
     def _print(self, text: Text) -> None:
         self._console.print(text, no_wrap=True, overflow="ellipsis")
@@ -438,19 +441,38 @@ class StreamMessageRenderer:
             if key in self._seen:
                 continue
             self._seen.add(key)
+            label = self._record(message)
             if self._verbose:
                 message.pretty_print()
             else:
-                self._render_one(message)
+                self._render_one(message, label)
 
-    def _render_one(self, message: Any) -> None:
+    def _record(self, message: Any) -> str:
+        """Keep full tool activity for ``/expand``; return a result's call label."""
+        kind = _field(message, "type")
+        if kind == "ai":
+            calls = [call for call in _field(message, "tool_calls") or [] if isinstance(call, dict)]
+            for index, call in enumerate(calls, start=1):
+                label = f"#{index}/{len(calls)}" if len(calls) > 1 else ""
+                self._labels[str(call.get("id"))] = (label, call.get("args"))
+        elif kind == "tool":
+            name = str(_field(message, "name") or "tool")
+            label, args = self._labels.pop(str(_field(message, "tool_call_id")), ("", None))
+            tool_output_log.record(f"{name} {label}".strip(), args, tool_result_parts(message)[0])
+            return label
+        return ""
+
+    def _render_one(self, message: Any, label: str = "") -> None:
         kind = _field(message, "type")
         if kind == "human" and self._query_pending:
             self._query_pending = False
             return
         if kind == "human":
             # Graph-generated follow-ups (e.g. structured JSON after the answer)
-            # keep any pending answer pending: format_response still shows it.
+            # keep a pending answer pending when format_response will show it.
+            if self._pending is not None and not self.answer_follows:
+                self._console.print(Markdown(self._pending))
+                self._pending = None
             text = _content_text(_field(message, "content")).strip()
             if text:
                 self._console.print(Text(_safe_review_text(text)))
@@ -464,8 +486,6 @@ class StreamMessageRenderer:
             name = str(_field(message, "name") or "tool")
             text, status, artifact = tool_result_parts(message)
             summary, failed = summarize_tool_result(name, text, status=status, artifact=artifact)
-            label, args = self._labels.pop(str(_field(message, "tool_call_id")), ("", None))
-            tool_output_log.record(f"{name} {label}".strip(), args, text)
             self._print(tool_result_text(
                 summary, failed=failed, prefix=f"{name} {label} · " if label else "",
             ))
@@ -482,7 +502,6 @@ class StreamMessageRenderer:
             name = str(call.get("name") or "tool")
             label = f"#{index}/{len(calls)}" if len(calls) > 1 else ""
             args = call.get("args")
-            self._labels[str(call.get("id"))] = (label, args)
             reason = args.get("reason") if isinstance(args, dict) else None
             self._print(tool_call_line(
                 name, args, label=label, reason=reason, width=self._console.width,

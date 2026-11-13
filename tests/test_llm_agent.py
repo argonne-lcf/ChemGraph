@@ -346,7 +346,7 @@ def test_cli_run_query_prints_compact_activity_once_per_thread(monkeypatch, tmp_
     from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
 
     from chemgraph.cli import commands
-    from chemgraph.cli.formatting import console
+    from chemgraph.cli.formatting import console, tool_output_log
 
     skill = "\n".join(f"{n:>6}  skill line {n}" for n in range(1, 501))
     batch = [{"name": "run_ase", "args": {"calculator": c}, "id": f"c{c}"} for c in "ABC"]
@@ -375,7 +375,10 @@ def test_cli_run_query_prints_compact_activity_once_per_thread(monkeypatch, tmp_
     monkeypatch.setattr("chemgraph.agent.llm_agent.load_chat_model_prepared", lambda **_k: _prepared())
     printed = []
     monkeypatch.setattr(BaseMessage, "pretty_print", lambda message: printed.append(message.id))
-    agent = ChemGraph(workflow_type="single_agent", enable_memory=False, log_dir=str(tmp_path / "logs"))
+    agent = ChemGraph(
+        workflow_type="single_agent", return_option="state",  # The CLI default.
+        enable_memory=False, log_dir=str(tmp_path / "logs"),
+    )
 
     with console.capture() as capture:
         commands.run_query(agent, "q1", thread_id=7)
@@ -404,6 +407,13 @@ def test_cli_run_query_prints_compact_activity_once_per_thread(monkeypatch, tmp_
         commands.run_query(agent, "q3", thread_id=8)
     assert '{"smiles": "O"}' in capture.get() and "q3" not in capture.get()
     assert "Water." not in capture.get()  # Left to format_response, so shown once.
+    agent.return_option = "last_message"  # format_response then gets only the JSON.
+    with console.capture() as capture:
+        commands.run_query(agent, "q3", thread_id=10)
+    assert "Water." in capture.get()
+    agent.return_option = "state"
 
+    tool_output_log.start_turn()
     commands.run_query(agent, "q3", thread_id=9, verbose=True)
     assert printed == ["h3", "a5", "x1", "x2", "a6", "h4"]  # Every parallel result, in full.
+    assert [entry[2] for entry in tool_output_log.entries()] == ["result A", "result B"]  # /expand
