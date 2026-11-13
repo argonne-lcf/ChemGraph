@@ -33,11 +33,9 @@ ALCF_MODEL_PREFIX = "alcf:"
 
 ALCF_MISSING_KEY_HELP = (
     "ALCF access token not found. To authenticate with ALCF:\n"
-    "  1. pip install globus_sdk\n"
-    "  2. wget https://raw.githubusercontent.com/argonne-lcf/inference-endpoints/"
-    "refs/heads/main/inference_auth_token.py\n"
-    "  3. python inference_auth_token.py authenticate\n"
-    "  4. export ALCF_ACCESS_TOKEN=$(python inference_auth_token.py get_access_token)\n"
+    "  1. pip install alcf-tokens\n"
+    "  2. alcf-tokens login inference\n"
+    "  3. export ALCF_ACCESS_TOKEN=$(alcf-tokens get-token inference)\n"
     "\n"
     "See: https://docs.alcf.anl.gov/services/inference-endpoints/#api-access"
 )
