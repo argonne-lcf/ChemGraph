@@ -1,5 +1,6 @@
 """Only top-level inputs enter readline's persistent history."""
 
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -48,7 +49,7 @@ def test_history_excludes_defaults_and_review_retries(monkeypatch, tmp_path):
     assert "That response is not allowed" in captured.get()
     assert entries == ["optimize methane"] and auto[0]
     path = tmp_path / ".chemgraph" / "cli_history"
-    assert path.stat().st_mode & 0o777 == 0o600
+    assert os.name == "nt" or path.stat().st_mode & 0o777 == 0o600
     with history.enable_input_history() as record:
         record("optimize methane")
         record("   ")

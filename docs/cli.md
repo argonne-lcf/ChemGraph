@@ -134,11 +134,12 @@ execution segment; it stops for approvals and questions and restarts afterward.
 Turn token usage and the thread/session identifier share one footer line.
 
 On supported terminals, ↑/↓ recalls top-level queries and commands across
-restarts. The latest 1,000 entries are saved in `~/.chemgraph/cli_history` with
-owner-only permissions (`0600`). Blank inputs and consecutive duplicates are
-omitted. Approval decisions, clarification answers, and other nested prompt
-responses are not saved. History is disabled for non-terminal input and when
-Python's `readline` or its automatic-history control is unavailable.
+restarts. The latest 1,000 entries are saved in `~/.chemgraph/cli_history`,
+with owner-only permissions (`0600`) on POSIX systems. Blank inputs and
+consecutive duplicates are omitted. Approval decisions, clarification answers,
+and other nested prompt responses are not saved. History is disabled for
+non-terminal input and when Python's `readline` or its automatic-history control
+is unavailable.
 
 Tool activity is compact by default. `/expand` pages the last turn's full tool
 arguments and results; `--verbose` displays full activity as it happens.

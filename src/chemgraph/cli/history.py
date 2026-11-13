@@ -51,7 +51,8 @@ def enable_input_history():
                 path.parent.mkdir(parents=True, exist_ok=True)
                 descriptor = os.open(path, os.O_WRONLY | os.O_CREAT, 0o600)
                 try:
-                    os.fchmod(descriptor, 0o600)
+                    if os.name != "nt":  # Windows has no POSIX owner-only modes.
+                        os.fchmod(descriptor, 0o600)
                 finally:
                     os.close(descriptor)
                 readline.write_history_file(str(path))
