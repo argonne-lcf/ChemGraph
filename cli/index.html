@@ -2011,6 +2011,21 @@ calculator, database, or facility endpoint is reachable.</p>
 </code></pre></div>
 <p>Use <code>/help</code> inside the shell to see the commands available in your release.
 Interactive sessions preserve conversation context and can be resumed later.</p>
+<p>The shell starts at the query prompt with a compact header showing the model,
+workflow, approval mode, and workspace when configured. Choose these with CLI
+flags or change them with <code>/model</code> and <code>/workflow</code>. Answers appear as borderless
+Markdown below a dim rule. A working spinner shows elapsed time for each
+execution segment; it stops for approvals and questions and restarts afterward.
+Turn token usage and the thread/session identifier share one footer line.</p>
+<p>On supported terminals, ↑/↓ recalls top-level queries and commands across
+restarts. The latest 1,000 entries are saved in <code>~/.chemgraph/cli_history</code>,
+with owner-only permissions (<code>0600</code>) on POSIX systems. Blank inputs and
+consecutive duplicates are omitted. Approval decisions, clarification answers,
+and other nested prompt responses are not saved. History is disabled for
+non-terminal input and when Python's <code>readline</code> or its automatic-history control
+is unavailable.</p>
+<p>Tool activity is compact by default. <code>/expand</code> pages the last turn's full tool
+arguments and results; <code>--verbose</code> displays full activity as it happens.</p>
 <p>The <code>main_agent</code> workflow is a durable agent with direct skills, file/shell,
 and local chemistry tools plus optional delegation. Interactive use reviews actions by default:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>main_agent<span class="w"> </span>--workspace<span class="w"> </span>.<span class="w"> </span><span class="se">\</span>
