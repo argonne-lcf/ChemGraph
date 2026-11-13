@@ -38,6 +38,7 @@ dependencies:
     - mace-torch>=0.3.16
     - -r requirements/mace-polar.txt
     - globus-sdk
+    - alcf-tokens==0.4.0
     - streamlit==1.54.0
     - py3Dmol
     - plotly
