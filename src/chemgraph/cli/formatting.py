@@ -194,9 +194,13 @@ _READ_ROW = re.compile(r"^\s*\d+(?:  |\t)")
 
 def _one_line(value: str, limit: int) -> str:
     """Return a single escaped line of at most *limit* characters."""
-    # Escaping never shortens text, so one character past the limit suffices.
-    text = _safe_review_text(value[: limit + 1]).replace("\n", "⏎").replace("\t", " ")
-    return text if len(text) <= limit else text[: limit - 1] + "…"
+    # Only a bounded prefix is displayed; line breaks and their indentation
+    # collapse to one space (``/expand`` keeps the original layout).
+    head = value[: limit * 4]
+    text = re.sub(r"\s*\n\s*", " ", _safe_review_text(head)).replace("\t", " ").strip()
+    if len(text) <= limit and len(head) == len(value):
+        return text
+    return text[: limit - 1] + "…"
 
 
 def _parse_literal(value: Any) -> Any:
