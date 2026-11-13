@@ -1,0 +1,37 @@
+# Isolated integration deployment. Never use this development identity in production.
+services:
+  model:
+    image: chemgraph-web-api:test
+    command: ["python", "/test/web_model_server.py", "--host", "0.0.0.0"]
+    volumes: ["./tests/web_model_server.py:/test/web_model_server.py:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9999/healthz')"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  web-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: chemgraph-web-api:test
+    init: true
+    environment:
+      CHEMGRAPH_WEB_DEV_USER: integration-test
+      CHEMGRAPH_WEB_DEMO: "false"
+      CHEMGRAPH_WEB_PUBLIC_ORIGIN: http://localhost:${CHEMGRAPH_TEST_PORT:-8082}
+      CHEMGRAPH_WEB_PROVIDERS_FILE: /etc/chemgraph/providers.toml
+    volumes:
+      - test-data:/data
+      - ./tests/web-providers.test.toml:/etc/chemgraph/providers.toml:ro
+    depends_on:
+      model:
+        condition: service_healthy
+  web:
+    build: ./frontend
+    image: chemgraph-web:test
+    ports: ["127.0.0.1:${CHEMGRAPH_TEST_PORT:-8082}:8080"]
+    depends_on:
+      web-api:
+        condition: service_healthy
+volumes:
+  test-data:

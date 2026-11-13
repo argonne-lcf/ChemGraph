@@ -1,0 +1,13 @@
+# Test-only endpoint, with no real credentials or external provider calls.
+[providers.Lab]
+model = "test-model"
+base_url = "http://model:9999/v1"
+
+[providers.Unavailable]
+model = "test-model"
+base_url = "http://model:9999/v1"
+api_key_env = "CHEMGRAPH_TEST_MISSING"
+
+[providers."Auth failure"]
+model = "fail-401"
+base_url = "http://model:9999/v1"

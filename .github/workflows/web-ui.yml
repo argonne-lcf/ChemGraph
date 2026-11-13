@@ -1,0 +1,97 @@
+name: React UI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install web dependencies
+        run: |
+          python -m pip install -e '.[web]' ruff
+          npm ci --prefix frontend
+          cd frontend
+          npx playwright install --with-deps chromium
+      - name: Validate API and frontend
+        run: |
+          ruff check .
+          pytest tests/test_web_*.py -q
+          npm test --prefix frontend
+          npm run build --prefix frontend
+          docker compose -f compose.web.yml config --quiet
+          docker compose -f compose.web.test.yml config --quiet
+          kubectl kustomize k8s/web > /tmp/chemgraph-web-manifests.yaml
+      - name: Exercise the browser workflow
+        env:
+          CHEMGRAPH_WEB_DEV_USER: ci-demo
+          CHEMGRAPH_WEB_DEMO: 'true'
+          CHEMGRAPH_WEB_DATA_DIR: /tmp/chemgraph-web-ci
+        run: |
+          python -m chemgraph.api > /tmp/chemgraph-api.log 2>&1 &
+          api_pid=$!
+          node frontend/node_modules/vite/bin/vite.js frontend --host 127.0.0.1 > /tmp/chemgraph-frontend.log 2>&1 &
+          frontend_pid=$!
+          trap 'kill "$api_pid" "$frontend_pid" 2>/dev/null || true; wait "$api_pid" "$frontend_pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/healthz && curl -fsS http://localhost:8080/ > /dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:e2e --prefix frontend
+      - name: Exercise real graphs in the development frontend
+        env:
+          CHEMGRAPH_WEB_DEV_USER: ci-test
+          CHEMGRAPH_WEB_DEMO: 'false'
+          CHEMGRAPH_WEB_DATA_DIR: /tmp/chemgraph-web-real-ci
+          CHEMGRAPH_WEB_PROVIDERS: '{"Lab":{"model":"test-model","base_url":"http://127.0.0.1:9999/v1"},"Unavailable":{"model":"test-model","base_url":"http://127.0.0.1:9999/v1","api_key_env":"CHEMGRAPH_TEST_MISSING"},"Auth failure":{"model":"fail-401","base_url":"http://127.0.0.1:9999/v1"}}'
+          WEB_TEST_REAL: 'true'
+        run: |
+          python tests/web_model_server.py > /tmp/chemgraph-model.log 2>&1 &
+          model_pid=$!
+          python -m chemgraph.api > /tmp/chemgraph-api.log 2>&1 &
+          api_pid=$!
+          node frontend/node_modules/vite/bin/vite.js frontend --host 127.0.0.1 > /tmp/chemgraph-frontend.log 2>&1 &
+          frontend_pid=$!
+          trap 'kill "$api_pid" "$frontend_pid" "$model_pid" 2>/dev/null || true; wait "$api_pid" "$frontend_pid" "$model_pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/healthz && curl -fsS http://localhost:8080/ > /dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:e2e --prefix frontend
+      - name: Exercise real graphs through the built proxy
+        env:
+          WEB_TEST_REAL: 'true'
+          WEB_TEST_URL: http://localhost:8082
+        run: |
+          docker compose -p chemgraph-web-test -f compose.web.test.yml build
+          docker compose -p chemgraph-web-test -f compose.web.test.yml up -d --wait
+          npm run test:e2e --prefix frontend
+      - name: Collect container logs and stop the test deployment
+        if: always()
+        run: |
+          docker compose -p chemgraph-web-test -f compose.web.test.yml logs --no-color > /tmp/chemgraph-web-containers.log
+          docker compose -p chemgraph-web-test -f compose.web.test.yml down --volumes
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: web-ui-failure-details
+          path: |
+            frontend/test-results/
+            /tmp/chemgraph-api.log
+            /tmp/chemgraph-frontend.log
+            /tmp/chemgraph-model.log
+            /tmp/chemgraph-web-containers.log
