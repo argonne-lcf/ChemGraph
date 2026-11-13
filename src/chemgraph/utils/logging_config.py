@@ -71,6 +71,12 @@ def configure_logging(level: int = logging.WARNING) -> None:
         handler.setFormatter(formatter)
         root.addHandler(handler)
 
+    # Child loggers may enable DEBUG for file diagnostics. Propagated records
+    # bypass the parent's logger level, so filter terminal output here too.
+    for handler in root.handlers:
+        if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+            handler.setLevel(level)
+
     # Propagate the level to any already-created child loggers so that
     # modules imported before this call also respect the new level.
     manager = logging.Logger.manager

@@ -59,18 +59,23 @@ def test_configure_logging_stops_root_duplication_and_keeps_child_file_log(
     root_output = io.StringIO()
     terminal_output = io.StringIO()
     root.addHandler(logging.StreamHandler(root_output))
-    file_handler = logging.FileHandler(tmp_path / "ase_core.log")
-    child.addHandler(file_handler)
 
-    configure_logging(logging.INFO)
-    configure_logging(logging.INFO)
+    configure_logging(logging.WARNING)
+    configure_logging(logging.WARNING)
     assert len(package.handlers) == 1
     package.handlers[0].setStream(terminal_output)
 
-    child.info("simulation completed")
+    # ASE enables detailed file logging after CLI logging is configured.
+    file_handler = logging.FileHandler(tmp_path / "ase_core.log")
+    child.addHandler(file_handler)
+    child.setLevel(logging.DEBUG)
+    child.info("file-only diagnostic")
+    child.warning("simulation completed")
     file_handler.flush()
 
     assert package.propagate is False
     assert terminal_output.getvalue().count("simulation completed") == 1
+    assert "file-only diagnostic" not in terminal_output.getvalue()
     assert root_output.getvalue() == ""
     assert (tmp_path / "ase_core.log").read_text().count("simulation completed") == 1
+    assert "file-only diagnostic" in (tmp_path / "ase_core.log").read_text()

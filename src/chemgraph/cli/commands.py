@@ -17,14 +17,15 @@ from copy import deepcopy
 from contextvars import ContextVar
 from functools import wraps
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Callable, Dict, Optional, Sequence
 
 from rich.panel import Panel
 from rich.console import Console
 from rich.markup import escape
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
+from rich.text import Text
 
 from chemgraph.agent.deepagent_backend import (
     DEEPAGENT_ENV_ALLOWLIST,
@@ -49,6 +50,7 @@ from chemgraph.cli.checkpoint_runtime import (
     DEFAULT_CHECKPOINT_DB,
     CheckpointRuntime,
 )
+from chemgraph.cli.history import enable_input_history
 from chemgraph.models.endpoints import (
     ModelRequest,
     missing_credential_help,
@@ -63,7 +65,8 @@ from chemgraph.utils.workflow_utils import get_removed_workflow_message
 
 from chemgraph.cli.formatting import (
     console,
-    create_banner,
+    create_session_header,
+    create_interactive_help,
     action_review_summary,
     build_action_review,
     format_response,
@@ -569,12 +572,62 @@ def _next_thread_id() -> int:
     return _thread_counter
 
 
-def print_token_usage(owner: Any, *, stderr: bool = False) -> None:
+def print_token_usage(owner: Any, *, stderr: bool = False, suffix: str | None = None) -> None:
     """Print locally collected counters without adding conversation messages."""
     usage = getattr(owner, "last_usage", None)
-    if isinstance(usage, dict):
+    if isinstance(usage, dict) or suffix:
         destination = Console(stderr=True) if stderr else console
-        destination.print(format_token_usage(usage))
+        text = format_token_usage(usage) if isinstance(usage, dict) else Text(style="dim")
+        if suffix:
+            text.append((" · " if text else "") + suffix)
+        destination.print(text)
+
+
+def _print_interactive_usage(owner: Any) -> None:
+    usage = getattr(owner, "last_usage", None)
+    thread_id = getattr(owner, "thread_id", None)
+    if thread_id is None and isinstance(usage, dict):
+        thread_id = usage.get("thread_id")
+    session_id = getattr(owner, "session_id", None)
+    suffix = f"thread {thread_id}" if thread_id is not None else (
+        f"session {session_id}" if session_id else None
+    )
+    print_token_usage(owner, suffix=suffix)
+
+
+@contextmanager
+def _working_progress(description: str = "Working…"):
+    """Show elapsed time for one execution segment, outside user prompts."""
+    original_stdout, original_stderr = sys.stdout, sys.stderr
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        TimeElapsedColumn(),
+        TextColumn("· Ctrl-C to interrupt", style="dim"),
+        console=console,
+        transient=True,
+    ) as progress:
+        progress.add_task(description, total=None)
+        # StreamHandlers retain the streams from their creation, bypassing
+        # Rich's live redirection unless we temporarily update them too.
+        redirected = {}
+        try:
+            loggers = [logging.getLogger(), *list(logging.Logger.manager.loggerDict.values())]
+            for owner in loggers:
+                if not isinstance(owner, logging.Logger):
+                    continue
+                for handler in owner.handlers:
+                    if not isinstance(handler, logging.StreamHandler) or handler in redirected:
+                        continue
+                    for original, live in ((original_stdout, sys.stdout), (original_stderr, sys.stderr)):
+                        if handler.stream is original and live is not original:
+                            redirected[handler] = original
+                            handler.setStream(live)
+                            break
+            yield
+        finally:
+            for handler, original in redirected.items():
+                handler.setStream(original)
 
 
 def _report_failed_usage(operation):
@@ -699,30 +752,19 @@ def _run_query(agent, query, thread_id, verbose, resume_from, renderer):
     interrupt_count = 0
 
     # --- First invocation: run the full agent.run() ---
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-        transient=True,
-    ) as progress:
-        task = progress.add_task("Processing query...", total=None)
-        try:
+    try:
+        with _working_progress():
             result = run_async_callable(
                 lambda: agent.run(query, config=config, resume_from=resume_from)
             )
-            progress.update(task, description="[green]Query completed!")
-            time.sleep(0.3)
-            return result
-        except HumanInputRequired as hir:
-            progress.update(task, description="[yellow]Agent needs your input")
-            time.sleep(0.2)
-            pending_interrupts = hir.interrupts
-            config = hir.resume_config or config
-        except Exception as e:
-            progress.update(task, description="[red]Query failed!")
-            renderer.flush()
-            console.print(f"[red]Error processing query: {e}[/red]")
-            return None
+        return result
+    except HumanInputRequired as hir:
+        pending_interrupts = hir.interrupts
+        config = hir.resume_config or config
+    except Exception as e:
+        renderer.flush()
+        console.print(f"[red]Error processing query: {e}[/red]")
+        return None
 
     # --- Interrupt-resume loop ---
     # The spinner's `with` block has exited, so the terminal is free
@@ -830,7 +872,8 @@ def _run_query(agent, query, thread_id, verbose, resume_from, renderer):
             return await agent.afinalize_completed_run(last_st, resume_config, query)
 
         try:
-            result = run_async_callable(_resume_stream)
+            with _working_progress():
+                result = run_async_callable(_resume_stream)
 
             if result is None:
                 console.print("[red]Resume produced no output.[/red]")
@@ -1074,13 +1117,7 @@ def _run_main_agent_operation(
         from chemgraph.agent.main_session import IncompatibleCheckpointError
 
         try:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=console,
-                transient=True,
-            ) as progress:
-                progress.add_task(progress_description, total=None)
+            with _working_progress(progress_description):
                 result = (
                     checkpoint_runtime.run(operation)
                     if checkpoint_runtime is not None
@@ -1122,11 +1159,12 @@ def _run_main_agent_operation(
                         )
                 restored = False
 
-                result = (
-                    checkpoint_runtime.run(lambda: session.resume(answers))
-                    if checkpoint_runtime is not None
-                    else run_async_callable(lambda: session.resume(answers))
-                )
+                with _working_progress(progress_description):
+                    result = (
+                        checkpoint_runtime.run(lambda: session.resume(answers))
+                        if checkpoint_runtime is not None
+                        else run_async_callable(lambda: session.resume(answers))
+                    )
             except IncompatibleCheckpointError as exc:
                 console.print(f"[red]{escape(str(exc))}[/red]")
                 return None
@@ -1153,7 +1191,7 @@ def run_main_agent_query(
     return _run_main_agent_operation(
         session,
         lambda: session.run(query),
-        progress_description="Processing main-agent turn...",
+        progress_description="Working…",
         verbose=verbose,
         checkpoint_runtime=checkpoint_runtime,
         interactive=interactive,
@@ -1518,20 +1556,26 @@ def _print_main_agent_restore_configuration(thread_id, config):
     console.print(table)
 
 
-def _interactive_auto_mode(operation):
-    """Give each interactive session its own auto-mode switch, starting off."""
+_record_input: ContextVar[Callable[[str], None]] = ContextVar("record_cli_input")
+
+
+def _interactive_session(operation):
+    """Scope auto approvals and explicit input history to one REPL session."""
     @wraps(operation)
     def run(*args, **kwargs):
-        token = _review_auto_mode.set(_AutoMode())
-        try:
-            return operation(*args, **kwargs)
-        finally:
-            _review_auto_mode.reset(token)
+        with enable_input_history() as record_input:
+            token = _review_auto_mode.set(_AutoMode())
+            history_token = _record_input.set(record_input)
+            try:
+                return operation(*args, **kwargs)
+            finally:
+                _record_input.reset(history_token)
+                _review_auto_mode.reset(token)
     return run
 
 
 @_report_session_usage
-@_interactive_auto_mode
+@_interactive_session
 def interactive_mode(
     model: str = "gpt-4o-mini",
     workflow: str = "single_agent",
@@ -1618,16 +1662,7 @@ def interactive_mode(
     reasoning_effort : str, optional
         Reasoning effort for models with verified support.
     """
-    console.print(create_banner())
-    console.print("[bold green]Welcome to ChemGraph Interactive Mode![/bold green]")
-    console.print(
-        "Type your queries and get AI-powered computational chemistry insights."
-    )
-    console.print(
-        "[dim]Type '/quit' to exit or '/help' for commands. Exact bare "
-        "aliases such as 'quit' and 'help' also work.[/dim]\n"
-    )
-
+    workflow = resolve_workflow(workflow)
     try:
         approval_mode = normalize_approval_mode(
             resolve_workflow(workflow), approval_mode, deepagent_auto_approve=deepagent_auto_approve,
@@ -1717,16 +1752,6 @@ def interactive_mode(
         except (TypeError, ValueError, RuntimeError, OSError) as exc:
             console.print(f"[red]{escape(str(exc))}[/red]")
             return
-        # Allow the user to override model/workflow at startup.
-        if approval_mode == "review":
-            model = Prompt.ask(
-                "Select model (or type a custom model ID)", default=model
-            )
-            workflow = Prompt.ask(
-                "Select workflow",
-                choices=ALL_WORKFLOW_TYPES,
-                default=resolve_workflow(workflow),
-            )
 
     if workflow == "main_agent":
         checkpoint_runtime = CheckpointRuntime()
@@ -1840,11 +1865,16 @@ def interactive_mode(
             )
         elif result.assistant_response:
             format_response(result, verbose=verbose)
-            print_token_usage(main_session if main_session is not None else agent)
+            _print_interactive_usage(main_session)
 
-    console.print(
-        "[green]Ready! You can now ask computational chemistry questions.[/green]\n"
-    )
+    header_workspace = main_options["workspace"] if workflow == "main_agent" else None
+    if workflow == "deep_agent":
+        header_workspace = getattr(getattr(agent, "deepagent_backend", None), "cwd", deepagent_workspace)
+    console.print(create_session_header(
+        model, workflow, approval_mode,
+        workspace=str(header_workspace) if header_workspace is not None else None,
+        auto=auto_mode.enabled,
+    ))
 
     while True:
         try:
@@ -1852,6 +1882,7 @@ def interactive_mode(
                 "\n[bold cyan]ChemGraph[/bold cyan]"
                 + (" [bold yellow]\\[auto][/bold yellow]" if auto_mode.enabled else "")
             )
+            _record_input.get(lambda _value: None)(query)
             auto_mode.approved = 0
             parsed_command = _parse_interactive_input(query)
 
@@ -1880,49 +1911,7 @@ def interactive_mode(
                 if argument:
                     console.print("[red]Usage: /help[/red]")
                     continue
-                console.print(
-                    Panel(
-                        """
-Available commands:
-  /quit              Exit interactive mode
-  /help              Show this help message
-  /clear             Clear screen
-  /config            Show current configuration
-  /expand            Show the full tool calls and results of the last turn
-  /model <name>      Change model
-  /workflow <type>   Change workflow type
-  /auto \\[on|off]     Approve tool actions without asking (this session only)
-
-Session commands:
-  /history           List recent sessions
-  /show <id>         Show a session's conversation
-  /resume <id>       Resume from a previous session
-  /retry             Retry a failed main_agent operation
-
-Exact bare aliases for commands without arguments remain supported. Commands
-with arguments require the leading slash so prompts beginning with words such
-as "show", "model", or "workflow" are sent to the agent.
-
-main_agent keeps one durable checkpointed thread. `/resume <id>` restores
-completed, interrupted, or retryable threads. Nested chemistry workers may
-pause to request input.
-
-Tool action reviews: Enter or y approves; n rejects. Type instructions
-instead to skip the displayed action and ask the agent to revise it. Each
-action in a batch is reviewed separately. Choose 3 (or type auto) to approve
-and switch on auto mode; `/auto off` brings the reviews back. Questions from
-the agent are always asked.
-
-Example queries:
-  What is the SMILES string for water?
-  Optimize the geometry of methane
-  Calculate CO2 vibrational frequencies
-  Show me the structure of caffeine
-                    """,
-                        title="Help",
-                        style="blue",
-                    )
-                )
+                console.print(create_interactive_help())
                 continue
             elif command == "expand":
                 if argument:
@@ -2123,7 +2112,7 @@ Example queries:
                         )
                     elif restored.assistant_response:
                         format_response(restored, verbose=verbose)
-                        print_token_usage(main_session)
+                        _print_interactive_usage(main_session)
                     continue
                 if main_session is not None:
                     console.print(
@@ -2145,7 +2134,7 @@ Example queries:
                         **run_options,
                     )
                     if result:
-                        print_token_usage(main_session if main_session is not None else agent)
+                        _print_interactive_usage(main_session if main_session is not None else agent)
                 continue
             elif command == "retry":
                 if argument:
@@ -2167,8 +2156,7 @@ Example queries:
                     )
                 if result:
                     format_response(result, verbose=verbose)
-                    print_token_usage(main_session if main_session is not None else agent)
-                    console.print(f"[dim]Thread: {main_session.thread_id}[/dim]")
+                    _print_interactive_usage(main_session if main_session is not None else agent)
                 continue
             elif command == "model":
                 if not argument:
@@ -2313,11 +2301,7 @@ Example queries:
             if result:
                 if main_session is not None:
                     format_response(result, verbose=verbose)
-                print_token_usage(main_session if main_session is not None else agent)
-                if main_session is not None:
-                    console.print(f"[dim]Thread: {main_session.thread_id}[/dim]")
-                elif hasattr(agent, "session_id") and agent.session_id:
-                    console.print(f"[dim]Session: {agent.session_id}[/dim]")
+                _print_interactive_usage(main_session if main_session is not None else agent)
 
         except EOFError:
             console.print("\n[yellow]Goodbye![/yellow]")

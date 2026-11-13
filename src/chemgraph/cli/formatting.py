@@ -21,6 +21,7 @@ from rich.console import Console, Group
 from rich.markdown import Markdown
 from rich.markup import escape
 from rich.panel import Panel
+from rich.rule import Rule
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
@@ -445,17 +446,23 @@ class StreamMessageRenderer:
         self.flush()
         self._labels.clear()
 
-    def flush(self) -> None:
-        """Print the held text-only AI message before later output or a prompt."""
+    def flush(self, *, answer: bool = False) -> None:
+        """Print the held text-only AI message before later output or a prompt.
+
+        With ``answer``, it is the turn's final answer and gets the answer marker.
+        """
         message, self._answer = self._answer, None
         if message is None:
             return
         self._handled.add(_message_identity(message))
         if self._verbose and hasattr(message, "pretty_print"):
             message.pretty_print()
+            return
+        text = _safe_review_text(_content_text(_field(message, "content")).strip())
+        if answer:
+            print_answer(text, output=self._console)
         else:
-            text = _content_text(_field(message, "content")).strip()
-            self._console.print(Markdown(_safe_review_text(text)))
+            self._console.print(Markdown(text))
 
     def hand_off(self, result: Any) -> None:
         """Leave the held answer to :func:`format_response` if *result* has it."""
@@ -463,7 +470,7 @@ class StreamMessageRenderer:
             _message_identity(message) for message in _result_messages(result)
         }:
             self._answer = None
-        self.flush()
+        self.flush(answer=True)
 
     def excludes(self, message: Any) -> bool:
         """Exclude old history and already displayed messages from final output."""
@@ -683,6 +690,47 @@ class ToolEventRenderer:
 # Banner
 # ---------------------------------------------------------------------------
 
+def create_session_header(
+    model: str, workflow: str, approval_mode: str, *,
+    workspace: str | None = None, auto: bool = False,
+) -> Panel:
+    """Show the effective configuration after initialization or restore."""
+    text = Text(f"model {model} · workflow {workflow} · approvals {approval_mode}")
+    if auto:
+        text.append(" [auto]", style="yellow")
+    if workspace:
+        text.append(f"\nworkspace {workspace}", style="dim")
+    text.append("\n/help commands · /expand tool output · ↑/↓ history · /quit exit", style="dim")
+    return Panel(text, title="ChemGraph", border_style="blue", expand=False)
+
+
+def create_interactive_help() -> Group:
+    table = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
+    table.add_column(style="cyan", no_wrap=True)
+    table.add_column()
+    for command, description in (
+        ("/help", "Show commands"),
+        ("/quit", "Exit interactive mode"),
+        ("/clear", "Clear the screen"),
+        ("/config", "Show current configuration"),
+        ("/expand", "View the last turn's full tool calls and results"),
+        ("/model <name>", "Change model"),
+        ("/workflow <type>", "Change workflow"),
+        ("/auto [on|off]", "Toggle automatic tool approvals for this session"),
+        ("/history", "List recent sessions"),
+        ("/show <id>", "Show a session's conversation"),
+        ("/resume <id>", "Resume a previous session"),
+        ("/retry", "Retry a failed main_agent operation"),
+    ):
+        table.add_row(Text(command), description)
+    return Group(
+        table,
+        Text("↑/↓ recalls inputs. Exact bare aliases work without arguments; otherwise use /commands.", style="dim"),
+        Text("Reviews: Enter/y approves; n rejects; 3/auto enables auto mode; type instructions to revise.", style="dim"),
+        Text("main_agent /resume restores durable threads. Agent questions always require an answer.", style="dim"),
+    )
+
+
 def create_banner() -> Panel:
     """Create a welcome banner for ChemGraph CLI."""
     banner_text = """
@@ -850,6 +898,15 @@ def _result_messages(result: Any) -> list[Any]:
     return [result]
 
 
+def print_answer(text: str, *, output: Console | None = None) -> None:
+    """Render prose consistently, including structured last-message runs."""
+    destination = output or console
+    # A rule, not a box, separates the answer from tool activity and keeps it copyable.
+    destination.print()
+    destination.print(Rule(style="dim"))
+    destination.print(Markdown(text))
+
+
 def format_response(
     result: Any, verbose: bool = False, *, exclude: Callable[[Any], bool] | None = None,
 ) -> None:
@@ -871,14 +928,7 @@ def format_response(
     if hasattr(result, "assistant_response"):
         response = str(getattr(result, "assistant_response", "")).strip()
         if response:
-            console.print(
-                Panel(
-                    Markdown(response),
-                    title="ChemGraph Response",
-                    style="green",
-                    padding=(1, 2),
-                )
-            )
+            print_answer(response)
         elif verbose:
             console.print("[dim]Main agent returned no assistant text.[/dim]")
         return
@@ -904,14 +954,7 @@ def format_response(
                     break
 
     if final_answer:
-        console.print(
-            Panel(
-                Markdown(final_answer),
-                title="ChemGraph Response",
-                style="green",
-                padding=(1, 2),
-            )
-        )
+        print_answer(final_answer)
 
     # Check for structure data (valid JSON with atomic keys)
     for message in messages:
