@@ -364,7 +364,10 @@ def test_cli_run_query_prints_compact_activity_once_per_thread(monkeypatch, tmp_
 
     class FakeWorkflow:
         async def astream(self, inputs, *, stream_mode, config):
-            for end in range(1, len(states["messages"]) + 1):
+            # LangGraph first emits existing history plus the new input.
+            start = next(i + 1 for i, message in reversed(list(enumerate(states["messages"])))
+                         if message.type == "human" and message.content == inputs["messages"])
+            for end in range(start, len(states["messages"]) + 1):
                 # Copies, as checkpoint deserialization produces.
                 yield {"messages": [m.model_copy() for m in states["messages"][:end]]}
 
@@ -384,7 +387,7 @@ def test_cli_run_query_prints_compact_activity_once_per_thread(monkeypatch, tmp_
         commands.run_query(agent, "q1", thread_id=7)
     first = capture.get()
     assert "⏺ read_file(/skills/x/SKILL.md)" in first and "⎿ Read 500 lines" in first
-    assert "skill line" not in first and "final answer one" not in first  # Answer is printed once later.
+    assert "skill line" not in first and first.count("final answer one") == 1
     assert [line for line in first.splitlines() if "⎿ run_ase" in line] == [
         "  ⎿ run_ase #2/3 · energy B", "  ⎿ run_ase #1/3 · energy A", "  ⎿ run_ase #3/3 · energy C",
     ]
@@ -392,7 +395,7 @@ def test_cli_run_query_prints_compact_activity_once_per_thread(monkeypatch, tmp_
     states["messages"] = [*turn1, HumanMessage("q2"), AIMessage("answer two", id="a4")]
     with console.capture() as capture:
         commands.run_query(agent, "q2", thread_id=7)
-    assert capture.get().strip() == "" and agent.message_renderer is None and printed == []
+    assert capture.get().strip() == "answer two" and agent.message_renderer is None and printed == []
 
     # Structured workflows return the answer as a graph-generated human message.
     states["messages"] = [
@@ -406,7 +409,7 @@ def test_cli_run_query_prints_compact_activity_once_per_thread(monkeypatch, tmp_
     with console.capture() as capture:
         commands.run_query(agent, "q3", thread_id=8)
     assert '{"smiles": "O"}' in capture.get() and "q3" not in capture.get()
-    assert "Water." not in capture.get()  # Left to format_response, so shown once.
+    assert capture.get().count("Water.") == 1
     agent.return_option = "last_message"  # format_response then gets only the JSON.
     with console.capture() as capture:
         commands.run_query(agent, "q3", thread_id=10)

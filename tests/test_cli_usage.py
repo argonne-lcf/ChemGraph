@@ -123,7 +123,7 @@ def test_one_shot_prints_usage_only_to_stderr(monkeypatch, tmp_path, terminal, c
                                   fail=outcome == "failure", pause=outcome == "cancelled"))
     monkeypatch.setattr(cli, "initialize_agent", lambda *args, **kwargs: agent)
     monkeypatch.setattr(cli, "console", commands.console)
-    monkeypatch.setattr(cli, "format_response", lambda *args, **kwargs: commands.console.print("ANSWER"))
+    monkeypatch.setattr(commands, "format_response", lambda *args, **kwargs: commands.console.print("ANSWER"))
     parser = cli.create_argument_parser()
     monkeypatch.setattr(cli.sys, "argv", ["chemgraph", "run", "-q", "test"])
     args = parser.parse_args(["run", "-q", "test"])

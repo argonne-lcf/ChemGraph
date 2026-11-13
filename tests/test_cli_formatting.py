@@ -97,7 +97,7 @@ def test_action_reviews_escape_terminal_controls(monkeypatch, name, args, full):
 
 
 def test_tool_reason_is_shown_once_and_escaped_in_review_and_event_line():
-    from chemgraph.cli.commands import _render_main_agent_event
+    from chemgraph.cli.commands import make_tool_event_renderer
 
     terminal = Console(width=120, color_system=None)
     with terminal.capture() as capture:
@@ -109,7 +109,7 @@ def test_tool_reason_is_shown_once_and_escaped_in_review_and_event_line():
     assert '"reason"' not in output
 
     with console.capture() as capture:
-        _render_main_agent_event("tool_call_started", {
+        make_tool_event_renderer()("tool_call_started", {
             "tool_name": "execute", "arguments": "{'command': 'ls'}", "reason": "[red]why[/red]\x1b[2J",
         })
     output = capture.get()
@@ -249,6 +249,28 @@ def test_tool_result_summary_is_bounded(name, content, kwargs, expected):
 def test_tool_args_summary_is_one_bounded_escaped_line():
     summary = summarize_tool_args("write_file", str({"content": "x\x1b[2J" * 5000, "reason": "why"}))
     assert len(summary) <= 100 and "\\x1b" in summary and "\x1b" not in summary and "why" not in summary
+
+
+@pytest.mark.parametrize("name,pattern,expected", [
+    ("grep", "energy", "energy"), ("glob", "*.py", "*.py"), ("ls", "ignored", "/src"),
+])
+def test_search_argument_summary_prefers_the_pattern(name, pattern, expected):
+    assert summarize_tool_args(name, {"path": "/src", "pattern": pattern}) == expected
+
+
+@pytest.mark.parametrize("value", ["{broken", "[" * 1000, "x" * 65537])
+def test_malformed_or_large_literals_stay_displayable(value):
+    assert len(summarize_tool_args("execute", value)) <= 100
+    assert summarize_tool_result("ls", value)[0]
+
+
+def test_parallel_call_labels_do_not_require_call_ids():
+    renderer = StreamMessageRenderer(console)
+    with console.capture() as capture:
+        renderer.render([AIMessage("", tool_calls=[
+            {"name": "ls", "args": {"path": path}, "id": None} for path in ("/a", "/b")
+        ])])
+    assert "ls(/a) #1/2" in capture.get() and "ls(/b) #2/2" in capture.get()
 
 
 def test_event_renderer_summarizes_callback_payloads_and_concurrent_workers():

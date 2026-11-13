@@ -158,7 +158,7 @@ def test_interactive_event_renders_direct_and_subagent_tool_calls():
     assert "row-250" not in output
 
 
-def test_create_main_agent_session_installs_interactive_event_renderer(monkeypatch):
+def test_create_main_agent_session_leaves_rendering_to_each_operation(monkeypatch):
     captured = {}
 
     class FakeSession:
@@ -185,7 +185,7 @@ def test_create_main_agent_session_installs_interactive_event_renderer(monkeypat
 
     assert captured["workflow"] is agent.workflow
     assert captured["thread_id"] == "thread-1"
-    assert isinstance(captured["on_event"], commands.ToolEventRenderer)
+    assert "on_event" not in captured
 
 
 def test_main_agent_query_runs_each_turn_on_same_session():

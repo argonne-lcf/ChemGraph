@@ -13,7 +13,7 @@ import os
 import re
 import threading
 from difflib import unified_diff
-from typing import Any
+from typing import Any, Callable
 
 from rich.align import Align
 from rich.cells import cell_len, set_cell_size
@@ -193,17 +193,24 @@ def _one_line(value: str, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def summarize_tool_args(name: str, args: Any, limit: int = 100) -> str:
-    """Summarize tool arguments (a dict or its ``str``) on one bounded line."""
-    if isinstance(args, str) and len(args) <= 65536:
+def _parse_literal(value: Any) -> Any:
+    """Decode small Python literals from callbacks; leave other values alone."""
+    if isinstance(value, str) and len(value) <= 65536:
         try:
-            args = ast.literal_eval(args)
+            return ast.literal_eval(value)
         except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
             pass
+    return value
+
+
+def summarize_tool_args(name: str, args: Any, limit: int = 100) -> str:
+    """Summarize tool arguments (a dict or its ``str``) on one bounded line."""
+    args = _parse_literal(args)
     if not isinstance(args, dict):
         return _one_line(str(args), limit)
     args = {key: value for key, value in args.items() if key != "reason"}
-    for key in _PRIMARY_ARG_KEYS:
+    keys = ("pattern", *_PRIMARY_ARG_KEYS) if name in {"grep", "glob"} else _PRIMARY_ARG_KEYS
+    for key in keys:
         if isinstance(args.get(key), str):
             return _one_line(args[key], limit)
     parts = []
@@ -280,10 +287,7 @@ def _summarize_result(name: str, text: str, status: str | None, artifact: Any) -
         if stripped == "No files found":
             return "No files", False
         listing = stripped.split("\n\n", 1)[0]
-        try:
-            paths = ast.literal_eval(listing) if len(listing) <= 65536 else None
-        except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
-            paths = None
+        paths = _parse_literal(listing)
         if isinstance(paths, list):
             more = " (truncated)" if listing != stripped else ""
             return f"{len(paths)} path{'' if len(paths) == 1 else 's'}{more}", False
@@ -341,18 +345,19 @@ def reason_text(reason: Any) -> Text:
     return Text("  ↳ " + _one_line(str(reason), 200), style="dim")
 
 
-def _note_text(text: str) -> Text:
-    lines = text.strip().splitlines()
-    shown = [_one_line(line, 160) for line in lines[:3]]
-    if len(lines) > 3:
-        shown.append(f"… +{len(lines) - 3} lines")
-    return Text("\n".join(shown), style="dim")
-
-
 def _field(message: Any, name: str) -> Any:
     if isinstance(message, dict):
         return message.get(name)
     return getattr(message, name, None)
+
+
+def _message_identity(message: Any) -> tuple:
+    if message_id := _field(message, "id"):
+        return ("id", message_id)
+    return (
+        "content", _field(message, "type"), _content_text(_field(message, "content")),
+        _field(message, "tool_call_id"),
+    )
 
 
 class ToolOutputLog:
@@ -386,11 +391,7 @@ def show_tool_output_log(log: ToolOutputLog = tool_output_log) -> None:
         return
     with console.pager(styles=False, links=False):
         for title, args, text in entries:
-            if isinstance(args, str):
-                try:
-                    args = ast.literal_eval(args) if len(args) <= 65536 else args
-                except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
-                    pass
+            args = _parse_literal(args)
             if not isinstance(args, str):
                 args = json.dumps(args, indent=2, ensure_ascii=False, default=str)
             console.print(Text(f"⏺ {title}", style="bold"))
@@ -402,87 +403,91 @@ def show_tool_output_log(log: ToolOutputLog = tool_output_log) -> None:
 class StreamMessageRenderer:
     """Print new graph messages as compact tool activity.
 
-    Seen message IDs persist across turns on one thread. The user's query (the
-    first new human message of a turn) is not echoed; later human messages are
-    graph-generated (e.g. structured JSON answers) and are printed in full. The
-    final text-only AI message is left to :func:`format_response`. With
-    ``verbose``, every new message is pretty-printed in full instead.
+    ``begin_turn`` seeds history from LangGraph's initial input-state snapshot.
+    Assistant prose and graph-generated human messages are shown immediately
+    and in full. With ``verbose``, new messages are pretty-printed instead.
     """
 
     def __init__(self, output: Console | None = None, *, verbose: bool = False) -> None:
         self._console = output or console
         self._verbose = verbose
         self._seen: set[Any] = set()
-        self._pending: str | None = None
-        self._query_pending = False
+        self._handled: set[tuple] = set()
+        self._initial = False
         self._labels: dict[str, tuple[str, Any]] = {}
-        # False when the caller's final answer is only the last message
-        # (``--output last_message``), which a structured follow-up replaces.
-        self.answer_follows = True
 
     def _print(self, text: Text) -> None:
         self._console.print(text, no_wrap=True, overflow="ellipsis")
 
     def begin_turn(self) -> None:
-        self._pending = None
-        self._query_pending = True
+        self._seen.clear()
+        self._handled.clear()
+        self._labels.clear()
+        self._initial = True
 
     def finish(self) -> None:
-        self._pending = None
-        self._query_pending = False
+        self._labels.clear()
+
+    def excludes(self, message: Any) -> bool:
+        """Exclude old history and already displayed messages from final output."""
+        return _message_identity(message) in self._handled
 
     def render(self, messages: Any) -> None:
+        if not messages:
+            return
+        occurrences: dict[tuple, int] = {}
         for index, message in enumerate(messages or []):
-            # Some graphs leave human messages without IDs; a thread's history
-            # is append-only, so position plus content identifies them.
-            key = _field(message, "id") or (
-                index, _field(message, "type"), hash(_content_text(_field(message, "content"))),
-            )
+            identity = _message_identity(message)
+            occurrences[identity] = occurrences.get(identity, 0) + 1
+            # Occurrences distinguish repeated ID-less messages without tying
+            # them to positions that can change when history is compacted.
+            key = (identity, occurrences[identity])
             if key in self._seen:
                 continue
-            self._seen.add(key)
-            label = self._record(message)
-            if self._verbose:
+            labels = self._record(message, record_output=not self._initial)
+            if self._initial:
+                # The last input message is this turn's query. Never replay
+                # existing history, even when verbose or entering a saved thread.
+                if self._verbose and index == len(messages) - 1 and _field(message, "type") == "human":
+                    message.pretty_print()
+            elif self._verbose:
                 message.pretty_print()
             else:
-                self._render_one(message, label)
+                self._render_one(message, labels)
+            self._seen.add(key)
+            self._handled.add(identity)
+        self._initial = False
 
-    def _record(self, message: Any) -> str:
-        """Keep full tool activity for ``/expand``; return a result's call label."""
+    def _record(self, message: Any, *, record_output: bool = True) -> list[str]:
+        """Keep full tool activity for ``/expand`` and return its display labels."""
         kind = _field(message, "type")
         if kind == "ai":
             calls = [call for call in _field(message, "tool_calls") or [] if isinstance(call, dict)]
+            labels = []
             for index, call in enumerate(calls, start=1):
                 label = f"#{index}/{len(calls)}" if len(calls) > 1 else ""
+                labels.append(label)
                 self._labels[str(call.get("id"))] = (label, call.get("args"))
+            return labels
         elif kind == "tool":
             name = str(_field(message, "name") or "tool")
             label, args = self._labels.pop(str(_field(message, "tool_call_id")), ("", None))
-            tool_output_log.record(f"{name} {label}".strip(), args, tool_result_parts(message)[0])
-            return label
-        return ""
+            if record_output:
+                tool_output_log.record(f"{name} {label}".strip(), args, tool_result_parts(message)[0])
+            return [label]
+        return []
 
-    def _render_one(self, message: Any, label: str = "") -> None:
+    def _render_one(self, message: Any, labels: list[str]) -> None:
         kind = _field(message, "type")
-        if kind == "human" and self._query_pending:
-            self._query_pending = False
-            return
         if kind == "human":
-            # Graph-generated follow-ups (e.g. structured JSON after the answer)
-            # keep a pending answer pending when format_response will show it.
-            if self._pending is not None and not self.answer_follows:
-                self._console.print(Markdown(self._pending))
-                self._pending = None
             text = _content_text(_field(message, "content")).strip()
             if text:
                 self._console.print(Text(_safe_review_text(text)))
             return
         if kind not in {"ai", "tool"}:
             return
-        if self._pending is not None:
-            self._print(_note_text(self._pending))
-            self._pending = None
         if kind == "tool":
+            label = labels[0]
             name = str(_field(message, "name") or "tool")
             text, status, artifact = tool_result_parts(message)
             summary, failed = summarize_tool_result(name, text, status=status, artifact=artifact)
@@ -492,15 +497,10 @@ class StreamMessageRenderer:
             return
         text = _content_text(_field(message, "content")).strip()
         calls = [call for call in _field(message, "tool_calls") or [] if isinstance(call, dict)]
-        if not calls:
-            if text:
-                self._pending = text
-            return
         if text:
-            self._print(_note_text(text))
-        for index, call in enumerate(calls, start=1):
+            self._console.print(Markdown(_safe_review_text(text)))
+        for call, label in zip(calls, labels, strict=True):
             name = str(call.get("name") or "tool")
-            label = f"#{index}/{len(calls)}" if len(calls) > 1 else ""
             args = call.get("args")
             reason = args.get("reason") if isinstance(args, dict) else None
             self._print(tool_call_line(
@@ -526,12 +526,22 @@ class ToolEventRenderer:
         self._batched: set[str] = set()
         self._calls: dict[str, dict[str, Any]] = {}
         self._sequence = 0
+        self._closed = False
+
+    def finish(self) -> None:
+        """Release outstanding calls and ignore late callbacks after this turn."""
+        with self._lock:
+            self._closed = True
+            self._calls.clear()
+            self._batched.clear()
 
     def _print(self, text: Any) -> None:
         self._console.print(text, no_wrap=True, overflow="ellipsis")
 
     def __call__(self, event: str, payload: dict[str, Any]) -> None:
         with self._lock:
+            if self._closed:
+                return
             if event == "llm_decision":
                 calls = [call for call in payload.get("tool_calls") or [] if call.get("id")]
                 if len(calls) > 1:
@@ -778,7 +788,9 @@ def _is_atomic_json(content: Any) -> bool:
     return bool(atomic_keys & data.keys())
 
 
-def format_response(result: Any, verbose: bool = False) -> None:
+def format_response(
+    result: Any, verbose: bool = False, *, exclude: Callable[[Any], bool] | None = None,
+) -> None:
     """Format the agent response for display.
 
     Parameters
@@ -787,6 +799,8 @@ def format_response(result: Any, verbose: bool = False) -> None:
         Agent result, message list, state dictionary, or message object.
     verbose : bool, optional
         Whether to include raw message details.
+    exclude : callable, optional
+        Skip messages already handled by the CLI's streamed display.
     """
     if not result:
         console.print("[red]No response received from agent.[/red]")
@@ -819,6 +833,8 @@ def format_response(result: Any, verbose: bool = False) -> None:
     # Find the final AI response
     final_answer = ""
     for message in reversed(messages):
+        if exclude is not None and exclude(message):
+            continue
         if hasattr(message, "content") and hasattr(message, "type"):
             content = _content_text(message.content).strip()
             if message.type == "ai" and content:
@@ -844,6 +860,8 @@ def format_response(result: Any, verbose: bool = False) -> None:
 
     # Check for structure data (valid JSON with atomic keys)
     for message in messages:
+        if exclude is not None and exclude(message):
+            continue
         content = ""
         if hasattr(message, "content"):
             content = _content_text(message.content).strip()

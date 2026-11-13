@@ -237,11 +237,11 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
                 raise ValueError(HEADLESS_CONFIGURATION_ERROR) from exc
         session = commands.create_main_agent_session(
             agent, thread_id=thread_id if saved else None, checkpoint_db=checkpoint_db,
-            verbose=options.get("verbose", False),
         )
         if saved:
             result = commands.restore_main_agent_session(
                 session, checkpoint_runtime=runtime, interactive=False,
+                verbose=options.get("verbose", False),
             )
             if query and result is not None and result.status in {"waiting_for_user", "failed"}:
                 Console(stderr=True).print(f"Query not run: session is {result.status}.")
@@ -257,6 +257,7 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
                 session, lambda: session.resume(answers),
                 progress_description="Answering main-agent questions...",
                 checkpoint_runtime=runtime, interactive=False, report_failure_usage=False,
+                verbose=options.get("verbose", False),
             )
         if query and (not saved or (result is not None and result.status == "completed")):
             # Clear restored state so a failed operation cannot report the previous result.
