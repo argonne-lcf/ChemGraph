@@ -683,6 +683,47 @@ class ToolEventRenderer:
 # Banner
 # ---------------------------------------------------------------------------
 
+def create_session_header(
+    model: str, workflow: str, approval_mode: str, *,
+    workspace: str | None = None, auto: bool = False,
+) -> Panel:
+    """Show the effective configuration after initialization or restore."""
+    text = Text(f"model {model} · workflow {workflow} · approvals {approval_mode}")
+    if auto:
+        text.append(" [auto]", style="yellow")
+    if workspace:
+        text.append(f"\nworkspace {workspace}", style="dim")
+    text.append("\n/help commands · /expand tool output · ↑/↓ history · /quit exit", style="dim")
+    return Panel(text, title="ChemGraph", border_style="blue", expand=False)
+
+
+def create_interactive_help() -> Group:
+    table = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
+    table.add_column(style="cyan", no_wrap=True)
+    table.add_column()
+    for command, description in (
+        ("/help", "Show commands"),
+        ("/quit", "Exit interactive mode"),
+        ("/clear", "Clear the screen"),
+        ("/config", "Show current configuration"),
+        ("/expand", "View the last turn's full tool calls and results"),
+        ("/model <name>", "Change model"),
+        ("/workflow <type>", "Change workflow"),
+        ("/auto [on|off]", "Toggle automatic tool approvals for this session"),
+        ("/history", "List recent sessions"),
+        ("/show <id>", "Show a session's conversation"),
+        ("/resume <id>", "Resume a previous session"),
+        ("/retry", "Retry a failed main_agent operation"),
+    ):
+        table.add_row(Text(command), description)
+    return Group(
+        table,
+        Text("↑/↓ recalls inputs. Exact bare aliases work without arguments; otherwise use /commands.", style="dim"),
+        Text("Reviews: Enter/y approves; n rejects; 3/auto enables auto mode; type instructions to revise.", style="dim"),
+        Text("main_agent /resume restores durable threads. Agent questions always require an answer.", style="dim"),
+    )
+
+
 def create_banner() -> Panel:
     """Create a welcome banner for ChemGraph CLI."""
     banner_text = """
@@ -850,6 +891,17 @@ def _result_messages(result: Any) -> list[Any]:
     return [result]
 
 
+def print_answer(text: str, *, output: Console | None = None) -> None:
+    """Render prose consistently, including structured last-message runs."""
+    destination = output or console
+    answer = Table.grid(padding=(0, 1), expand=True)
+    answer.add_column(width=1, no_wrap=True)
+    answer.add_column(ratio=1)
+    answer.add_row(Text("●", style="green"), Markdown(text))
+    destination.print()
+    destination.print(answer)
+
+
 def format_response(
     result: Any, verbose: bool = False, *, exclude: Callable[[Any], bool] | None = None,
 ) -> None:
@@ -871,14 +923,7 @@ def format_response(
     if hasattr(result, "assistant_response"):
         response = str(getattr(result, "assistant_response", "")).strip()
         if response:
-            console.print(
-                Panel(
-                    Markdown(response),
-                    title="ChemGraph Response",
-                    style="green",
-                    padding=(1, 2),
-                )
-            )
+            print_answer(response)
         elif verbose:
             console.print("[dim]Main agent returned no assistant text.[/dim]")
         return
@@ -904,14 +949,7 @@ def format_response(
                     break
 
     if final_answer:
-        console.print(
-            Panel(
-                Markdown(final_answer),
-                title="ChemGraph Response",
-                style="green",
-                padding=(1, 2),
-            )
-        )
+        print_answer(final_answer)
 
     # Check for structure data (valid JSON with atomic keys)
     for message in messages:

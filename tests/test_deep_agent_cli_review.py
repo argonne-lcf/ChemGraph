@@ -328,12 +328,9 @@ def test_auto_option_is_not_offered_outside_reviewed_repl(monkeypatch):
 @pytest.mark.parametrize("approval_mode", ["review", "bypass"])
 def test_auto_command_toggles_session_state(monkeypatch, approval_mode):
     prompts = iter(["/auto on", "/auto on", "/config", "/auto", "/auto off", "/config", "/quit"])
-    if approval_mode == "review":
-        prompts = iter(["initial-model", "deep_agent", *prompts])
     labels, confirmations = [], iter([False, True])
     monkeypatch.setattr(commands.Prompt, "ask", lambda label, **_k: labels.append(label) or next(prompts))
     monkeypatch.setattr(commands.Confirm, "ask", lambda *_a, **_k: next(confirmations))
-    monkeypatch.setattr(commands, "create_banner", lambda: "")
     monkeypatch.setattr(commands, "initialize_agent", lambda *_a, **_k: SimpleNamespace())
     output = io.StringIO()
     monkeypatch.setattr(commands, "console", Console(file=output, width=200))
@@ -350,7 +347,7 @@ def test_auto_command_toggles_session_state(monkeypatch, approval_mode):
     assert states == ["Auto mode: on", "Auto mode: on. Usage: /auto [on|off]", "Auto mode: off"]
     # One REPL label per command: the marker appears after the confirmed /auto on and
     # disappears after /auto off.
-    assert ["[auto]" in label for label in labels[2:]] == [False, False, True, True, True, False, False]
+    assert ["[auto]" in label for label in labels] == [False, False, True, True, True, False, False]
 
 
 @pytest.mark.parametrize("answer", ["v", "VIEW"])
@@ -771,9 +768,8 @@ def test_interactive_catalog_survives_model_and_workflow_changes(monkeypatch, ca
         if catalog_mode == "empty" else ToolRegistry([ToolRegistry().get_spec("calculator")])
     )
     initialized = []
-    prompts = iter(["initial-model", "deep_agent", "/model another-model", "/workflow single_agent", "/workflow deep_agent", "/quit"])
+    prompts = iter(["/model another-model", "/workflow single_agent", "/workflow deep_agent", "/quit"])
     monkeypatch.setattr(commands.Prompt, "ask", lambda *_a, **_k: next(prompts))
-    monkeypatch.setattr(commands, "create_banner", lambda: None)
     monkeypatch.setattr(commands, "initialize_agent", lambda *args, **kwargs: (
         initialized.append((args[1], kwargs.get("deepagent_tool_registry"))) or SimpleNamespace()
     ))
@@ -791,19 +787,18 @@ def test_cli_retains_catalog_before_selecting_deep_agent(
 ):
     from chemgraph.registry import ToolRegistry
 
-    settings = {"workflow": "single_agent"}
+    settings = {"workflow": startup_workflow}
     if restriction is not None:
         settings["tools"] = restriction
     path = tmp_path / "config.toml"
     path.write_text(toml.dumps({"general": settings}))
     prompts = iter([
-        "initial-model", startup_workflow, "/workflow deep_agent",
+        "/workflow deep_agent",
         "/model another-model", "/workflow single_agent", "/workflow deep_agent", "/quit",
     ])
     initialized = []
     monkeypatch.setattr(ToolRegistry, "get", lambda *_a, **_k: pytest.fail("must stay lazy"))
     monkeypatch.setattr(commands.Prompt, "ask", lambda *_a, **_k: next(prompts))
-    monkeypatch.setattr(commands, "create_banner", lambda: None)
     monkeypatch.setattr(commands, "initialize_agent", lambda *args, **kwargs: (
         initialized.append((args[1], kwargs["deepagent_tool_registry"])) or SimpleNamespace()
     ))

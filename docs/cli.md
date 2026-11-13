@@ -126,6 +126,23 @@ chemgraph run --interactive
 Use `/help` inside the shell to see the commands available in your release.
 Interactive sessions preserve conversation context and can be resumed later.
 
+The shell starts at the query prompt with a compact header showing the model,
+workflow, approval mode, and workspace when configured. Choose these with CLI
+flags or change them with `/model` and `/workflow`. Answers appear as borderless
+Markdown with a `●` marker. A working spinner shows elapsed time for each
+execution segment; it stops for approvals and questions and restarts afterward.
+Turn token usage and the thread/session identifier share one footer line.
+
+On supported terminals, ↑/↓ recalls top-level queries and commands across
+restarts. The latest 1,000 entries are saved in `~/.chemgraph/cli_history` with
+owner-only permissions (`0600`). Blank inputs and consecutive duplicates are
+omitted. Approval decisions, clarification answers, and other nested prompt
+responses are not saved. History is disabled for non-terminal input and when
+Python's `readline` or its automatic-history control is unavailable.
+
+Tool activity is compact by default. `/expand` pages the last turn's full tool
+arguments and results; `--verbose` displays full activity as it happens.
+
 The `main_agent` workflow is a durable agent with direct skills, file/shell,
 and local chemistry tools plus optional delegation. Interactive use reviews actions by default:
 

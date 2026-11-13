@@ -172,6 +172,19 @@ def test_content_text_normalizes_structured_blocks():
     assert _content_text(content) == "Optimization complete!"
 
 
+def test_session_header_shows_effective_configuration_and_hints():
+    from chemgraph.cli.formatting import create_interactive_help, create_session_header
+
+    terminal = Console(width=120, color_system=None)
+    with terminal.capture() as capture:
+        terminal.print(create_session_header("test-model", "main_agent", "review", workspace="/runs/[water]", auto=True))
+        terminal.print(create_interactive_help())
+    output = capture.get()
+    assert "model test-model · workflow main_agent · approvals review [auto]" in output
+    assert "workspace /runs/[water]" in output
+    assert all(hint in output for hint in ("↑/↓", "/expand", "/help", "/resume", "/auto [on|off]"))
+
+
 def test_format_response_renders_structured_ai_content():
     result = {
         "messages": [
@@ -189,7 +202,7 @@ def test_format_response_renders_structured_ai_content():
         format_response(result)
 
     output = capture.get()
-    assert "ChemGraph Response" in output
+    assert "●" in output and "ChemGraph Response" not in output
     assert "Optimization complete" in output
 
 
@@ -211,7 +224,7 @@ def test_format_response_detects_atomic_json_in_structured_content():
         format_response(result)
 
     output = capture.get()
-    assert "ChemGraph Response" in output
+    assert "●" in output and "ChemGraph Response" not in output
     assert "Water optimized" in output
     assert "Molecular Structure Data" in output
 
@@ -229,7 +242,7 @@ def test_format_response_renders_main_agent_turn_result():
         format_response(result)
 
     output = capture.get()
-    assert "ChemGraph Response" in output
+    assert "●" in output and "ChemGraph Response" not in output
     assert "Delegated calculation complete" in output
 
 

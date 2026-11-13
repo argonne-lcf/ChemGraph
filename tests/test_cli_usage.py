@@ -4,6 +4,7 @@ import io
 import gc
 import weakref
 from asyncio import CancelledError
+from contextlib import contextmanager
 
 import pytest
 from rich.console import Console
@@ -43,7 +44,22 @@ def test_format_usage_unknown_partial_and_subsets():
     assert format_token_usage(counts).plain == "Tokens: unavailable"
 
 
-def test_standalone_approval_counts_calls_on_both_sides(monkeypatch, tmp_path, terminal):
+@pytest.mark.parametrize("main", [False, True])
+def test_approval_spinner_and_usage_cover_both_execution_segments(monkeypatch, tmp_path, terminal, main):
+    phases = []
+    @contextmanager
+    def working(*args):
+        phases.append("start")
+        try:
+            yield
+        finally:
+            phases.append("stop")
+    def prompt(*args, **kwargs):
+        assert phases[-1] == "stop"
+        phases.append("prompt")
+        return "yes"
+    monkeypatch.setattr(commands, "_working_progress", working)
+    monkeypatch.setattr(commands, "_prompt_for_interrupt", prompt)
     model = FakeMessagesListChatModel(responses=[answer(), answer(), answer()])
     builder = StateGraph(MessagesState)
     builder.add_node("first", lambda state: {"messages": [model.invoke(state["messages"])]})
@@ -54,17 +70,19 @@ def test_standalone_approval_counts_calls_on_both_sides(monkeypatch, tmp_path, t
     builder.add_edge(START, "first")
     builder.add_edge("first", "second")
     builder.add_edge("second", END)
-    agent = _agent(monkeypatch, tmp_path, workflow=builder.compile(checkpointer=InMemorySaver()))
-    monkeypatch.setattr(commands, "_prompt_for_interrupt", lambda *_: "yes")
-    result = commands.run_query(agent, "test")
-    assert result.content == "done"
+    workflow = builder.compile(checkpointer=InMemorySaver())
+    agent = MainAgentSession(workflow) if main else _agent(monkeypatch, tmp_path, workflow=workflow)
+    run = commands.run_main_agent_query if main else commands.run_query
+    result = run(agent, "test")
+    assert (result.assistant_response if main else result.content) == "done"
+    assert phases == ["start", "stop", "prompt", "start", "stop"]
     assert "Tokens:" not in terminal.getvalue()  # caller renders after the answer
     commands.print_token_usage(agent)
     assert terminal.getvalue().count("Tokens:") == 1
     assert "24 total" in terminal.getvalue()
     assert model.i == 2  # no extra invocation to produce the usage line
     assert agent.last_usage["call_count"] == 2
-    state = agent.get_state({"configurable": {"thread_id": agent.last_usage["thread_id"]}})
+    state = workflow.get_state({"configurable": {"thread_id": agent.last_usage["thread_id"]}}).values
     assert all("Tokens:" not in m.content for m in state.get("messages", []))
 
 
@@ -150,7 +168,7 @@ def test_interactive_exit_prints_cumulative_usage(monkeypatch, tmp_path, termina
                    workflow=graph(FakeMessagesListChatModel(responses=[answer()])))
     monkeypatch.setattr(commands, "initialize_agent", lambda *args, **kwargs: agent)
     monkeypatch.setattr(commands, "format_response", lambda *args, **kwargs: commands.console.print("ANSWER"))
-    inputs = iter(["test", "single_agent", "one", "two", exit_command])
+    inputs = iter(["one", "two", exit_command])
     def ask(*args, **kwargs):
         item = next(inputs)
         if item is None:
@@ -160,6 +178,7 @@ def test_interactive_exit_prints_cumulative_usage(monkeypatch, tmp_path, termina
     commands.interactive_mode(model="test", workflow="single_agent")
     output = terminal.getvalue()
     assert output.count("Tokens:") == 2
+    assert all(" · thread " in line for line in output.splitlines() if line.startswith("Tokens:"))
     assert output.count("Session tokens:") == 1
     assert "Session tokens: 20 input · 4 output · 24 total" in output
     assert output.index("ANSWER") < output.index("Tokens:")

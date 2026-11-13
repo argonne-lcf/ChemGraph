@@ -18,7 +18,7 @@ def test_switches_reuse_resolved_context(monkeypatch, tmp_path, model_loader):
         agents.append(agent)
         return agent
 
-    replies = iter(["test", "main_agent", "/model test-two", "/workflow single_agent",
+    replies = iter(["/model test-two", "/workflow single_agent",
                     "/workflow main_agent", "/quit"])
     def ask(*args, **kwargs):
         answer = next(replies)
@@ -30,7 +30,7 @@ def test_switches_reuse_resolved_context(monkeypatch, tmp_path, model_loader):
     monkeypatch.setattr(commands.Prompt, "ask", ask)
     with commands.console.capture():
         commands.interactive_mode(
-            workflow="main_agent", checkpoint_db=str(tmp_path / "checkpoints.db"),
+            model="test", workflow="main_agent", checkpoint_db=str(tmp_path / "checkpoints.db"),
             workspace=str(tmp_path), base_url="https://original.example/v1", discover_skills=False,
             subagent_names=[], tool_registry=ToolRegistry([]),
         )
