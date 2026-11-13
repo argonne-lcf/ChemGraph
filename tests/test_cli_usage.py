@@ -2,6 +2,8 @@
 
 import io
 import gc
+import logging
+import sys
 import weakref
 from asyncio import CancelledError
 from contextlib import contextmanager
@@ -42,6 +44,26 @@ def test_format_usage_unknown_partial_and_subsets():
     assert "Tokens (partial): 100 input · unknown output · unknown total" in format_token_usage(counts).plain
     counts.update(input_tokens=None, call_count=0, incomplete_calls=0)
     assert format_token_usage(counts).plain == "Tokens: unavailable"
+
+
+def test_progress_routes_logs_and_restores_stream_after_interrupt(monkeypatch):
+    stderr, display = io.StringIO(), io.StringIO()
+    monkeypatch.setattr(sys, "stderr", stderr)
+    monkeypatch.setattr(commands, "console", Console(
+        file=display, force_terminal=True, color_system=None,
+    ))
+    logger = logging.getLogger("progress_test")
+    handler = logging.StreamHandler(stderr)
+    monkeypatch.setattr(logger, "handlers", [handler])
+    monkeypatch.setattr(logger, "propagate", False)
+    with pytest.raises(KeyboardInterrupt):
+        with commands._working_progress():
+            logger.warning("calculator diagnostic")
+            assert stderr.getvalue() == ""
+            assert "calculator diagnostic" in display.getvalue()
+            raise KeyboardInterrupt
+    logger.warning("after progress")
+    assert stderr.getvalue() == "after progress\n"
 
 
 @pytest.mark.parametrize("main", [False, True])

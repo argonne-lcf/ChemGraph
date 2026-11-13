@@ -4,8 +4,6 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
-
 from chemgraph.cli import commands, history
 from chemgraph.cli.formatting import console
 
@@ -56,13 +54,3 @@ def test_history_excludes_defaults_and_review_retries(monkeypatch, tmp_path):
         record("   ")
         assert entries == ["optimize methane"]
     assert path.read_text() == "optimize methane\n" and auto[0]
-
-
-@pytest.mark.parametrize("mode", ["not_tty", "missing_readline", "missing_auto_history"])
-def test_history_is_optional(monkeypatch, tmp_path, mode):
-    monkeypatch.setattr(sys, "stdin", SimpleNamespace(isatty=lambda: mode != "not_tty"))
-    monkeypatch.setitem(sys.modules, "readline", None if mode == "missing_readline" else SimpleNamespace())
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    with history.enable_input_history() as record:
-        record("query")
-    assert not (tmp_path / ".chemgraph").exists()

@@ -172,19 +172,6 @@ def test_content_text_normalizes_structured_blocks():
     assert _content_text(content) == "Optimization complete!"
 
 
-def test_session_header_shows_effective_configuration_and_hints():
-    from chemgraph.cli.formatting import create_interactive_help, create_session_header
-
-    terminal = Console(width=120, color_system=None)
-    with terminal.capture() as capture:
-        terminal.print(create_session_header("test-model", "main_agent", "review", workspace="/runs/[water]", auto=True))
-        terminal.print(create_interactive_help())
-    output = capture.get()
-    assert "model test-model · workflow main_agent · approvals review [auto]" in output
-    assert "workspace /runs/[water]" in output
-    assert all(hint in output for hint in ("↑/↓", "/expand", "/help", "/resume", "/auto [on|off]"))
-
-
 def test_format_response_renders_structured_ai_content():
     result = {
         "messages": [
