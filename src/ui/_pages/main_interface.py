@@ -594,7 +594,7 @@ def _finish_first_run_setup(config: dict, info, model_name: Optional[str] = None
     providers.align_base_url_for_provider(config, info.id)
     st.session_state.config = config
     saved = save_config(config)
-    # Local servers stay "unproven" to any_provider_ready, so remember
+    # Local servers are never "proven" ready, so remember
     # that setup finished to avoid re-gating the chat.
     st.session_state._setup_skipped = True
     if saved:

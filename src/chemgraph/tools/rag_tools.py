@@ -338,16 +338,3 @@ def query_knowledge_base(
         "num_results": len(results),
         "results": results,
     }
-
-
-def get_loaded_documents() -> list[str]:
-    """Return a list of file paths currently loaded in the vector store.
-
-    This is a plain helper (not a tool) for programmatic access.
-    """
-    return [k for k in _vector_stores if k != "__latest__"]
-
-
-def clear_vector_stores() -> None:
-    """Remove all loaded vector stores. Useful for testing and cleanup."""
-    _vector_stores.clear()

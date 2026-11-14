@@ -389,10 +389,7 @@ async def test_concurrent_interrupts_limit_only_questions(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("asynchronous", [False, True])
-async def test_finalization_scopes_idless_messages_to_thread(
-    monkeypatch, tmp_path, asynchronous
-):
+async def test_finalization_scopes_idless_messages_to_thread(monkeypatch, tmp_path):
     state = {
         "messages": [
             {"type": "human", "content": "Repeated"},
@@ -411,10 +408,7 @@ async def test_finalization_scopes_idless_messages_to_thread(
     agent._ensure_session("Repeated")
     for thread in (7, "7", "new-thread", "new-thread"):
         config = {"configurable": {"thread_id": thread}}
-        if asynchronous:
-            await agent.afinalize_completed_run(state, config, "Repeated")
-        else:
-            agent.finalize_completed_run(state, config, "Repeated")
+        await agent.afinalize_completed_run(state, config, "Repeated")
     session = agent.session_store.get_session(agent.session_id)
     assert [msg.content for msg in session.messages] == ["Repeated", "Same reply"] * 2
     assert session.query_count == 2

@@ -34,7 +34,6 @@ __all__ = [
     "alcf_task",
     "alcf_auth",
     "ALCF_IRI_CATEGORY_TOOLS",
-    "ALCF_IRI_TOOLS",  # backwards-compat alias for ALCF_IRI_CATEGORY_TOOLS
 ]
 
 
@@ -137,6 +136,3 @@ ALCF_IRI_CATEGORY_TOOLS = [
     alcf_facility, alcf_status, alcf_account,
     alcf_compute, alcf_filesystem, alcf_task, alcf_auth,
 ]
-
-# Backwards-compat alias: old code / notebooks importing ALCF_IRI_TOOLS keeps working.
-ALCF_IRI_TOOLS = ALCF_IRI_CATEGORY_TOOLS

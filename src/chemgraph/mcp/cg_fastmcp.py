@@ -359,113 +359,6 @@ class CGFastMCP(FastMCP):
 
         return decorator
 
-    # ── Ensemble tool registration ─────────────────────────────────────
-
-    def ensemble_tool(
-        self,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
-        annotations: Optional[ToolAnnotations] = None,
-        # ── TaskSpec resource hints ──────────────────────────────────
-        num_nodes: int = 1,
-        processes_per_node: int = 1,
-        gpus_per_task: int = 0,
-        env: Optional[Dict[str, str]] = None,
-        working_dir: Optional[str] = None,
-    ) -> Callable:
-        """Register a fan-out tool that submits ``list[params]`` to the backend.
-
-        Decorates ``fn(params: Schema) -> result``.  The MCP tool schema
-        becomes ``list[Schema]`` — the LLM provides a list of jobs and
-        the framework submits each as a
-        :class:`~chemgraph.execution.base.TaskSpec`, then gathers results
-        via :func:`~chemgraph.execution.utils.submit_or_gather`.
-
-        Parameters
-        ----------
-        name, description, annotations
-            Passed through to :meth:`FastMCP.add_tool`.
-        num_nodes, processes_per_node, gpus_per_task, env, working_dir
-            Forwarded to :class:`~chemgraph.execution.base.TaskSpec`.
-        """
-        from chemgraph.execution.base import TaskSpec
-        from chemgraph.execution.utils import submit_or_gather
-
-        task_spec_kwargs: dict[str, Any] = {
-            "num_nodes": num_nodes,
-            "processes_per_node": processes_per_node,
-            "gpus_per_task": gpus_per_task,
-            "env": env or {},
-        }
-        if working_dir is not None:
-            task_spec_kwargs["working_dir"] = working_dir
-
-        fastmcp_kwargs: dict[str, Any] = {}
-        if name is not None:
-            fastmcp_kwargs["name"] = name
-        if description is not None:
-            fastmcp_kwargs["description"] = description
-        if annotations is not None:
-            fastmcp_kwargs["annotations"] = annotations
-
-        def decorator(fn: Callable) -> Callable:
-            self._fix_module_for_pickle(fn)
-            sig = inspect.signature(fn)
-            params = list(sig.parameters.values())
-            if len(params) != 1:
-                raise TypeError(
-                    f"@ensemble_tool expects a function with exactly one "
-                    f"parameter (the per-item schema), got {len(params)} "
-                    f"on {fn.__qualname__}."
-                )
-            param = params[0]
-            param_type = param.annotation
-
-            async def wrapper(params):
-                from chemgraph.execution.utils import to_picklable
-
-                self._ensure_backend()
-                self._task_counter += 1
-                batch_counter = self._task_counter
-                pending = []
-                for i, p in enumerate(params):
-                    task = TaskSpec(
-                        task_id=f"{fn.__name__}_{batch_counter}_{i}",
-                        task_type="python",
-                        callable=fn,
-                        kwargs={param.name: to_picklable(p)},
-                        **task_spec_kwargs,
-                    )
-                    task = self._apply_pre_submit_hook(task)
-                    fut = self._backend.submit(task)
-                    pending.append(({"index": i}, fut))
-
-                return await submit_or_gather(
-                    self._backend,
-                    pending,
-                    self._tracker,
-                    name or fn.__name__,
-                )
-
-            wrapper.__name__ = name or fn.__name__
-            wrapper.__doc__ = fn.__doc__
-            wrapper.__module__ = fn.__module__
-            wrapper.__qualname__ = fn.__qualname__
-
-            new_param = inspect.Parameter(
-                "params",
-                kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                annotation=list[param_type],
-            )
-            wrapper.__signature__ = inspect.Signature(
-                parameters=[new_param]
-            )
-
-            self.add_tool(wrapper, **fastmcp_kwargs)
-            return fn
-
-        return decorator
-
     # ── Schema-driven fanout tool ──────────────────────────────────────
 
     def schema_fanout_tool(
@@ -488,12 +381,10 @@ class CGFastMCP(FastMCP):
         The decorated function is an **expander**: it receives the
         ensemble schema and returns a list of per-item arguments. The
         framework calls ``worker(item)`` on the backend for each item,
-        gathers the results, and returns a batch summary -- same shape
-        as :meth:`ensemble_tool`.
+        gathers the results, and returns a batch summary.
 
-        Unlike :meth:`ensemble_tool` (whose tool signature is
-        ``list[Schema]``), this preserves the ensemble schema as the
-        agent-facing API, so the LLM makes a single tool call against
+        The ensemble schema stays the agent-facing API, so the LLM makes
+        a single tool call against
         e.g. ``input_structure_directory`` and server-side expansion
         produces the per-file jobs.
 

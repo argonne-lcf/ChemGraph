@@ -12,7 +12,6 @@ from chemgraph.models.endpoints.configuration import (
     resolve_base_url_for_spec,
     select_endpoint_for_config,
 )
-from chemgraph.models.endpoints.registry import match_endpoint
 
 try:
     import tomllib
@@ -164,15 +163,6 @@ def _extract_endpoint_from_cli_toml(raw: Mapping[str, Any]) -> dict[str, Any]:
         "provider": provider,
         "reasoning_effort": general.get("reasoning_effort"),
     }
-
-
-def _provider_section_for(model: Any) -> str:
-    """Return the canonical config section for a model identifier."""
-    if isinstance(model, str):
-        spec = match_endpoint(model)
-        if spec is not None and spec.config_section:
-            return spec.config_section
-    return "vllm"
 
 
 def _str_or_none(value: Any) -> str | None:

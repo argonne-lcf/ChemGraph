@@ -380,24 +380,3 @@ class BenchmarkConfig(BaseModel):
                 kwargs[key] = value
 
         return cls(**kwargs)
-
-    @staticmethod
-    def list_profiles(config_file: str) -> List[str]:
-        """Return the names of all eval profiles defined in *config_file*.
-
-        Parameters
-        ----------
-        config_file : str
-            Path to a TOML config file.
-
-        Returns
-        -------
-        list[str]
-            Sorted list of profile names, e.g. ``["quick", "standard"]``.
-        """
-        p = Path(config_file)
-        if not p.exists():
-            return []
-        with open(p) as fh:
-            raw = toml.load(fh)
-        return sorted(raw.get("eval", {}).get("profiles", {}).keys())

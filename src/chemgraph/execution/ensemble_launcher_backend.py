@@ -26,7 +26,6 @@ from typing import List, Literal, Optional, Union
 from chemgraph.execution.base import ExecutionBackend, TaskSpec
 
 try:
-    from ensemble_launcher import EnsembleLauncher
     from ensemble_launcher.config import (
         LauncherConfig,
         MPIConfig,
@@ -38,7 +37,6 @@ try:
 
     _ENSEMBLE_LAUNCHER_AVAILABLE = True
 except ImportError:
-    EnsembleLauncher = None
     LauncherConfig = None
     MPIConfig = None
     PolicyConfig = None

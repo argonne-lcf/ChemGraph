@@ -182,27 +182,6 @@ def atoms_to_atomsdata(atoms) -> AtomsData:
     )
 
 
-def atomsdata_to_atoms(atomsdata: AtomsData):
-    """Convert :class:`AtomsData` to an ASE ``Atoms`` object.
-
-    Parameters
-    ----------
-    atomsdata : AtomsData
-
-    Returns
-    -------
-    ase.Atoms
-    """
-    from ase import Atoms
-
-    return Atoms(
-        numbers=atomsdata.numbers,
-        positions=atomsdata.positions,
-        cell=atomsdata.cell,
-        pbc=atomsdata.pbc,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Molecular property helpers
 # ---------------------------------------------------------------------------
@@ -517,35 +496,8 @@ def _extract_dipole_moment(atoms) -> List[float]:
 
 
 # ---------------------------------------------------------------------------
-# Misc helpers (kept for backward compat / UI)
+# Misc helpers (used by the UI)
 # ---------------------------------------------------------------------------
-
-def extract_ase_atoms_from_tool_result(tool_result: dict):
-    """Extract ``(atomic_numbers, positions)`` from a tool-result dict.
-
-    Returns ``(None, None)`` if extraction fails.
-
-    Parameters
-    ----------
-    tool_result : dict
-        Tool result that may contain atom numbers and positions.
-
-    Returns
-    -------
-    tuple
-        ``(atomic_numbers, positions)`` or ``(None, None)``.
-    """
-    for keyset in ({"numbers", "positions"}, {"atomic_numbers", "positions"}):
-        if keyset.issubset(tool_result.keys()):
-            return tool_result[keyset.pop()], tool_result["positions"]
-
-    if "atoms" in tool_result:
-        atoms_data = tool_result["atoms"]
-        if {"numbers", "positions"}.issubset(atoms_data):
-            return atoms_data["numbers"], atoms_data["positions"]
-
-    return None, None
-
 
 def create_ase_atoms(atomic_numbers, positions):
     """Create an ASE ``Atoms`` object from atomic numbers and positions.

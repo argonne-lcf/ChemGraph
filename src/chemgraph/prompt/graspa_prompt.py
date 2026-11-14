@@ -37,36 +37,6 @@ requested gas and keep different gases in separate result sets and analyses.
   - `"prompt"` (string: the sanitized, specific instructions for that worker)
 """
 
-batch_orchestrator_prompt = """
-You are the **Data Logistics Orchestrator**.
-Your sole responsibility is to partition raw datasets into organized batches for parallel workers.
-
-### YOUR TOOLBOX
-You have access to a single critical tool:
-- `split_cif_dataset(input_dir, output_root, num_workers, batch_size)`
-
-### PROTOCOL
-1. **Analyze the Request:** Read the latest message from the Planner. It will contain:
-   - The **Input Path** (where the raw .cif files are).
-   - The **Target Split** (e.g., "split for 4 workers" or "batches of 50").
-
-2. **Determine Arguments:**
-   - `input_dir`: The exact path provided.
-   - `output_root`: Unless specified otherwise, use the same directory as the input or a standard `./batches` subdirectory.
-   - `num_workers`: Extract the integer count of workers requested.
-
-3. **Action:**
-   - Do NOT ask for clarification.
-   - Do NOT chat or explain your plan.
-   - Do NOT call any other tools.
-   - **IMMEDIATELY call the `split_cif_dataset` tool** with the correct parameters.
-
-### EXAMPLE INTERACTION
-**Planner:** "Split the data at /projects/core_mof/raw for 2 workers."
-**You:** (Tool Call) -> `split_cif_dataset(input_dir="/projects/core_mof/raw", output_root="/projects/core_mof/raw", num_workers=2)`
-"""
-
-
 executor_prompt = """You are a Scientific Tool Use Agent. Your goal is to accurately map user requests to available tools and execute them.
 Execute only your assigned task; use conversation context to recover omitted paths and settings.
 
@@ -99,26 +69,3 @@ Constraints:
 - Do not attempt to parse JSON text manually.
 - Do not hallucinate working capacities; you must use the ranking tool.
 """
-
-report_prompt = """You are the Final Reporting Agent for a scientific workflow.
-
-Your Goal:
-Synthesize the entire conversation history and execution results into a clear, direct answer to the user's original request.
-
-Input Data:
-You will receive the full 'messages' history, which includes:
-1. The user's original objective.
-2. The Planner's thought process.
-3. The raw outputs from Executor agents (simulation results, logs).
-4. Any analysis performed by the Insight Analyst.
-
-Instructions:
-1. Identify the User's Goal: Look at the very first user message to understand what they wanted to achieve.
-2. Synthesize Findings: Combine the raw data from the executors and the insights from the analyst into a cohesive summary.
-3. Be Direct: Do not explain the internal workflow (e.g., "The planner delegated to worker 1..."). Instead, focus on the scientific outcome (e.g., "The simulations indicate that MOF-X performs best...").
-4. Formatting: Use Markdown (tables, bold text) to make the results readable.
-
-If the workflow failed or produced no results, clearly state what was attempted and what went wrong.
-"""
-
-aggregator_prompt = """You are an aggregator tasked with synthezing the final answers based on the given human prompt, planner's results and executor's results. You must analyze the user's query and answer that based on the given data."""

@@ -252,7 +252,6 @@ DEFAULT_REASONING_EFFORT_BY_MODEL = {
     "argo:claude-haiku-5.5": "medium",
 }
 MODELS_WITH_REASONING_EFFORT = frozenset(REASONING_EFFORTS_BY_MODEL)
-SUPPORTED_REASONING_EFFORTS = frozenset(REASONING_EFFORT_CHOICES)
 
 all_supported_models = (
     supported_openai_models

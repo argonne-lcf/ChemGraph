@@ -154,33 +154,3 @@ def _mean_uptake(rows):
     # Scale finite nonnegative values so their sum cannot overflow.
     scale = max(row["uptake_in_mol_kg"] for row in rows)
     return scale * (math.fsum(row["uptake_in_mol_kg"] / scale for row in rows) / len(rows)) if scale else 0.0
-
-
-def analyze_records(records: list[dict], root: Path, analysis: GraspaAnalysis | None) -> dict:
-    """Write complete artifacts and return only a bounded, model-facing summary."""
-    rows = [normalize_record(row) for row in records]
-    write_records(root / "results.jsonl", rows)
-    write_csv(root / "results.csv", rows, RECORD_COLUMNS)
-    failed = sum(row["status"] != "success" for row in rows)
-    summary = {"total_records": len(rows), "failed_records": failed, "units": "mol/kg",
-               "results_jsonl": str(root / "results.jsonl"), "results_csv": str(root / "results.csv")}
-    if analysis is not None:
-        ranked, excluded = rank_records(rows, analysis)
-        selected = ranked[:math.ceil(analysis.top_fraction * len(ranked))]
-        columns = ranking_columns(analysis)
-        write_csv(root / "rankings.csv", ranked, columns)
-        write_csv(root / "top_candidates.csv", selected, columns)
-        write_json(root / "excluded.json", excluded)
-        summary.update(conditions=analysis.model_dump(mode="json"),
-                       valid_structures=len(ranked), excluded_structures=len(excluded),
-                       selected_structures=len(selected), top_fraction=analysis.top_fraction,
-                       rankings_csv=str(root / "rankings.csv"),
-                       top_candidates_csv=str(root / "top_candidates.csv"),
-                       excluded_json=str(root / "excluded.json"), preview=selected[:5])
-    else:
-        summary["preview"] = [{key: row.get(key) for key in RECORD_COLUMNS[:6]} for row in rows[:5]]
-    summary["status"] = ("failed" if not rows or failed == len(rows)
-                         else "partial" if failed or summary.get("excluded_structures")
-                         else "completed")
-    write_json(root / "analysis.json", summary)
-    return summary

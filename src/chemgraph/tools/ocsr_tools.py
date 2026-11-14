@@ -1,8 +1,8 @@
 """LangChain ``@tool`` wrappers for OCSR: read a structure image, return a SMILES.
 
 The tool delegates to a plain function, so a human or a test can call the same logic
-without an agent: :func:`image_to_smiles` is a ``StructuredTool`` and is not callable
-directly, :func:`image_to_smiles_core` is. Same split as
+without an agent: the ``image_to_smiles`` tool is a ``StructuredTool`` and is not
+callable directly, :func:`image_to_smiles_core` is. Same split as
 :mod:`chemgraph.tools.docking_tools` over :mod:`chemgraph.tools.docking_core`.
 
 Layering, so it is clear where to add things:
@@ -61,7 +61,7 @@ def image_to_smiles_core(image_path: str, model: str | None = None,
                          llm: Any = None) -> dict:
     """Read a molecule's 2D structure diagram and return its SMILES.
 
-    The plain-Python entry point; :func:`image_to_smiles` is the agent-facing wrapper.
+    The plain-Python entry point; ``image_to_smiles`` is the agent-facing wrapper.
     Never raises: every failure comes back as ``ok=False`` with an actionable
     ``error``.
 
@@ -230,26 +230,6 @@ def make_ocsr_tools(llm: Any = None) -> list:
         name="image_to_smiles",
         description=_TOOL_DOC,
     )]
-
-
-@tool
-def image_to_smiles(image_path: str, model: str | None = None) -> dict:
-    """Read a molecule's 2D structure diagram from an image and return its SMILES.
-
-    Module-level tool for callers that bind tools statically. It has no LLM bound, so
-    `model='llm'` reports the fallback as unavailable; use `make_ocsr_tools(llm)` to
-    get a version with the agent's model wired in. Every other model works here.
-
-    See `make_ocsr_tools` for the full contract.
-
-    Parameters
-    ----------
-    image_path : str
-        Path to a PNG, JPEG, GIF or WEBP showing ONE molecule's 2D structure.
-    model : str, optional
-        'decimer', 'molnextr', 'molscribe', 'ocsrglyph', or 'llm'.
-    """
-    return image_to_smiles_core(image_path, model=model, llm=None)
 
 
 @tool

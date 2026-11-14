@@ -509,17 +509,6 @@ class GlobusTransferManager:
             )
         return entries
 
-    def get_remote_path(
-        self,
-        local_path: str,
-        remote_subdir: Optional[str] = None,
-    ) -> str:
-        """Compute the remote path for a local file."""
-        filename = Path(local_path).name
-        if remote_subdir:
-            return f"{self.destination_base_path}/{remote_subdir}/{filename}"
-        return f"{self.destination_base_path}/{filename}"
-
 
 def authenticate(collections=(), *, client_id=None, domains=()) -> None:
     """Explicit terminal login, never called by tools.
