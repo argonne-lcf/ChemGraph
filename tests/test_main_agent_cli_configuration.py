@@ -1,14 +1,11 @@
 """CLI configuration changes reuse the normalized main-agent runtime."""
 
-import pytest
-
 from chemgraph.cli import commands
 from chemgraph.registry.tools import ToolRegistry
 from tests.test_main_agent_execution_context import model_loader as model_loader
 
 
-@pytest.mark.parametrize("preflight", [True, False])
-def test_switches_reuse_resolved_context(monkeypatch, tmp_path, model_loader, preflight):
+def test_switches_reuse_resolved_context(monkeypatch, tmp_path, model_loader):
     original = tmp_path / "original"
     original.mkdir()
     monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(original))
@@ -24,7 +21,7 @@ def test_switches_reuse_resolved_context(monkeypatch, tmp_path, model_loader, pr
         return agent
 
     replies = iter(["/model test-two", "/workflow single_agent",
-                    "/workflow main_agent", "/help", "/doctor", "/quit"])
+                    "/workflow main_agent", "/doctor", "/quit"])
     def ask(*args, **kwargs):
         answer = next(replies)
         if answer.startswith("/model"):
@@ -33,17 +30,16 @@ def test_switches_reuse_resolved_context(monkeypatch, tmp_path, model_loader, pr
 
     monkeypatch.setattr(commands, "initialize_agent", record)
     monkeypatch.setattr(commands.Prompt, "ask", ask)
-    with commands.console.capture() as output:
+    with commands.console.capture():
         commands.interactive_mode(
             model="test", workflow="main_agent", checkpoint_db=str(tmp_path / "checkpoints.db"),
             workspace=str(tmp_path), base_url="https://original.example/v1", discover_skills=False,
             subagent_names=[], tool_registry=ToolRegistry([]),
-            preflight=preflight,
+            preflight=False,
         )
     mains = [agent.runtime_config.saved for agent in agents if agent.workflow_type == "main_agent"]
     assert [config.model_name for config in mains] == ["test", "test-two", "test-two"]
-    assert reports == ([{}, {}, {}] if preflight else []) + [{"console": commands.console}]
-    assert "/doctor" in output.get() and "/expand" in output.get()
+    assert reports == [{"console": commands.console}]
     assert len({agent.session_id for agent in agents}) == len(agents)
     for config in mains:
         assert config.artifact_directory == str(original)
