@@ -9,6 +9,7 @@ chemgraph run        Run an agent query or interactive session
 chemgraph eval       Evaluate a dataset
 chemgraph session    List, inspect, or delete saved sessions
 chemgraph models     List registered model identifiers
+chemgraph doctor     Check optional Globus and IRI prerequisites
 chemgraph ui         Launch the Streamlit web interface
 chemgraph dashboard  Launch the trace dashboard
 chemgraph academy    Run Academy campaigns and workers
@@ -42,6 +43,7 @@ Common options:
 | `--output-file` | Save the printed result to a file |
 | `--result-file PATH` | Write a JSON session receipt (headless `main_agent`) |
 | `--answers-file PATH` | Submit clarification answers by interrupt ID with `--resume` |
+| `--no-preflight` | Skip the advisory startup readiness report |
 | `-v`, `-vv` | INFO or DEBUG diagnostics |
 
 The recursion limit counts graph steps, including middleware and tool execution,
@@ -86,6 +88,56 @@ them after CLI logging configuration. Library use alone does not configure this.
 
 The legacy no-subcommand form, such as `chemgraph -q "..."`, remains supported,
 but new scripts should use `chemgraph run`.
+
+### Startup readiness
+
+Before initializing `main_agent` or `deep_agent`, the CLI reports
+Globus CLI authentication, Globus Connect Personal
+connection status, and IRI skill authentication. The report also runs when
+restoring a session or changing to one of these workflows. It is advisory:
+optional integrations do not prevent startup. Model credentials are left to
+the existing provider-specific validation during agent initialization and use.
+Automatic reports go to stderr, separate from answers and receipts. Setup
+commands and links appear below the status table so they remain readable.
+
+Check again without constructing an agent, or use `/doctor` inside a chat:
+
+```bash
+chemgraph doctor
+chemgraph run --interactive -w main_agent --no-preflight
+```
+
+Doctor exits successfully after reporting even when setup is incomplete.
+`/doctor` also works after launching with `--no-preflight`.
+
+Run the displayed setup commands in another terminal with the same environment:
+
+```bash
+uv pip install "chemgraph[globus]"  # From a checkout: uv pip install -e ".[globus]"
+globus login
+uv pip install alcf-tokens
+alcf-tokens login iri
+```
+
+The `globus` extra installs the Globus CLI. If it is missing, Connect Personal
+is **Not checked** until the CLI is installed. IRI checks the skill's credentials;
+legacy IRI caches and ALCF inference tokens are separate. Existing credentials
+may be refreshed by the status commands, but the checks never start a login.
+Cached logins can be picked up by `/doctor`.
+
+Globus and IRI are optional for remote workflows. Local transfers need
+[Globus Connect Personal](https://docs.globus.org/globus-connect-personal/install/),
+a separately installed application, configured and running; transfers between
+managed collections may not need it.
+On macOS/Windows, launch the application and resume transfers if paused. On
+Linux, run `./globusconnectpersonal -start` from its installation directory.
+A disconnected collection may also indicate a network problem.
+
+Checks run concurrently with three-second process timeouts and an eight-second
+report budget, plus process cleanup. Network failures, timeouts, and unsupported
+responses appear as **Unverified**, rather than an instruction to log in again.
+A ready Globus login does not establish consent or file access on every
+collection. No tokens or raw command errors are printed.
 
 ### Reasoning effort
 

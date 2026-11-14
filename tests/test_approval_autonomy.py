@@ -133,14 +133,19 @@ def headless(monkeypatch, tmp_path, model_loader):
     return run, model_loader[0], model_loader[1]
 
 
-def test_headless_restart_does_not_replay_completed_tools(headless, tmp_path, capsys):
+def test_headless_restart_does_not_replay_completed_tools(headless, tmp_path, capsys, monkeypatch):
     run, responses, requests = headless
+    reports = []
+    monkeypatch.setattr(commands, "show_report", lambda: reports.append(True))
     responses[:] = [call("write_file", file_path="/workspace/result.txt", content="first"), AIMessage(content="done")]
     assert run(query="write", workspace=str(tmp_path)) == 0
+    assert reports == [True]
+    reports.clear()
     saved = SessionStore().list_sessions()[0]
     (tmp_path / "result.txt").write_text("user edit")
     responses[:] = [AIMessage(content="next turn")]
-    assert run(resume_session=saved.session_id) == 0
+    assert run(resume_session=saved.session_id, preflight=False) == 0
+    assert not reports
     assert (tmp_path / "result.txt").read_text() == "user edit"
     assert run(resume_session=saved.session_id, query="continue") == 0
     count = len(requests)

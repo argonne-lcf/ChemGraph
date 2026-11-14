@@ -83,6 +83,8 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
     parser : argparse.ArgumentParser
         Parser or subparser to receive query/run arguments.
     """
+    parser.add_argument("--no-preflight", action="store_true", default=argparse.SUPPRESS,
+                        help="Skip the advisory readiness report before main_agent/deep_agent startup")
     parser.add_argument(
         "-q", "--query", type=str, help="The computational chemistry query to execute"
     )
@@ -356,6 +358,8 @@ Examples:
 
     # ---- "models" subcommand ---------------------------------------------
     subparsers.add_parser("models", help="List all available LLM models.")
+
+    subparsers.add_parser("doctor", help="Check optional Globus and IRI prerequisites.")
 
     # ---- "ui" subcommand ---------------------------------------------------
     ui_parser = subparsers.add_parser(
@@ -772,6 +776,7 @@ def _handle_run(args: argparse.Namespace) -> None:
 
     if getattr(args, "interactive", False):
         code = interactive_mode(
+            preflight=not getattr(args, "no_preflight", False),
             **main_options,
             model=args.model,
             workflow=args.workflow,
@@ -806,6 +811,7 @@ def _handle_run(args: argparse.Namespace) -> None:
 
     if args.workflow == "main_agent":
         code = run_headless_main_agent(
+            preflight=not getattr(args, "no_preflight", False),
             **main_options, query=args.query, resume_session=args.resume,
             checkpoint_db=getattr(args, "checkpoint_db", None) or config.get("checkpoint_db"),
             output_file=args.output_file, model_name=args.model,
@@ -888,6 +894,7 @@ def _handle_run(args: argparse.Namespace) -> None:
         deepagent_discover_skills=deepagent_discover_skills,
         deepagent_auto_approve=deepagent_auto_approve,
         approval_mode=approval_mode,
+        preflight=not getattr(args, "no_preflight", False),
     )
 
     if not agent:
@@ -1001,6 +1008,11 @@ def main() -> None:
         from chemgraph.eval.cli import run_eval
 
         run_eval(args)
+
+    elif args.command == "doctor":
+        from chemgraph.cli.preflight import show_report
+
+        show_report(console=console)
 
     elif args.command == "skills":
         from chemgraph.skills.cli import run_skills

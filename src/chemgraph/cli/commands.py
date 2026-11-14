@@ -51,6 +51,7 @@ from chemgraph.cli.checkpoint_runtime import (
     CheckpointRuntime,
 )
 from chemgraph.cli.history import enable_input_history
+from chemgraph.cli.preflight import show_report
 from chemgraph.models.endpoints import (
     ModelRequest,
     missing_credential_help,
@@ -247,6 +248,7 @@ def initialize_agent(
     model_endpoint=None,
     approval_mode: ApprovalMode | None = None,
     _raise_configuration_errors: bool = False,
+    preflight: bool = True,
 ) -> Any:
     """Initialize a ChemGraph agent with progress indication.
 
@@ -371,6 +373,9 @@ def initialize_agent(
             raise
         console.print(f"[red]{escape(str(exc))}[/red]")
         return None
+
+    if preflight and workflow_type in {"main_agent", "deep_agent"}:
+        show_report()
 
     backend = None
     if workspace is not None:
@@ -1448,6 +1453,7 @@ _INTERACTIVE_COMMANDS = {
     "auto",
     "clear",
     "config",
+    "doctor",
     "expand",
     "help",
     "history",
@@ -1516,7 +1522,7 @@ def validate_main_agent_approval(config, approval_mode):
 
 def _initialize_saved_main_agent(config, *, return_option, checkpointer, argo_user=None, verbose=False,
                                  model_name=None, reasoning_effort=None, approval_mode="review",
-                                 _raise_configuration_errors=False):
+                                 _raise_configuration_errors=False, preflight=True):
     from chemgraph.agent.configuration import restoration_arguments
 
     validate_main_agent_approval(config, approval_mode)
@@ -1532,7 +1538,7 @@ def _initialize_saved_main_agent(config, *, return_option, checkpointer, argo_us
         options.pop("structured_output"), return_option,
         options.pop("generate_report"), options.pop("recursion_limit"),
         checkpointer=checkpointer, argo_user=argo_user, verbose=verbose,
-        _raise_configuration_errors=_raise_configuration_errors, **options,
+        _raise_configuration_errors=_raise_configuration_errors, preflight=preflight, **options,
     )
 
 
@@ -1609,6 +1615,7 @@ def interactive_mode(
     configuration_id: str | None = None,
     approval_mode: ApprovalMode | None = None,
     reasoning_effort: str | None = None,
+    preflight: bool = True,
 ) -> int | None:
     """Start interactive REPL mode for ChemGraph CLI.
 
@@ -1773,6 +1780,7 @@ def interactive_mode(
                 argo_user=argo_user, verbose=verbose, model_name=selected_model,
                 reasoning_effort=selected_reasoning,
                 approval_mode=approval_mode,
+                preflight=preflight,
             )
         return initialize_agent(
             selected_model,
@@ -1819,6 +1827,7 @@ def interactive_mode(
             terminal_tool_names=terminal_tool_names,
             **(main_options if selected_workflow == "main_agent" else {}),
             approval_mode=approval_mode,
+            preflight=preflight,
         )
 
     agent = initialize_selection(model, workflow, reasoning_effort)
@@ -1924,6 +1933,12 @@ def interactive_mode(
                     console.print("[red]Usage: /clear[/red]")
                     continue
                 console.clear()
+                continue
+            elif command == "doctor":
+                if argument:
+                    console.print("[red]Usage: /doctor[/red]")
+                    continue
+                show_report(console=console)
                 continue
             elif command == "config":
                 if argument:
@@ -2042,6 +2057,7 @@ def interactive_mode(
                             target_config, return_option=return_option, checkpointer=candidate_saver,
                             argo_user=argo_user, verbose=verbose,
                             approval_mode=approval_mode,
+                            preflight=preflight,
                         )
                         if candidate_agent is None:
                             raise RuntimeError("Could not recreate the stored agent.")
