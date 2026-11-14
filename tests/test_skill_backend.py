@@ -3,8 +3,79 @@
 import asyncio
 
 import pytest
+from deepagents.backends import FilesystemBackend
 
 from chemgraph.skills.backend import BundledSkillsBackend
+from chemgraph.skills.runtime import prepare_skill_backend
+
+
+@pytest.mark.parametrize("pattern,path,expected", [
+    ("SKILL.md", "/", [f"/{name}/SKILL.md" for name in (
+        "chemgraph", "globus-transfer", "iri-hpc", "pbs-hpc",
+    )]),
+    ("**/SKILL.md", "/chemgraph/", ["/chemgraph/SKILL.md"]),
+    ("*.py", "/chemgraph/", ["/chemgraph/assets/calculate.py"]),
+    ("**/*.py", "/iri-hpc/", [
+        "/iri-hpc/scripts/iri_configure.py", "/iri-hpc/scripts/iri_submit.py",
+    ]),
+    ("{calculate,iri_submit}.py", "/", [
+        "/chemgraph/assets/calculate.py", "/iri-hpc/scripts/iri_submit.py",
+    ]),
+    ("/SKILL.md", "/chemgraph/", ["/chemgraph/SKILL.md"]),
+    ("absent*", "/", []),
+])
+def test_bundled_glob_and_grep_filters(pattern, path, expected):
+    backend = BundledSkillsBackend()
+    for operation, args, kwargs in (
+        ("glob", (pattern, path), {}),
+        ("grep", (".", path), {"glob": pattern}),
+    ):
+        result = getattr(backend, operation)(*args, **kwargs)
+        assert not result.error
+        assert sorted({entry["path"] for entry in result.matches}) == expected
+
+
+def test_grep_leading_slash_anchors_filter_to_search_root():
+    backend = BundledSkillsBackend()
+    result = backend.grep(".", "/", glob="/SKILL.md")
+    # Unlike recursive glob(), a slash anchors grep's include filter.
+    assert not result.error and result.matches == []
+
+
+_ROUTED_SKILLS = [
+    "/chemgraph-skills/chemgraph/SKILL.md",
+    "/chemgraph-skills/globus-transfer/SKILL.md",
+    "/chemgraph-skills/iri-hpc/SKILL.md",
+    "/chemgraph-skills/pbs-hpc/SKILL.md",
+]
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("pattern,path,glob_expected,grep_expected", [
+    ("SKILL.md", "/", _ROUTED_SKILLS, _ROUTED_SKILLS),
+    ("SKILL.md", "/chemgraph-skills/chemgraph/",
+     ["/chemgraph-skills/chemgraph/SKILL.md"], ["/chemgraph-skills/chemgraph/SKILL.md"]),
+    ("/SKILL.md", "/", [], []),
+    ("/chemgraph-skills/**/SKILL.md", "/", _ROUTED_SKILLS, []),
+    ("/SKILL.md", "/chemgraph-skills/", _ROUTED_SKILLS, []),
+])
+def test_composite_skill_searches(
+    tmp_path, asynchronous, pattern, path, glob_expected, grep_expected,
+):
+    backend, _, _ = prepare_skill_backend(
+        FilesystemBackend(root_dir=tmp_path, virtual_mode=True), (),
+        discover_skills=False,
+    )
+    for operation, args, kwargs, expected in (
+        ("glob", (pattern, path), {}, glob_expected),
+        ("grep", (".", path), {"glob": pattern}, grep_expected),
+    ):
+        result = (
+            asyncio.run(getattr(backend, "a" + operation)(*args, **kwargs))
+            if asynchronous else getattr(backend, operation)(*args, **kwargs)
+        )
+        assert not result.error
+        assert sorted({entry["path"] for entry in result.matches}) == expected
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])

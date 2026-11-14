@@ -1,6 +1,7 @@
 """Reject incompatible checkpoints before invoking models or reviewed tools."""
 
 from dataclasses import replace
+import importlib.metadata
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -104,7 +105,8 @@ async def test_tampered_checkpoint_is_rejected_before_resume():
 
 
 @pytest.mark.parametrize("change", ["none", "description", "catalog_version", "tool_path", "policy_version", "policy", "policy_tools",
-                                    "worker_path", "worker_version", "worker_defaults", "agent_catalog_version"])
+                                    "worker_path", "worker_version", "worker_defaults", "agent_catalog_version",
+                                    "deepagents_version"])
 def test_builtin_compatibility_across_sqlite_restarts(monkeypatch, tmp_path, change):
     from chemgraph.agent.llm_agent import ChemGraph
     from chemgraph.graphs import workspace
@@ -143,6 +145,12 @@ def test_builtin_compatibility_across_sqlite_restarts(monkeypatch, tmp_path, cha
             elif change == "agent_catalog_version":
                 monkeypatch.setattr(agent_catalog, "BUILTIN_AGENT_CATALOG_VERSION",
                                     agent_catalog.BUILTIN_AGENT_CATALOG_VERSION + 1)
+            elif change == "deepagents_version":
+                original_version = importlib.metadata.version
+                monkeypatch.setattr(
+                    importlib.metadata, "version",
+                    lambda name: "next-runtime" if name == "deepagents" else original_version(name),
+                )
             elif change.startswith("worker_"):
                 specs = agent_catalog.BUILTIN_AGENT_SPECS
                 options = {

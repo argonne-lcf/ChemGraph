@@ -40,7 +40,7 @@ def _check_frontmatter(text, path, core):
     def error(message):
         errors.append(Diagnostic(str(path), "frontmatter", message))
 
-    # The parser and naming helper match the pinned deepagents==0.7.5 loader.
+    # The parser and naming helper match the pinned deepagents==0.7.32 loader.
     match = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.DOTALL)
     if not match:
         error("Expected YAML frontmatter delimited by ---.")

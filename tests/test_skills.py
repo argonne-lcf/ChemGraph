@@ -14,6 +14,7 @@ from deepagents.backends import (
 from deepagents.backends.protocol import ExecuteResponse, LsResult, SandboxBackendProtocol
 from deepagents.backends.utils import create_file_data
 from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import GraphInterrupt
 from langgraph.store.memory import InMemoryStore
@@ -24,6 +25,7 @@ from chemgraph.graphs.deep_agent import (
     _normalize_backend,
     construct_deep_agent_graph,
 )
+from chemgraph.cli.checkpoint_runtime import CheckpointRuntime
 from chemgraph.skills.backend import BundledSkillsBackend
 from chemgraph.skills.runtime import (
     BUNDLED_SKILLS_PATH,
@@ -60,6 +62,88 @@ def _read_skill(path="/chemgraph-skills/chemgraph/SKILL.md", call_id="read-skill
             }
         ],
     )
+
+
+def _overlapping_skill_graph(tmp_path, model, **kwargs):
+    for source, body in (("first", "FIRST_BODY"), ("last", "LAST_BODY")):
+        path = _skill(tmp_path / source, "shared", f"{source} source instructions")
+        path.write_text(path.read_text() + body)
+    return construct_deep_agent_graph(
+        model, backend=FilesystemBackend(root_dir=tmp_path, virtual_mode=True),
+        skills=["/first/", "/last/"], discover_skills=False, **kwargs,
+    )
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("pin", [False, True])
+def test_inherited_skill_hooks_use_merged_sources(tmp_path, asynchronous, pin):
+    executed = []
+
+    @tool
+    def record(value: str) -> str:
+        """Record a test value."""
+        executed.append(value)
+        return "Recorded " + value
+
+    model = _RecordingChatModel(responses=[
+        AIMessage(content="", tool_calls=[
+            {"name": "record", "args": {"value": "once"}, "id": "known", "type": "tool_call"},
+            {"name": "missing_skill_tool", "args": {}, "id": "unknown", "type": "tool_call"},
+        ]),
+        AIMessage(content="Done"), AIMessage(content="Done"),
+    ])
+    graph = _overlapping_skill_graph(tmp_path, model, tools=[record])
+    config = {"configurable": {"thread_id": "skill-hooks"}}
+    for turn in (1, 2):
+        data = {"messages": [HumanMessage(content=f"Turn {turn}")]}
+        if pin and turn == 1:
+            # Exercise an inherited upstream input channel, not a ChemGraph API.
+            data["pinned_skills"] = ["shared"]
+        if asynchronous:
+            asyncio.run(graph.ainvoke(data, config))
+        else:
+            graph.invoke(data, config)
+        snapshot = graph.get_state(config).values
+        assert not snapshot.get("pinned_skills")
+        assert snapshot["_skill_tools_disclosed"] == {}
+        prompt = _prompt(model)
+        assert "last source instructions" in prompt
+        assert "first source instructions" not in prompt
+        humans = [m for m in model.received_messages if m.type == "human"]
+        bodies = [_message_content_text(m) for m in humans]
+        assert len(humans) == turn + int(pin)
+        assert sum("LAST_BODY" in body for body in bodies) == int(pin)
+        assert all("FIRST_BODY" not in body for body in bodies)
+        results = {m.tool_call_id: m for m in snapshot["messages"] if m.type == "tool"}
+        assert results["known"].status == "success"
+        assert results["known"].content == "Recorded once"
+        assert results["unknown"].status == "error"
+        assert "missing_skill_tool is not a valid tool" in results["unknown"].content
+        assert executed == ["once"]
+
+
+def test_skill_hook_state_survives_strict_sqlite_restart(tmp_path):
+    config = {"configurable": {"thread_id": "durable-skills"}}
+    for restarting in (False, True):
+        runtime = CheckpointRuntime()
+        try:
+            model = _RecordingChatModel(responses=[AIMessage(content="Done")])
+            graph = _overlapping_skill_graph(
+                tmp_path, model,
+                checkpointer=runtime.open_sqlite(str(tmp_path / "checkpoints.db")),
+            )
+            data = {"messages": [HumanMessage(content="Inspect skills")]}
+            if restarting:
+                restored = runtime.run(lambda: graph.aget_state(config)).values
+                assert restored["pinned_skills"] == []
+                assert restored["_skill_tools_disclosed"] == {}
+            else:
+                data["pinned_skills"] = ["shared"]
+            runtime.run(lambda: graph.ainvoke(data, config))
+            humans = [m for m in model.received_messages if m.type == "human"]
+            assert sum("LAST_BODY" in _message_content_text(m) for m in humans) == 1
+        finally:
+            runtime.close()
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
