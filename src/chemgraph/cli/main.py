@@ -83,7 +83,7 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
     parser : argparse.ArgumentParser
         Parser or subparser to receive query/run arguments.
     """
-    parser.add_argument("--no-preflight", action="store_true",
+    parser.add_argument("--no-preflight", action="store_true", default=argparse.SUPPRESS,
                         help="Skip the advisory readiness report before main_agent/deep_agent startup")
     parser.add_argument(
         "-q", "--query", type=str, help="The computational chemistry query to execute"

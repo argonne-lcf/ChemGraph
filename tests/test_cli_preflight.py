@@ -159,21 +159,27 @@ def test_startup_report_precedes_backend_and_model_validation(monkeypatch, workf
     assert events[-1] == "keys"
 
 
-@pytest.mark.parametrize("prefix,workflow,interactive", [
-    (["run"], "main_agent", True), (["run"], "main_agent", False), ([], "deepagent", False),
+@pytest.mark.parametrize("prefix,workflow,interactive,enabled", [
+    (["--no-preflight", "run"], "main_agent", True, False),
+    (["run", "--no-preflight"], "main_agent", True, False),
+    (["--no-preflight", "run"], "main_agent", False, False),
+    (["run", "--no-preflight"], "main_agent", False, False),
+    (["--no-preflight"], "deepagent", False, False),
+    (["run"], "deepagent", False, True),
+    ([], "main_agent", False, True),
 ])
-def test_opt_out_dispatch(monkeypatch, tmp_path, prefix, workflow, interactive):
+def test_preflight_dispatch(monkeypatch, tmp_path, prefix, workflow, interactive, enabled):
     captured = []
     monkeypatch.setattr(cli_main, "interactive_mode", lambda **kwargs: captured.append(kwargs))
     monkeypatch.setattr(cli_main, "run_headless_main_agent", lambda **kwargs: captured.append(kwargs))
     monkeypatch.setattr(cli_main, "initialize_agent", lambda *args, **kwargs: captured.append(kwargs))
-    argv = [*prefix, "-w", workflow, "--no-preflight", "--dangerously-skip-approvals", "-q", "test"]
+    argv = [*prefix, "-w", workflow, "--dangerously-skip-approvals", "-q", "test"]
     argv += ["--interactive"] if interactive else ["--deepagent-workspace", str(tmp_path)] if workflow == "deepagent" else []
     try:
         cli_main._handle_run(cli_main.create_argument_parser().parse_args(argv))
     except SystemExit as exc:
         assert exc.code == 1  # mocked standalone initialization returns None
-    assert captured and captured[0]["preflight"] is False
+    assert captured and captured[0]["preflight"] is enabled
 
 
 def test_doctor_without_agent(monkeypatch):
