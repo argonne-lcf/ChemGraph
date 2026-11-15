@@ -8,7 +8,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langgraph.types import interrupt
 
 from chemgraph.runtime.context import (
-    ScopedExecutionError, current_context, invocation, run_context,
+    JobPending, ScopedExecutionError, current_context, invocation, run_context,
 )
 from chemgraph.runtime.journal import (
     APPROVED, BLOCKED, PROPOSED, REJECTED, ApprovalRequired, error_message,
@@ -66,12 +66,15 @@ class ScopedToolsMiddleware(AgentMiddleware):
                     f"The operator rejected this {call['name']} call, so it was not executed. "
                     "Do not retry it unless the user asks."
                 ))
-            async with context.lock:
-                with run_context(context):
-                    try:
+            try:
+                async with context.lock:
+                    with run_context(context):
                         return await journal.execute(context, call, invoke)
-                    except ApprovalRequired:
-                        pass  # Rejected or expired meanwhile: review the journal again.
+            except ApprovalRequired:
+                pass  # Rejected or expired meanwhile: review the journal again.
+            except JobPending as pending:
+                # Approval tokens can replay here; persisted state decides readiness.
+                interrupt(pending.payload)
 
 
 def _with_arguments(request, call):
