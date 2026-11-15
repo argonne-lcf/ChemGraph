@@ -128,16 +128,22 @@ class PreparedAction:
     calculator: dict | None
     policy_identity: str
     digest: str = ""
+    execution: dict | None = None
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        value = asdict(self)
+        if self.version == 1:
+            value.pop("execution")
+        return value
 
     @classmethod
     def from_dict(cls, value: dict) -> PreparedAction:
+        if value.get("version") == 1 and "execution" in value:
+            raise ValueError("Version 1 preparations cannot carry execution metadata.")
         action = cls(**value)
         content = action.to_dict()
         saved = content.pop("digest")
-        if action.version != PREPARATION_VERSION or digest(content) != saved:
+        if action.version not in {1, 2} or digest(content) != saved:
             raise ValueError("Prepared action version or digest is invalid.")
         return action
 

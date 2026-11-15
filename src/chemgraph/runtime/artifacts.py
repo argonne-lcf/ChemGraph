@@ -14,7 +14,8 @@ from pathlib import Path
 
 INPUTS_DIR = ".chemgraph-inputs"
 ARTIFACTS_DIR = ".chemgraph-artifacts"
-INTERNAL_DIRS = frozenset({INPUTS_DIR, ARTIFACTS_DIR})
+JOBS_DIR = ".chemgraph-jobs"
+INTERNAL_DIRS = frozenset({INPUTS_DIR, ARTIFACTS_DIR, JOBS_DIR})
 
 _CHUNK = 1024 * 1024
 
@@ -120,12 +121,13 @@ def output_manifest(workspace, outputs) -> list[dict]:
     return manifest
 
 
-def capture_artifacts(context, tool_call_id: str, manifest: list[dict]) -> list[dict]:
+def capture_artifacts(context, tool_call_id: str, manifest: list[dict], *, source_root=None) -> list[dict]:
     """Publish immutable copies of exactly the outputs recorded in ``manifest``."""
     artifacts = []
     for output in manifest:
         relative, digest = output["source_path"], output["sha256"]
-        source = checked_path(context.workspace, context.workspace / relative)
+        root = Path(source_root) if source_root is not None else context.workspace
+        source = checked_path(root, root / relative)
         key = hashlib.sha256(
             f"{context.task_id}:{tool_call_id}:{relative}:{digest}".encode()
         ).hexdigest()
