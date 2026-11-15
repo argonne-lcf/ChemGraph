@@ -33,7 +33,7 @@ class SessionMessage(BaseModel):
     )
 
 
-SessionStatus = Literal["new", "running", "waiting_for_user", "completed", "failed"]
+SessionStatus = Literal["new", "running", "waiting_for_user", "completed", "failed", "cancelled"]
 SubagentRunStatus = Literal[
     "running", "waiting_for_user", "completed", "failed"
 ]
