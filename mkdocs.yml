@@ -60,6 +60,7 @@ nav:
       - Tool and agent registries: registries.md
       - Calculators: calculators.md
       - Python API: python_api.md
+      - Python run service: run_service.md
       - Scoped runtime for services: scoped_runtime.md
       - Deep Agent Skills: skills.md
       - PBS Jobs with Skills: pbs_jobs_with_skills.md

@@ -3,6 +3,9 @@
 Use the Python API to embed ChemGraph in notebooks, services, or larger
 workflows. The standard agent is asynchronous.
 
+For persistent sessions, reviewed operations, local calculation jobs, and artifact
+inspection, use the [Python run service](run_service.md).
+
 ## Run a single-agent query
 
 ```python
