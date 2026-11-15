@@ -22,7 +22,7 @@ uv pip install -e ".[test,academy,parsl,globus_compute]"   # full CI test extras
 ```
 
 Optional extras in `pyproject.toml`: `test`, `calculators`, `uma`, `ui`,
-`parsl`, `ensemble_launcher`, `globus_compute`, `academy`, `xanes`, `rag`,
+`parsl`, `ensemble_launcher`, `globus_compute`, `globus`, `academy`, `xanes`, `rag`,
 `ocsr`, `codex`, `docking`.
 
 ## Build / test / lint commands

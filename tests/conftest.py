@@ -48,6 +48,17 @@ def _no_live_codex_sdk_in_ui_tests(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_live_cli_preflight(monkeypatch):
+    """Readiness tests must explicitly fake probes, never inspect real accounts."""
+    from chemgraph.cli import preflight
+
+    def blocked(*args, **kwargs):
+        raise RuntimeError("External readiness probes are disabled in tests")
+
+    monkeypatch.setattr(preflight, "_run", blocked)
+
+
+@pytest.fixture(autouse=True)
 def setup_test_env():
     """Setup any test environment variables or configurations needed"""
     # Filter numpy deprecation warnings

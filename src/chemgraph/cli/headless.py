@@ -223,6 +223,7 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
                 checkpointer=saver, argo_user=options.get("argo_user"),
                 verbose=options.get("verbose", False), approval_mode=options["approval_mode"],
                 _raise_configuration_errors=True,
+                preflight=options.get("preflight", True),
             )
         else:
             agent = commands.initialize_agent(

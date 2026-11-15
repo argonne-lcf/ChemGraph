@@ -120,6 +120,9 @@ ensemble_launcher = [
 globus_compute = [
     "globus-compute-sdk",
 ]
+globus = [
+    "globus-cli>=3.43,<4",
+]
 academy = [
     "academy-py",
     "httpx",
