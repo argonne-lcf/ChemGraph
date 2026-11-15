@@ -143,6 +143,8 @@ Invoke = Callable[[PreparedAction, set[str]], Awaitable[ToolMessage]]
 class OperationJournal:
     """Review, authorize, execute and reconcile scoped operations."""
 
+    unfinished_states = UNFINISHED
+
     def __init__(self, store: OperationStore, *, authorizer=default_authorizer):
         self.store = store
         self.authorizer = authorizer
@@ -158,6 +160,9 @@ class OperationJournal:
 
     # -- review ---------------------------------------------------------
 
+    def prepare_action(self, context, call, record):
+        return prepare(context, call)
+
     async def propose(self, context, call: dict) -> dict:
         """Prepare ``call`` once; later calls return the saved record unchanged."""
         identifier = operation_id(context, call["id"])
@@ -167,15 +172,16 @@ class OperationJournal:
                 raise ScopedExecutionError(
                     f"Tool call id {call['id']!r} was reused with different arguments."
                 )
-            return record
-        record = {
+            if record["prepared"] is not None or record["state"] != PROPOSED:
+                return record
+        record = record or {
             "id": identifier, "owner": context.owner, "thread_id": context.thread_id,
             "task_id": context.task_id, "tool_call_id": call["id"], "tool": call["name"],
             "call_digest": call_digest(call), "prepared": None, "decision": None,
             "history": [],
         }
         try:
-            action = await asyncio.to_thread(prepare, context, call)
+            action = await asyncio.to_thread(self.prepare_action, context, call, record)
         except (PolicyDenied, PreparationError) as exc:
             state, changes = BLOCKED, {"error": str(exc)}
         else:
@@ -255,7 +261,7 @@ class OperationJournal:
             return error_message(call, "An operator abandoned this operation; its outcome is "
                                        "unknown and it will not be repeated.")
         others = [r for r in await self.store.records(thread_id=context.thread_id)
-                  if r["id"] != record["id"] and r["state"] in UNFINISHED]
+                  if r["id"] != record["id"] and r["state"] in self.unfinished_states]
         if others:
             raise ScopedExecutionError(
                 "The workspace has an uncertain or unfinished operation; reconcile it first."
