@@ -91,10 +91,11 @@ but new scripts should use `chemgraph run`.
 
 ### Startup readiness
 
-Before initializing `main_agent` or `deep_agent`, the CLI reports
-Globus CLI authentication, Globus Connect Personal
-connection status, and IRI skill authentication. The report also runs when
-restoring a session or changing to one of these workflows. It is advisory:
+Before the first `main_agent` or `deep_agent` initialization in a process,
+including a session restore or a switch to one of these workflows, the CLI
+reports Globus CLI authentication, Globus Connect Personal connection status,
+and IRI skill authentication. The automatic report runs once per process and
+only when stderr is a terminal, so scripted and batch runs skip it. It is advisory:
 optional integrations do not prevent startup. Model credentials are left to
 the existing provider-specific validation during agent initialization and use.
 Automatic reports go to stderr, separate from answers and receipts. Setup

@@ -136,7 +136,7 @@ def headless(monkeypatch, tmp_path, model_loader):
 def test_headless_restart_does_not_replay_completed_tools(headless, tmp_path, capsys, monkeypatch):
     run, responses, requests = headless
     reports = []
-    monkeypatch.setattr(commands, "show_report", lambda: reports.append(True))
+    monkeypatch.setattr(commands, "show_startup_report", lambda: reports.append(True))
     responses[:] = [call("write_file", file_path="/workspace/result.txt", content="first"), AIMessage(content="done")]
     assert run(query="write", workspace=str(tmp_path)) == 0
     assert reports == [True]

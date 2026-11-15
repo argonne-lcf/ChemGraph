@@ -51,7 +51,7 @@ from chemgraph.cli.checkpoint_runtime import (
     CheckpointRuntime,
 )
 from chemgraph.cli.history import enable_input_history
-from chemgraph.cli.preflight import show_report
+from chemgraph.cli.preflight import show_report, show_startup_report
 from chemgraph.models.endpoints import (
     ModelRequest,
     missing_credential_help,
@@ -375,7 +375,7 @@ def initialize_agent(
         return None
 
     if preflight and workflow_type in {"main_agent", "deep_agent"}:
-        show_report()
+        show_startup_report()
 
     backend = None
     if workspace is not None:

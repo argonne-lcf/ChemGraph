@@ -117,3 +117,14 @@ def test_doctor_without_agent(monkeypatch):
     monkeypatch.setattr(cli_main, "initialize_agent", lambda *args, **kwargs: pytest.fail("doctor constructed agent"))
     assert cli_main.main() is None
     assert seen == [((), {"console": cli_main.console})]
+
+
+@pytest.mark.parametrize("tty,expected", [(False, []), (True, [True])])
+def test_startup_report_once_and_only_on_terminal(monkeypatch, tty, expected):
+    shown = []
+    monkeypatch.setattr(preflight, "show_report", lambda: shown.append(True))
+    monkeypatch.setattr(preflight, "_startup_shown", False)
+    monkeypatch.setattr(preflight.sys, "stderr", type("Err", (), {"isatty": lambda self: tty})())
+    preflight.show_startup_report()
+    preflight.show_startup_report()
+    assert shown == expected

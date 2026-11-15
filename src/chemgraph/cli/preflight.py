@@ -23,6 +23,7 @@ REPORT_TIMEOUT = 8.0
 _GCP_INSTALL = "https://docs.globus.org/globus-connect-personal/install/"
 _GLOBUS_INSTALL = 'uv pip install "chemgraph[globus]"'
 _IRI_INSTALL = "uv pip install alcf-tokens"
+_startup_shown = False
 
 
 @dataclass(frozen=True)
@@ -188,3 +189,12 @@ def show_report(*, console: Console | None = None) -> None:
         for remedy in remedies:
             console.print(Text(remedy), soft_wrap=True)
     console.print("\nGlobus and IRI are optional for remote work. Recheck with chemgraph doctor or /doctor.")
+
+
+def show_startup_report() -> None:
+    """Show the automatic report once per process, and only on an interactive terminal."""
+    global _startup_shown
+    if _startup_shown or not sys.stderr.isatty():
+        return
+    _startup_shown = True
+    show_report()
