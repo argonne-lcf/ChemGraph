@@ -119,7 +119,7 @@ def test_removed_workflow_initialization_precedes_credential_check(monkeypatch, 
 
 @pytest.mark.parametrize("workflow", ["python_relp", "python_repl"])
 def test_interactive_removed_workflow_keeps_current_agent(monkeypatch, workflow):
-    answers = iter([f"/workflow {workflow}", "quit"])
+    answers = iter([f"/workflow {workflow}", "/quit"])
     monkeypatch.setattr(commands.Prompt, "ask", lambda *_args, **_kwargs: next(answers))
     initialized = []
 
@@ -427,7 +427,7 @@ def test_retry_main_agent_session_resumes_failed_operation():
 def test_interactive_main_agent_discards_session_on_quit(monkeypatch):
     session = _FakeMainSession([])
     agent = SimpleNamespace()
-    answers = iter(["calculate", "quit"])
+    answers = iter(["calculate", "/quit"])
 
     monkeypatch.setattr(
         commands.Prompt,
@@ -458,7 +458,7 @@ def test_interactive_main_agent_discards_session_on_quit(monkeypatch):
 def test_interactive_main_agent_retry_command(monkeypatch):
     session = _FakeMainSession([], failed=True)
     agent = SimpleNamespace()
-    answers = iter(["/retry", "quit"])
+    answers = iter(["/retry", "/quit"])
 
     monkeypatch.setattr(
         commands.Prompt,
@@ -496,8 +496,8 @@ def test_interactive_main_agent_retry_command(monkeypatch):
         ("/model Provider/Model-X", ("model", "Provider/Model-X")),
         ("/workflow single_agent", ("workflow", "single_agent")),
         ("/SHOW MixedCase", ("show", "MixedCase")),
-        ("help", ("help", "")),
-        ("retry", ("retry", "")),
+        ("help", None),
+        ("retry", None),
         ("show me the tools", None),
         ("model a molecule", None),
     ],
@@ -510,7 +510,7 @@ def test_interactive_show_prompt_reaches_main_agent(monkeypatch):
     prompt = "show me the list of all the tools your subagent has"
     session = _FakeMainSession([])
     agent = SimpleNamespace()
-    answers = iter([prompt, "quit"])
+    answers = iter([prompt, "/quit"])
     calls = []
 
     monkeypatch.setattr(
@@ -545,7 +545,7 @@ def test_interactive_show_prompt_reaches_main_agent(monkeypatch):
 def test_interactive_slash_show_dispatches_to_session_command(monkeypatch):
     session = _FakeMainSession([])
     agent = SimpleNamespace()
-    answers = iter(["/show AbC123", "quit"])
+    answers = iter(["/show AbC123", "/quit"])
     shown = []
 
     monkeypatch.setattr(
@@ -575,7 +575,7 @@ def test_interactive_slash_show_dispatches_to_session_command(monkeypatch):
 def test_interactive_slash_resume_dispatches_to_saved_session(monkeypatch):
     agent = SimpleNamespace(session_id="active-session")
     answers = iter(
-        ["/resume old-thread", "continue", "quit"]
+        ["/resume old-thread", "continue", "/quit"]
     )
     calls = []
 
@@ -603,7 +603,7 @@ def test_interactive_slash_model_and_workflow_switches(monkeypatch):
         [
             "/model Provider/Next-Model",
             "/workflow single_agent",
-            "quit",
+            "/quit",
         ]
     )
     initial_agent = SimpleNamespace()
@@ -643,7 +643,7 @@ def test_interactive_model_switch_uses_supported_reasoning_default(monkeypatch):
     answers = iter(
         [
             "/model argo:claude-opus-4.8",
-            "quit",
+            "/quit",
         ]
     )
     agents = iter(
@@ -708,7 +708,7 @@ def test_workflow_switch_recovers_from_checkpoint_open_failure(monkeypatch):
         [
             "/workflow main_agent",
             "/workflow main_agent",
-            "quit",
+            "/quit",
         ]
     )
 
@@ -790,7 +790,7 @@ def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
         [
             "/resume target-thread",
             "/workflow single_agent",
-            "quit",
+            "/quit",
         ]
     )
     agents = iter([SimpleNamespace(), SimpleNamespace(), SimpleNamespace(session_id="new")])
@@ -943,7 +943,7 @@ def test_interactive_deepagent_setting_survives_workflow_switches(monkeypatch, t
             "/model second-model",
             "/workflow single_agent",
             "/workflow main_agent",
-            "quit",
+            "/quit",
         ]
     )
     agents = iter(
@@ -1041,7 +1041,7 @@ def test_interactive_defers_skill_access_and_retries_switch(
         collection.mkdir()
         yield f"/workflow {target_workflow}"
         yield "/model third-model"
-        yield "quit"
+        yield "/quit"
 
     responses = answers()
     monkeypatch.setattr(commands.Prompt, "ask", lambda *_, **__: next(responses))
@@ -1096,7 +1096,7 @@ def test_interactive_retains_canonical_skills_after_activation(
         yield "/model second-model"
         yield "/workflow single_agent"
         yield "/workflow deep_agent"
-        yield "quit"
+        yield "/quit"
 
     responses = answers()
     monkeypatch.setattr(commands.Prompt, "ask", lambda *_, **__: next(responses))
@@ -1127,7 +1127,7 @@ def test_interactive_invalid_active_directory_fails_before_shell(
 
 def test_interactive_standalone_deepagent_reuses_one_thread(monkeypatch):
     answers = iter(
-        ["inspect files", "run tests", "quit"]
+        ["inspect files", "run tests", "/quit"]
     )
     agent = SimpleNamespace(session_id="deep-session")
     thread_ids = []
@@ -1368,7 +1368,7 @@ def test_interactive_reports_invalid_slash_commands(monkeypatch):
     agent = SimpleNamespace()
     session = _FakeMainSession([])
     answers = iter(
-        ["/show", "/not-a-command", "quit"]
+        ["/show", "/not-a-command", "/quit"]
     )
 
     monkeypatch.setattr(
