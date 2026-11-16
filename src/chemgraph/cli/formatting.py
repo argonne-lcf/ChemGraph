@@ -710,7 +710,7 @@ def create_interactive_help() -> Group:
     table.add_column()
     for command, description in (
         ("/help", "Show commands"),
-        ("/quit", "Exit interactive mode"),
+        ("/quit", "Exit interactive mode (also /exit or /q)"),
         ("/clear", "Clear the screen"),
         ("/config", "Show current configuration"),
         ("/doctor", "Recheck optional Globus and IRI prerequisites"),
@@ -726,7 +726,7 @@ def create_interactive_help() -> Group:
         table.add_row(Text(command), description)
     return Group(
         table,
-        Text("↑/↓ recalls inputs. Exact bare aliases work without arguments; otherwise use /commands.", style="dim"),
+        Text("↑/↓ recalls inputs. Commands require /; plain text is sent to the agent.", style="dim"),
         Text("Reviews: Enter/y approves; n rejects; 3/auto enables auto mode; type instructions to revise.", style="dim"),
         Text("main_agent /resume restores durable threads. Agent questions always require an answer.", style="dim"),
     )

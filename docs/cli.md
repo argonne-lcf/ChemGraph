@@ -179,6 +179,13 @@ chemgraph run --interactive
 Use `/help` inside the shell to see the commands available in your release.
 Interactive sessions preserve conversation context and can be resumed later.
 
+At the query prompt, commands require `/`; plain text is sent to the agent.
+Words such as `retry`, `expand`, `help`, and `quit` are ordinary messages.
+Use `/quit`, `/exit`, or `/q` to exit. `/retry` resumes a failed `main_agent`
+checkpoint; a failed session must recover with `/retry` before accepting a new
+message. Responses to approval and clarification prompts keep their displayed
+controls, such as `y`, `n`, and `auto` for tool reviews.
+
 The shell starts at the query prompt with a compact header showing the model,
 workflow, approval mode, and workspace when configured. Choose these with CLI
 flags or change them with `/model` and `/workflow`. Answers appear as borderless

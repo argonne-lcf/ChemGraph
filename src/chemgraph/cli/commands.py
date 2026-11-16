@@ -1464,17 +1464,6 @@ _INTERACTIVE_COMMANDS = {
     "show",
     "workflow",
 }
-_INTERACTIVE_BARE_ALIASES = {
-    "clear": "clear",
-    "config": "config",
-    "exit": "quit",
-    "expand": "expand",
-    "help": "help",
-    "history": "history",
-    "q": "quit",
-    "quit": "quit",
-    "retry": "retry",
-}
 _INTERACTIVE_SLASH_ALIASES = {
     "exit": "quit",
     "q": "quit",
@@ -1482,11 +1471,8 @@ _INTERACTIVE_SLASH_ALIASES = {
 
 
 def _parse_interactive_input(query: str) -> tuple[str, str] | None:
-    """Return a canonical interactive command and its argument, if any."""
+    """Parse explicit slash commands; leave plain text for the agent."""
     stripped = query.strip()
-    bare_command = _INTERACTIVE_BARE_ALIASES.get(stripped.lower())
-    if bare_command is not None:
-        return bare_command, ""
     if not stripped.startswith("/"):
         return None
 
