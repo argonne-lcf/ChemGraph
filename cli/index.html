@@ -2077,6 +2077,12 @@ calculator, database, or facility endpoint is reachable.</p>
 </code></pre></div>
 <p>Use <code>/help</code> inside the shell to see the commands available in your release.
 Interactive sessions preserve conversation context and can be resumed later.</p>
+<p>At the query prompt, commands require <code>/</code>; plain text is sent to the agent.
+Words such as <code>retry</code>, <code>expand</code>, <code>help</code>, and <code>quit</code> are ordinary messages.
+Use <code>/quit</code>, <code>/exit</code>, or <code>/q</code> to exit. <code>/retry</code> resumes a failed <code>main_agent</code>
+checkpoint; a failed session must recover with <code>/retry</code> before accepting a new
+message. Responses to approval and clarification prompts keep their displayed
+controls, such as <code>y</code>, <code>n</code>, and <code>auto</code> for tool reviews.</p>
 <p>The shell starts at the query prompt with a compact header showing the model,
 workflow, approval mode, and workspace when configured. Choose these with CLI
 flags or change them with <code>/model</code> and <code>/workflow</code>. Answers appear as borderless
