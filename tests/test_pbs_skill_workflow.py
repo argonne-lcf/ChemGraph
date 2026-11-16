@@ -83,6 +83,23 @@ def test_documented_calculation_and_batch(job, tmp_path, outcome):
             assert (tmp_path / "frequencies_hydrogen.csv").exists()
 
 
+def test_polaris_template_runs_calculation(job, tmp_path):
+    payload, env = job
+    shared_env = tmp_path / "shared env"
+    (shared_env / "bin").mkdir(parents=True)
+    (shared_env / "bin/activate").write_text("")
+    (shared_env / "bin/python").write_text(f'#!/bin/bash\nexec {shlex.quote(sys.executable)} "$@"\n')
+    (shared_env / "bin/python").chmod(0o755)
+    batch = (SKILLS / "pbs-hpc/assets/polaris-chemgraph.pbs.template").read_text()
+    default = "/grand/catalyst/world-shared/chemgraph/alcf_chemgraph_env"
+    batch = batch.replace(default, shlex.quote(str(shared_env)))
+    (tmp_path / "job.pbs").write_text(batch)
+    (tmp_path / "input.json").write_text(json.dumps(payload))
+    result = subprocess.run(["bash", "job.pbs"], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads((tmp_path / "result.json").read_text())["success"]
+
+
 @pytest.fixture
 def scheduler(tmp_path):
     qsub = tmp_path / "qsub"

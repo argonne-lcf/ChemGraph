@@ -1,0 +1,22 @@
+#!/bin/bash
+#PBS -N {{JOB_NAME}}
+#PBS -A {{PROJECT}}
+#PBS -q {{QUEUE}}
+#PBS -l select=1:system=polaris
+#PBS -l place=scatter
+#PBS -l walltime={{WALLTIME}}
+#PBS -l filesystems=home:eagle:grand
+#PBS -j oe
+
+# One ChemGraph calculation on one Polaris GPU. Submit with qsub from the run
+# directory holding input.json and calculate.py. Change CHEMGRAPH_ENV only when
+# the user names another environment; keep grand in filesystems while it is on /grand.
+set -eo pipefail
+cd "${PBS_O_WORKDIR:?PBS submission directory is required}"
+CHEMGRAPH_ENV=/grand/catalyst/world-shared/chemgraph/alcf_chemgraph_env
+source "$CHEMGRAPH_ENV/bin/activate"
+set -u
+export http_proxy=http://proxy.alcf.anl.gov:3128 https_proxy=http://proxy.alcf.anl.gov:3128
+export HTTP_PROXY="$http_proxy" HTTPS_PROXY="$https_proxy"
+export CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=8 TMPDIR=/tmp CHEMGRAPH_LOG_DIR="$PWD"
+exec "$CHEMGRAPH_ENV/bin/python" calculate.py
