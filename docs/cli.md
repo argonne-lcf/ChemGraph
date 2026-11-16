@@ -9,7 +9,7 @@ chemgraph run        Run an agent query or interactive session
 chemgraph eval       Evaluate a dataset
 chemgraph session    List, inspect, or delete saved sessions
 chemgraph models     List registered model identifiers
-chemgraph doctor     Check optional Globus and IRI prerequisites
+chemgraph doctor     Check optional Globus, IRI, and ALCF prerequisites
 chemgraph ui         Launch the Streamlit web interface
 chemgraph dashboard  Launch the trace dashboard
 chemgraph academy    Run Academy campaigns and workers
@@ -94,12 +94,14 @@ but new scripts should use `chemgraph run`.
 Before the first `main_agent` or `deep_agent` initialization in a process,
 including a session restore or a switch to one of these workflows, the CLI
 reports Globus CLI authentication, Globus Connect Personal connection status,
-and IRI skill authentication. The automatic report runs once per process and
-only when stderr is a terminal, so scripted and batch runs skip it. It is advisory:
-optional integrations do not prevent startup. Model credentials are left to
-the existing provider-specific validation during agent initialization and use.
+IRI skill authentication, and whether `ALCF_ACCESS_TOKEN` is set.
+The automatic report runs once per process and only when stderr is a terminal,
+so scripted and batch runs skip it. It is advisory: optional integrations do not
+prevent startup. Provider-specific credential validation still runs during
+agent initialization and use.
 Automatic reports go to stderr, separate from answers and receipts. Setup
-commands and links appear below the status table so they remain readable.
+commands and links for Globus and IRI appear below the status table; ALCF token
+setup steps appear directly in its Details cell.
 
 Check again without constructing an agent, or use `/doctor` inside a chat:
 
@@ -125,6 +127,11 @@ is **Not checked** until the CLI is installed. IRI checks the skill's credential
 legacy IRI caches and ALCF inference tokens are separate. Existing credentials
 may be refreshed by the status commands, but the checks never start a login.
 Cached logins can be picked up by `/doctor`.
+
+`ALCF_ACCESS_TOKEN` is **Set** when nonblank and **Missing** otherwise; its validity
+is not checked. For ALCF inference, follow the setup steps in the table in the
+shell used to launch ChemGraph, then start or restart ChemGraph. Exporting a token
+in another terminal does not update an already running process.
 
 Globus and IRI are optional for remote workflows. Local transfers need
 [Globus Connect Personal](https://docs.globus.org/globus-connect-personal/install/),

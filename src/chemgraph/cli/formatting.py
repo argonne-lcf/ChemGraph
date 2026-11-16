@@ -713,7 +713,7 @@ def create_interactive_help() -> Group:
         ("/quit", "Exit interactive mode (also /exit or /q)"),
         ("/clear", "Clear the screen"),
         ("/config", "Show current configuration"),
-        ("/doctor", "Recheck optional Globus and IRI prerequisites"),
+        ("/doctor", "Recheck optional Globus, IRI, and ALCF prerequisites"),
         ("/expand", "View the last turn's full tool calls and results"),
         ("/model <name>", "Change model"),
         ("/workflow <type>", "Change workflow"),

@@ -22,7 +22,7 @@ PROBE_TIMEOUT = 3.0
 REPORT_TIMEOUT = 8.0
 _GCP_INSTALL = "https://docs.globus.org/globus-connect-personal/install/"
 _GLOBUS_INSTALL = 'uv pip install "chemgraph[globus]"'
-_IRI_INSTALL = "uv pip install alcf-tokens"
+_ALCF_TOKENS_INSTALL = "uv pip install alcf-tokens"
 _startup_shown = False
 
 
@@ -136,7 +136,7 @@ def _iri(deadline: float) -> list[CheckResult]:
     executable = shutil.which("alcf-tokens")
     if not executable:
         return [CheckResult(name, "Missing", "alcf-tokens is not on PATH.",
-                            f"{_IRI_INSTALL}\nalcf-tokens login iri")]
+                            f"{_ALCF_TOKENS_INSTALL}\nalcf-tokens login iri")]
     result = _run([executable, "test-token", "iri"], deadline)
     data = json.loads(result.stdout)
     if result.returncode == 0 and data.get("ready") is True:
@@ -150,12 +150,27 @@ def _iri(deadline: float) -> list[CheckResult]:
     return [_unknown(name)]
 
 
+def _alcf() -> list[CheckResult]:
+    name = "ALCF_ACCESS_TOKEN"
+    if os.environ.get(name, "").strip():
+        return [CheckResult(name, "Set", "Environment variable is set. Token validity is not checked.")]
+    return [CheckResult(
+        name, "Missing",
+        "Run in the shell used to launch ChemGraph:\n"
+        f"{_ALCF_TOKENS_INSTALL}\n"
+        "alcf-tokens login inference\n"
+        'export ALCF_ACCESS_TOKEN="$(alcf-tokens get-token inference)"\n'
+        "Then launch or restart ChemGraph.",
+    )]
+
+
 def collect_checks() -> list[CheckResult]:
     """Collect independent probes without prompting, making model calls, or exposing errors."""
     deadline = time.monotonic() + REPORT_TIMEOUT
     probes = [
         (("Globus CLI authentication", "Globus Connect Personal"), lambda: _globus(deadline)),
         (("IRI authentication",), lambda: _iri(deadline)),
+        (("ALCF_ACCESS_TOKEN",), _alcf),
     ]
 
     def safe_probe(names, probe):
@@ -180,7 +195,7 @@ def show_report(*, console: Console | None = None) -> None:
     except Exception:
         results = [_unknown("Readiness checks")]
     for result in results:
-        style = {"Ready": "green", "Not checked": "dim"}.get(result.status, "yellow")
+        style = {"Ready": "green", "Set": "green", "Not checked": "dim"}.get(result.status, "yellow")
         table.add_row(Text(result.name), Text(result.status, style=style), Text(result.summary))
     console.print(table)
     remedies = list(dict.fromkeys(result.remedy for result in results if result.remedy))
@@ -188,7 +203,9 @@ def show_report(*, console: Console | None = None) -> None:
         console.print("\nRun these setup or diagnostic steps in another terminal:")
         for remedy in remedies:
             console.print(Text(remedy), soft_wrap=True)
-    console.print("\nGlobus and IRI are optional for remote work. Recheck with chemgraph doctor or /doctor.")
+    console.print("\nGlobus and IRI are optional for remote work. "
+                  "ALCF_ACCESS_TOKEN is required for ALCF inference. "
+                  "Recheck with chemgraph doctor or /doctor.")
 
 
 def show_startup_report() -> None:
