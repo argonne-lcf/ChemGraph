@@ -10,136 +10,93 @@ metadata:
 
 # Remote PBS jobs through the IRI API
 
-Use this workflow when the user selects IRI or needs ALCF batch execution from a
-host that cannot run `qsub`. If no method was selected and the shell is on an
-authorized submission host, prefer [pbs-hpc](../pbs-hpc/SKILL.md). Preserve an
-explicitly selected method and never mix submission methods for one run. Use the
-PBS skill's relevant site-reference sections for environment and launch
-requirements; `#PBS` directives do not apply here because the JobSpec selects
-resources.
+Use this when the user selects IRI or needs ALCF batch execution from a host that
+cannot run `qsub`. If no method was selected and the shell is on a submission host,
+prefer [pbs-hpc](../pbs-hpc/SKILL.md). Never mix submission methods for one run. The
+JobSpec selects resources, so `#PBS` lines do not apply.
 
 ## Setup
 
-First identify the local workspace: use the user's selected workspace, or select
-and state one for this task. It holds `target.toml`, run directories, and transfer
-records. Check **that workspace's** `target.toml`; use a configuration elsewhere
-only when the user identifies it. Example paths are illustrative, not locations
-to search for configuration. If importing a configuration, place a copy at the
-selected workspace's `target.toml` and correct `local_collection_id` and
-`local_globus_root` to map this workspace, rather than staging the old workspace.
-Preserve the source configuration.
+Use the user's workspace, or pick one and say so. It holds `target.toml`, run
+directories, and transfer records. Use a configuration from elsewhere only when the
+user names it; then copy it here (keeping the source) and correct
+`local_collection_id` and `local_globus_root` for this workspace.
 
-Run every command from the selected workspace (in Claude Code or Codex, start
-each command with `cd` to it). Use the literal Bash wrapper in the
-recipes, including under DeepAgent's `/bin/sh`: Bash reads the script from fd 3
-and child commands receive closed stdin. This requires Bash and `/dev/fd` support;
-if either is unavailable, stop and report it. Skill files may be mounted at a virtual
-path such as `/chemgraph-skills/`, while shell commands run on the host, so resolve
-the installed skills directory and run bundled files from it; never retype them:
+Run every command from the workspace inside this literal wrapper, even under
+DeepAgent's `/bin/sh` (Bash reads the script from fd 3; children get closed stdin).
+Skill files may be mounted at a virtual path, so run bundled files from `$SKILLS` and
+never retype them:
 
 ```bash
 exec bash /dev/fd/3 3<<'BASH' </dev/null
 SKILLS=$(python -c "import chemgraph.skills, pathlib; print(pathlib.Path(chemgraph.skills.__file__).parent)")
-# Put setup commands that use SKILLS here, in this same block.
+# Put commands that use SKILLS here, in this same block.
 BASH
 ```
 
-Each execution starts fresh: include its own variables and setup inside the wrapper.
-For DeepAgent `execute`, use `timeout=180` for submission, `timeout=420` for IRI
-filesystem polling, and `timeout=660` for Globus wait. Exit 124 can leave a mutation
-in flight: inspect saved state and follow [resume guidance](references/api-v2.md#resume);
-never replay it blindly.
+Each block starts fresh. DeepAgent `execute` timeouts: 180 s for submission, 420 s for
+IRI filesystem polling, 660 s for Globus wait. Exit 124 can leave a mutation in flight:
+inspect saved state per [Resume](references/api-v2.md#resume).
 
 At the start of each session:
 
-1. **Tools and logins.** Check `command -v jq curl`, that `curl --version` is 7.76
-   or newer, `alcf-tokens test-token iri` (`"ready": true`), and `globus whoami`.
-   Tell the user what to install if a tool is missing (`jq`, `curl`,
-   `pip install alcf-tokens globus-cli`). For confirmed missing/expired credentials
-   or required consent, give the user the exact command to run in their own
-   terminal: `alcf-tokens login iri`, `globus login`, or the `globus login --gcs …`
-   consent the CLI printed. Connection failures alone do not establish a login
-   problem; use [the diagnostics](references/api-v2.md#connection-and-authentication).
-2. **Target.** If `./target.toml` is missing:
-   - For Polaris (the default) with Eagle storage, run
-     `python "$SKILLS/iri-hpc/scripts/iri_configure.py" .`. It discovers resource
-     IDs, the user's projects and username, and the Globus collections. Exit 2
-     prints JSON questions: ask the user all of them in one message, then rerun with
-     `--project`, `--environment-setup`, and `--python` (plus `--username` or
-     `--remote-root` when asked or wanted).
-   - For Aurora, Crux, or a remote root outside Eagle, copy
-     [target.example.toml](assets/target.example.toml) to `./target.toml` and fill it
-     with the user, taking resource IDs from `status/resources` by name.
-   Never guess projects, paths, or environments.
-3. **State the configuration in use.** Identify its source path (including the
-   original source if imported), account, and remote `environment_setup` and
-   `python`. These describe an existing remote environment supplied by the user
-   or deployment, not a laptop environment or an environment to install
-   automatically. This is informational, not another approval step.
+1. **Tools and logins.** Check `jq`, `curl` 7.76+, `alcf-tokens test-token iri`
+   (`"ready": true`), and `globus whoami`. Tell the user what to install
+   (`pip install alcf-tokens globus-cli`) or the exact login to run in their own
+   terminal (`alcf-tokens login iri`, `globus login`, or the printed `--gcs` consent).
+   A connection failure is not a login problem; see
+   [diagnostics](references/api-v2.md#connection-and-authentication).
+2. **Target.** Use an existing `./target.toml` as is. Otherwise, for Polaris with
+   Eagle storage, run `python "$SKILLS/iri-hpc/scripts/iri_configure.py" .`. It
+   discovers IDs, projects, username, and Globus collections, and uses the
+   [ChemGraph environment](../pbs-hpc/references/polaris.md#chemgraph-environment)
+   unless the user names another (`--environment-setup` and `--python`). Exit 2
+   prints JSON questions: ask them all in one message, then rerun with `--project`
+   (and `--username`/`--remote-root` if asked). For Aurora, Crux, or non-Eagle roots,
+   fill [target.example.toml](assets/target.example.toml) with the user. Never guess
+   projects or paths. State the configuration's path, account, and remote
+   environment; this is informational, not an approval step.
 
-`target.toml` is the only place IDs live. Sourcing `scripts/iri.sh` loads them as
-shell variables; never retype IDs into commands. Never ask for, print, store, or pass
-a token as a command argument; send every authenticated request through the `iri`
-function, as shown in [the v2 recipes](references/api-v2.md).
+`target.toml` is the only place IDs live; `scripts/iri.sh` loads them as shell
+variables. Never ask for, print, store, or pass a token; send authenticated requests
+through the `iri` function in [the recipes](references/api-v2.md).
 
 ## Run a calculation
 
-1. **Discover.** Check the compute resource status and that the project appears in
-   `account/projects`.
-2. **Prepare** a fresh run directory `./$RUN`; its remote counterpart is
-   `$REMOTE_ROOT/$RUN`. One run name drives every path:
-   - the structure file (follow
-     [local preparation](../chemgraph/references/structure-preparation.md) if absent);
-   - `input.json` with run-relative `input_structure_file` and `output_results_file`;
-   - the `chemgraph` skill's [calculate.py](../chemgraph/assets/calculate.py), copied
-     unchanged with `cp "$SKILLS/chemgraph/assets/calculate.py" "$RUN/"`;
-   - `launch.sh` from [the launch template](assets/launch.sh.template), checked with `bash -n`;
-   - `request.json`: `{"resource_id": ..., "job_spec": ...}` as in the recipes.
-   Use [ASE input checks](../chemgraph/references/ase-batch.md) without requiring
-   the remote calculator's extras on the laptop solely for schema validation.
-3. **Stage.** ALCF's IRI API has no upload or download. Create the remote
-   directory with IRI `mkdir`, then transfer `./$RUN` with the `globus-transfer`
-   skill, labelled `$RUN-stage-in`, with records in `./.globus/`, from
-   `$LOCAL:$LOCAL_ROOT/$RUN/` to `$REMOTE_COLLECTION:$REMOTE_GLOBUS_ROOT/$RUN/` as in
-   the stage recipe. Wait until that task is `SUCCEEDED`, then confirm with IRI `ls`
-   that the structure and any explicitly supplied checkpoint files exist. Named
-   pretrained models do not require staging model files. Output files are created
-   by the job.
-4. **Submit once** with `python "$SKILLS/iri-hpc/scripts/iri_submit.py" "$RUN"`,
-   as its own command after the stage-in task succeeded and you reviewed the staged
-   listing; never chain it after staging.
-   The helper sends no `Idempotency-Key` (ALCF may have no idempotency store). It
-   records a local attempt marker and history, then `job.id` and `job.json`. Report
-   the full job ID. Without server deduplication, uncertain submissions cannot be retried.
-5. **Check status.** For “submit a job,” report the accepted ID and observed state,
-   including queued or held. For completed results, monitor to a terminal state;
-   if reporting while pending, retain the ID and say results are outstanding.
-6. **Collect when results are requested:** `job.out`, `job.err`, and the result JSON
-   with the IRI `view` or `tail` recipes, and save them in the local run directory.
-   Move large or binary outputs with `globus-transfer` (label `$RUN-collect`) into
-   `$RUN/outputs/`.
-7. **Interpret** with the `chemgraph` skill: `calculate.py` exits 0 for success,
-   2 for nonconvergence, and 1 for failure. Scheduler `completed` alone does not
-   establish scientific success; early failures may leave only stderr.
+1. **Discover:** compute resource status and the project in `account/projects`.
+2. **Write inputs** in a fresh `./$RUN`: the structure (follow
+   [local preparation](../chemgraph/references/structure-preparation.md) if absent)
+   and `input.json` with run-relative `input_structure_file`/`output_results_file`,
+   as in the [ASE batch example](../chemgraph/references/ase-batch.md). Do not install
+   the remote calculator locally just to validate the schema.
+3. **Prepare:** `python "$SKILLS/iri-hpc/scripts/iri_prepare.py" "$RUN"` writes
+   `launch.sh`, `request.json`, and `calculate.py` from `target.toml`. Review its output.
+4. **Stage:** IRI has no upload. Follow the [stage recipe](references/api-v2.md#stage):
+   IRI `mkdir`, then the `globus-transfer` skill (label `$RUN-stage-in`, records in
+   `./.globus/`), wait for `SUCCEEDED`, then IRI `ls` to confirm the inputs.
+5. **Submit once:** `python "$SKILLS/iri-hpc/scripts/iri_submit.py" "$RUN"` as its own
+   command after staging succeeded. It saves a marker, `job.id`, and `job.json`; report
+   the full job ID.
+6. **Status and results.** For "submit a job", report the ID and observed state. For
+   results, monitor to a terminal state, then collect `job.out`, `job.err`, and the
+   result JSON with the [view/tail recipes](references/api-v2.md#collect); move large
+   outputs with `globus-transfer` (label `$RUN-collect`) into `$RUN/outputs/`.
+   `calculate.py` exits 0 on success, 2 on nonconvergence, 1 on failure; scheduler
+   `completed` alone is not scientific success.
 
-Cancel only a job the user asks to cancel, using its full ID and the
-[cancel recipe](references/api-v2.md#cancel).
+Cancel only a job the user asks to cancel, with its full ID
+([cancel recipe](references/api-v2.md#cancel)).
 
 ## Resume and uncertainty
 
-Resume from saved evidence; accepted jobs survive agent exit. With `job.id`,
-monitor that job without resubmitting. With `submission.started` but no ID, stop
-and follow [resume and uncertainty procedures](references/api-v2.md#resume).
-`--retry-uncertain` always refuses; an empty job listing never permits a resend.
+Accepted jobs survive agent exit. With `job.id`, monitor that job and never resubmit.
+With `submission.started` but no ID, stop and follow
+[Resume](references/api-v2.md#resume): uncertain submissions are never retried, and an
+empty job listing is not permission to resend. Any submission evidence forbids
+restaging; never delete evidence or `.submission.lock`, or submit the same
+calculation from another directory to work around it. After a definite rejection,
+fix the cause (for example in `target.toml`), rerun `iri_prepare.py`, and submit
+separately.
 
-Any `submission.started`, `job.id`, or `submission.history` prohibits stage-in.
-Never delete evidence or `.submission.lock`, edit an uncertain request, or submit
-in another directory to work around uncertainty. Resume an existing transfer from
-its saved record. Definite rejections require correction and a separate submit.
-The only legacy recovery is the
-[exact missing-idempotency-store rejection](references/api-v2.md#resolve-a-legacy-idempotency-rejection),
-with evidence for **every** prior attempt and the user's confirmation. Recovery
-submits nothing; any later submission is separate and never restages the run.
-
-For other operations, consult the [ALCF IRI guide](https://docs.alcf.anl.gov/services/iri-api/)
+For other operations, see the [ALCF IRI guide](https://docs.alcf.anl.gov/services/iri-api/)
 and the [API reference](https://api.alcf.anl.gov/).

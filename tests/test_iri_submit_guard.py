@@ -383,21 +383,39 @@ def test_configure_asks_once_then_writes_an_eagle_target(configure, tmp_path, ca
     tmp_path.mkdir()
     assert configure.configure(tmp_path) == 2
     assert json.loads(capsys.readouterr().out) == {
-        "ask": ["project", "environment_setup", "python"],
+        "ask": ["project"],
         "choices": {"project": ["A", "B"]},
     }
     assert configure.configure(tmp_path, remote_root="/home/me/runs") == 1
     assert not (tmp_path / "target.toml").exists()
 
-    answers = {"project": "A", "environment_setup": "source env/bin/activate",
-               "python": "env/bin/python"}
+    answers = {"project": "A"}
     assert configure.configure(tmp_path, **answers) == 0
     target = tomllib.loads((tmp_path / "target.toml").read_text(encoding="utf-8"))
+    assert target["python"] == configure.POLARIS_ENV + "/bin/python"
+    assert target["filesystems"] == "home:eagle:grand"
     assert target["username"] == "me" and target["storage_resource_id"] == "eagle-id"
     assert target["remote_root"] == "/eagle/A/me/chemgraph-runs"
     assert target["remote_globus_root"] == "/A/me/chemgraph-runs"
     assert target["local_globus_root"].endswith("w-\N{GRINNING FACE}")
     assert configure.configure(tmp_path, **answers) == 1
+
+    spec = importlib.util.spec_from_file_location("iri_prepare", SCRIPT.with_name("iri_prepare.py"))
+    prepare = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(prepare)
+    run = tmp_path / "water-1"
+    run.mkdir()
+    (run / "input.json").write_text("{}")
+    if shutil.which("bash"):
+        assert prepare.prepare("water-1", tmp_path) == 0
+        job = json.loads((run / "request.json").read_text())["job_spec"]
+        assert job["directory"] == "/eagle/A/me/chemgraph-runs/water-1"
+        assert job["attributes"]["custom_attributes"] == {"filesystems": "home:eagle:grand"}
+        assert f"source {configure.POLARIS_ENV}/bin/activate" in (run / "launch.sh").read_text()
+    (run / "submission.started").write_text("{}")
+    before = {p.name: p.read_bytes() for p in run.iterdir()}
+    assert prepare.prepare("water-1", tmp_path) == 1
+    assert before == {p.name: p.read_bytes() for p in run.iterdir()}
 
 
 @pytest.mark.skipif(sys.platform == "win32" or not shutil.which("bash"), reason="needs bash")

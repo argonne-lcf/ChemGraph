@@ -1,9 +1,10 @@
 """Write WORKSPACE/target.toml for iri-hpc runs on Polaris with Eagle storage.
 
 Resource IDs, the user's projects, and the ALCF username come from the IRI API;
-the laptop's Globus collection comes from `globus endpoint local-id`. Values that
-cannot be discovered are returned as questions instead of guessed. Other systems
-and filesystems are configured by hand from assets/target.example.toml.
+the laptop's Globus collection comes from `globus endpoint local-id`. The remote
+environment defaults to ChemGraph's shared Polaris environment. Values that cannot
+be discovered are returned as questions instead of guessed. Other systems and
+filesystems are configured by hand from assets/target.example.toml.
 
 Exit codes: 0 target.toml written, 1 error or unsupported target,
 2 questions for the user, printed as JSON {"ask": [...], "choices": {...}}.
@@ -20,7 +21,8 @@ import urllib.request
 from iri_submit import _OPENER, BASE_URL, TIMEOUT_S, get_token
 
 EAGLE_COLLECTION = "05d2c76a-e867-4f67-aa57-76edeb0beda0"  # alcf#dtn_eagle, root /eagle
-NEEDS = ("project", "username", "environment_setup", "python")
+POLARIS_ENV = "/grand/catalyst/world-shared/chemgraph/alcf_chemgraph_env"
+NEEDS = ("project", "username")
 
 
 def _get(url, token=None):
@@ -86,8 +88,14 @@ def configure(workspace, *, project=None, username=None, environment_setup=None,
     names = sorted(p["name"] for p in projects)
     shared = set.intersection(*(set(p.get("user_ids") or ()) for p in projects)) if projects else set()
 
-    values = {"project": project, "username": username,
-              "environment_setup": environment_setup, "python": python}
+    if environment_setup is None and python is None:
+        environment_setup = f"source {POLARIS_ENV}/bin/activate"
+        python = f"{POLARIS_ENV}/bin/python"
+    elif environment_setup is None or python is None:
+        print("Pass both --environment-setup and --python, or neither for the default "
+              "ChemGraph environment.", file=sys.stderr)
+        return 1
+    values = {"project": project, "username": username}
     choices = {"project": names}
     if project is None and len(names) == 1:
         values["project"] = names[0]
@@ -118,7 +126,8 @@ def configure(workspace, *, project=None, username=None, environment_setup=None,
         "account": values["project"],
         "username": values["username"],
         "queue": "debug",
-        "filesystems": "home:eagle",
+        # PBS holds jobs that use an undeclared filesystem, such as a /grand environment.
+        "filesystems": "home:eagle:grand" if python.startswith("/grand/") else "home:eagle",
         "node_count": 1,
         "duration": 300,
         "remote_root": root,
@@ -126,8 +135,8 @@ def configure(workspace, *, project=None, username=None, environment_setup=None,
         "local_globus_root": globus_path(workspace),
         "remote_collection_id": EAGLE_COLLECTION,
         "remote_globus_root": root.removeprefix("/eagle"),
-        "environment_setup": values["environment_setup"],
-        "python": values["python"],
+        "environment_setup": environment_setup,
+        "python": python,
     }
     # JSON strings without ASCII escaping are valid TOML basic strings.
     text = "# Written by iri_configure.py for Polaris with Eagle storage.\n" + "".join(
@@ -146,7 +155,8 @@ def main(argv=None):
     parser.add_argument("workspace")
     parser.add_argument("--project")
     parser.add_argument("--username", help="ALCF username")
-    parser.add_argument("--environment-setup", help="shell line that activates ChemGraph on Polaris")
+    parser.add_argument("--environment-setup", help="shell line that activates ChemGraph on "
+                        "Polaris (default: the shared ChemGraph environment)")
     parser.add_argument("--python", help="Python executable of that environment")
     parser.add_argument("--remote-root", help="parent of remote run directories, on /eagle")
     parser.add_argument("--base-url", default=BASE_URL)

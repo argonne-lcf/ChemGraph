@@ -94,29 +94,11 @@ again.
 
 ## Submit
 
-`request.json` wraps a PSI/J JobSpec. Use absolute remote paths and select
-resources here:
-
-```json
-{
-  "resource_id": "<compute_resource_id>",
-  "job_spec": {
-    "name": "cg-water-opt",
-    "executable": "/bin/bash",
-    "arguments": ["<REMOTE_RUN>/launch.sh"],
-    "directory": "<REMOTE_RUN>",
-    "stdout_path": "<REMOTE_RUN>/job.out",
-    "stderr_path": "<REMOTE_RUN>/job.err",
-    "resources": {"node_count": 1},
-    "attributes": {
-      "duration": 300,
-      "queue_name": "debug",
-      "account": "<account>",
-      "custom_attributes": {"filesystems": "home:eagle"}
-    }
-  }
-}
-```
+`iri_prepare.py RUN` writes `request.json`: `resource_id` plus a PSI/J `job_spec`
+that runs `/bin/bash REMOTE_RUN/launch.sh` in `REMOTE_RUN`, writes `job.out` and
+`job.err` there, and takes `node_count`, `duration`, `queue`, `account`, and
+`filesystems` from `target.toml`. Change resources in `target.toml` and rerun it,
+rather than editing the JSON by hand.
 
 The helper omits `Idempotency-Key`, so submission does not require a server-side
 idempotency store. Its local marker blocks uncertain replays. Submit separately
