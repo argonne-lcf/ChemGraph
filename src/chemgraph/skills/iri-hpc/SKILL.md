@@ -91,7 +91,7 @@ Cancel only a job the user asks to cancel, with its full ID
 
 Accepted jobs survive agent exit. With `job.id`, monitor that job and never resubmit.
 With `submission.started` but no ID, stop and follow
-[Resume](references/api-v2.md#resume): uncertain submissions are never retried, and an
+[Resume](references/api-v2.md#resume): an
 empty job listing is not permission to resend. Any submission evidence forbids
 restaging; never delete evidence or `.submission.lock`, or submit the same
 calculation from another directory to work around it. After a definite rejection,
