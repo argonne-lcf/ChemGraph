@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Fake PBS qstat for jobs run by the fake qsub. Every job has already finished,
+# so, as on PBS, `qstat -f ID` points to history and `qstat -xf ID` shows it.
+state=${FAKE_PBS_STATE:-$HOME/.fake-pbs}
+history=false
+id=
+for arg in "$@"; do
+    case $arg in
+        -*x*) history=true ;;
+        [0-9]*) id=${arg%%.*} ;;
+    esac
+done
+[ -n "$id" ] || exit 0  # Listings show only active jobs; there are none.
+job=$state/$id
+if [ ! -d "$job" ]; then
+    echo "qstat: Unknown Job Id $id.fake" >&2
+    exit 153
+fi
+if ! $history; then
+    echo "qstat: $id.fake Job has finished, use -x or -H to obtain historical job information" >&2
+    exit 35
+fi
+cat <<EOF
+Job Id: $id.fake
+    Job_Name = $(cat "$job/name")
+    job_state = F
+    Exit_status = $(cat "$job/exit")
+    Output_Path = $(cat "$job/workdir")/$(cat "$job/name").o$id
+EOF

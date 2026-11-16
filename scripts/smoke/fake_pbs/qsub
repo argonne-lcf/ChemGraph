@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Fake PBS qsub for local ChemGraph agent runs: executes the job script now, on
+# this machine, then prints a job ID. Not a scheduler; for testing skills only.
+#
+# The shared Polaris ChemGraph environment is replaced by FAKE_PBS_ENV (default:
+# the active virtualenv), and PBS_JOBID/PBS_NODEFILE/PBS_O_WORKDIR are set so
+# calculate.py's compute-node guard passes. Job records live in FAKE_PBS_STATE.
+set -uo pipefail
+state=${FAKE_PBS_STATE:-$HOME/.fake-pbs}
+env_dir=${FAKE_PBS_ENV:-${VIRTUAL_ENV:-}}
+script=${!#}
+[ "$#" -gt 0 ] && [ -f "$script" ] || { echo "qsub: script file cannot be loaded" >&2; exit 2; }
+[ -x "$env_dir/bin/python" ] || { echo "qsub: activate a venv or set FAKE_PBS_ENV" >&2; exit 2; }
+
+mkdir -p "$state"
+id=$(( $(cat "$state/last" 2>/dev/null || echo 100) + 1 ))
+echo "$id" > "$state/last"
+job=$state/$id
+mkdir "$job"
+name=$(sed -n 's/^#PBS -N //p' "$script" | head -n 1)
+name=${name:-$(basename "$script")}
+echo "$name" > "$job/name"
+pwd > "$job/workdir"
+"$env_dir/bin/python" -c 'import socket; print(socket.gethostname())' > "$job/nodes"
+sed "s|/grand/catalyst/world-shared/chemgraph/alcf_chemgraph_env|$env_dir|g" "$script" > "$job/job.sh"
+
+PBS_JOBID=$id.fake PBS_NODEFILE=$job/nodes PBS_O_WORKDIR=$PWD \
+    bash "$job/job.sh" > "$name.o$id" 2>&1
+echo $? > "$job/exit"
+echo "$id.fake"

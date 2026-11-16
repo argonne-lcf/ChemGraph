@@ -16,6 +16,7 @@ unit suite still lives at `tests/test_execution.py`.
 | [`smoke_local.py`](smoke_local.py) | laptop | `local` | none |
 | [`smoke_globus_compute.py`](smoke_globus_compute.py) | laptop | `globus_compute` | live GC endpoint |
 | [`smoke_globus_transfer.py`](smoke_globus_transfer.py) | laptop | `GlobusTransferManager` (+ optional `globus_compute` MCP) | Globus collections on both ends |
+| [`fake_pbs/`](fake_pbs/) | laptop | full `main_agent` run through the `pbs-hpc` skill | an LLM model |
 | [`smoke_parsl_in_job.py`](smoke_parsl_in_job.py) | inside `qsub -I` on Polaris/Aurora | `parsl` | PBS allocation |
 | [`smoke_ensemble_launcher_in_job.py`](smoke_ensemble_launcher_in_job.py) | inside `qsub -I` on Polaris/Aurora | `ensemble_launcher` (managed + client-only) | PBS allocation, `ensemble_launcher` built from source |
 
@@ -43,6 +44,41 @@ source .cg_env/bin/activate
 python scripts/smoke/smoke_local.py             # ~5s + first-run MACE model download
 python scripts/smoke/smoke_local.py --quick     # ~3s, skips MACE
 ```
+
+### Laptop: full agent run with a fake PBS scheduler
+
+`fake_pbs/qsub` and `fake_pbs/qstat` let the ChemGraph agent run the whole
+direct-PBS workflow locally: it reads the `pbs-hpc` skill, writes `input.json`,
+`calculate.py`, and `job.pbs`, submits once, checks the job, and reports the
+result. The fake `qsub` runs the job immediately on this machine. It replaces
+the shared Polaris environment path with the active venv (or `FAKE_PBS_ENV`)
+and sets the PBS variables that `calculate.py` checks. Job records live in
+`FAKE_PBS_STATE` (default `~/.fake-pbs`). Every job is already finished:
+`qstat -f ID` points to history, and `qstat -xf ID` shows `Exit_status`.
+
+```bash
+source .venv/bin/activate                    # this checkout, installed with -e
+mkdir -p ~/cg-pbs-test && cd ~/cg-pbs-test
+PATH="$OLDPWD/scripts/smoke/fake_pbs:$PATH" \
+    chemgraph run --interactive --workflow main_agent --workspace . -m <model>
+```
+
+Ask: *"Treat this machine as a Polaris login node; qsub works here. Optimize
+an H2 molecule with EMT on Polaris using project TEST, debug queue, 10 minutes,
+and give me the energy."*
+
+**Expected:**
+- The run directory has `input.json`, an unchanged `calculate.py`, `job.pbs`,
+  `submission.started`, and `job.id`.
+- `job.pbs` comes from the Polaris template.
+- The `NAME.oID` output file and `result.json` exist, and the agent reports
+  `potential_energy`.
+- Ask a new session to *"check my existing job and report the result; don't
+  resubmit"*. It should read `job.id`, and the ID in `~/.fake-pbs/last` should
+  not change.
+
+Use EMT (or a CPU calculator): the Polaris template sets
+`CUDA_VISIBLE_DEVICES=0`.
 
 ### Laptop → live Globus Compute endpoint
 
