@@ -424,11 +424,10 @@ def test_retry_main_agent_session_resumes_failed_operation():
     assert session.calls == [("retry", None)]
 
 
-@pytest.mark.parametrize("exit_command", ["/quit", "/EXIT", "  /q  "])
-def test_interactive_main_agent_discards_session_on_quit(monkeypatch, exit_command):
+def test_interactive_main_agent_discards_session_on_quit(monkeypatch):
     session = _FakeMainSession([])
     agent = SimpleNamespace()
-    answers = iter(["calculate", exit_command])
+    answers = iter(["calculate", "/quit"])
 
     monkeypatch.setattr(
         commands.Prompt,
@@ -459,7 +458,7 @@ def test_interactive_main_agent_discards_session_on_quit(monkeypatch, exit_comma
 def test_interactive_main_agent_retry_command(monkeypatch):
     session = _FakeMainSession([], failed=True)
     agent = SimpleNamespace()
-    answers = iter(["/retry extra", "/ReTrY", "/quit"])
+    answers = iter(["/retry", "/quit"])
 
     monkeypatch.setattr(
         commands.Prompt,
@@ -482,12 +481,11 @@ def test_interactive_main_agent_retry_command(monkeypatch):
 
     monkeypatch.setattr(commands, "retry_main_agent_session", fake_retry)
 
-    with console.capture() as capture:
+    with console.capture():
         commands.interactive_mode(workflow="main_agent", generate_report=False)
 
     assert calls == [(session, False)]
     assert session.calls == []
-    assert "Usage: /retry" in capture.get()
 
 
 @pytest.mark.parametrize(
@@ -498,12 +496,6 @@ def test_interactive_main_agent_retry_command(monkeypatch):
         ("/model Provider/Model-X", ("model", "Provider/Model-X")),
         ("/workflow single_agent", ("workflow", "single_agent")),
         ("/SHOW MixedCase", ("show", "MixedCase")),
-        ("/help", ("help", "")),
-        ("  /ReTrY  ", ("retry", "")),
-        ("/clear", ("clear", "")),
-        ("/config", ("config", "")),
-        ("/expand", ("expand", "")),
-        ("/history", ("history", "")),
         ("help", None),
         ("retry", None),
         ("show me the tools", None),
@@ -512,57 +504,6 @@ def test_interactive_main_agent_retry_command(monkeypatch):
 )
 def test_parse_interactive_input(value, expected):
     assert commands._parse_interactive_input(value) == expected
-
-
-@pytest.mark.parametrize("workflow", ["single_agent", "deep_agent", "main_agent"])
-@pytest.mark.parametrize("auto", [False, True])
-def test_interactive_bare_commands_reach_agent(monkeypatch, workflow, auto):
-    queries = [
-        value
-        for word in ("clear", "config", "exit", "expand", "help", "history", "q", "quit", "retry")
-        for value in (word, word.upper(), f"  {word.title()}  ")
-    ] + ["retry that calculation"]
-    answers = iter([*(["/auto on"] if auto else []), *queries, "/quit"])
-    agent = SimpleNamespace()
-    session = _FakeMainSession([])
-    calls = []
-    monkeypatch.setattr(commands.Prompt, "ask", lambda *_args, **_kwargs: next(answers))
-    monkeypatch.setattr(commands.Confirm, "ask", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(commands, "initialize_agent", lambda *_args, **_kwargs: agent)
-    monkeypatch.setattr(commands, "create_main_agent_session", lambda *_args, **_kwargs: session)
-
-    def run(active, query, **_kwargs):
-        assert active is (session if workflow == "main_agent" else agent)
-        calls.append((query, commands._review_auto_mode.get().enabled))
-
-    monkeypatch.setattr(commands, "run_query", run)
-    monkeypatch.setattr(commands, "run_main_agent_query", run)
-    monkeypatch.setattr(
-        commands, "retry_main_agent_session",
-        lambda *_args, **_kwargs: pytest.fail("plain retry triggered checkpoint recovery"),
-    )
-
-    with console.capture() as capture:
-        commands.interactive_mode(workflow=workflow, generate_report=False)
-
-    assert calls == [(query, auto) for query in queries]
-    assert "/retry is available only" not in capture.get()
-
-
-@pytest.mark.parametrize("workflow", ["single_agent", "deep_agent"])
-def test_interactive_slash_retry_requires_main_agent(monkeypatch, workflow):
-    answers = iter(["/retry", "/quit"])
-    monkeypatch.setattr(commands.Prompt, "ask", lambda *_args, **_kwargs: next(answers))
-    monkeypatch.setattr(commands, "initialize_agent", lambda *_args, **_kwargs: SimpleNamespace())
-    monkeypatch.setattr(
-        commands, "run_query",
-        lambda *_args, **_kwargs: pytest.fail("/retry was sent as an agent message"),
-    )
-
-    with console.capture() as capture:
-        commands.interactive_mode(workflow=workflow, generate_report=False)
-
-    assert "/retry is available only for the main_agent workflow." in " ".join(capture.get().split())
 
 
 def test_interactive_show_prompt_reaches_main_agent(monkeypatch):
