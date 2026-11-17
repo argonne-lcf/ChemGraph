@@ -37,5 +37,7 @@ remote_globus_root = "/YOUR_PROJECT/YOUR_USER/iri-runs"
 # Existing remote compute environment with ChemGraph and the requested calculator
 # installed, supplied by the user or deployment configuration. These are remote
 # activation/Python settings, not laptop paths; never install it automatically.
+# On Polaris, default to /grand/catalyst/world-shared/chemgraph/alcf_chemgraph_env
+# and add grand to filesystems.
 environment_setup = "source /eagle/YOUR_PROJECT/YOUR_USER/envs/chemgraph/bin/activate"
 python = "/eagle/YOUR_PROJECT/YOUR_USER/envs/chemgraph/bin/python"

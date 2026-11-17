@@ -3,9 +3,7 @@
 Use the existing `ASEInputSchema` and `run_ase_core` in a workspace Python script.
 ChemGraph and the requested calculator must be installed in the compute environment.
 Keep the agent and LLM calls on the host driving the workflow; run the calculation
-inside PBS.
-Read the relevant `pbs-hpc` site-reference sections for environment and launch
-settings; use [iri-hpc](../../iri-hpc/SKILL.md) when submitting remotely.
+inside PBS, through [pbs-hpc](../../pbs-hpc/SKILL.md) or [iri-hpc](../../iri-hpc/SKILL.md).
 
 If the structure is missing, first follow [local preparation](structure-preparation.md)
 and use the returned artifact path.
@@ -48,27 +46,18 @@ checkpoint files or use files already accessible on compute nodes; for IRI,
 checkpoints staged with the run can use run-relative paths. Named pretrained
 models need no user-supplied file: the calculator downloads missing weights during
 initialization inside the allocation. This needs compute-node network access or
-an existing cache. Compute nodes may reach the internet only through a
-proxy that the job must set: the launch templates do not, so export the site's
-proxy variables before Python (for Polaris, see
-[network proxy setup](../../pbs-hpc/references/polaris.md#internet-proxy-login-and-compute-nodes)).
+an existing cache; the Polaris templates set the
+[proxy](../../pbs-hpc/references/polaris.md#internet-proxy-login-and-compute-nodes).
 Do not execute the calculation on a login node to download or initialize a model.
 
 Copy [calculate.py](../assets/calculate.py) into the run directory unchanged. Its
 PBS host check precedes chemistry imports and rejects accidental execution on a
 login node. It reads `input.json` from the working directory.
 
-For direct PBS, fill the existing PBS template with site resources and environment
-setup, export `CHEMGRAPH_LOG_DIR="$PWD"` after changing to the run directory, and
-launch `exec /absolute/path/to/compute/python calculate.py`. For IRI, use its
-launch template and select resources in `request.json`.
-
-For either route, quote shell paths and use JSON serialization for input values.
-For a single Polaris GPU calculation, launch one process with
-`CUDA_VISIBLE_DEVICES=0` and `OMP_NUM_THREADS=8`. Source the compute environment
-with nounset temporarily disabled if activation requires it, then restore it;
-export the site's proxy variables when the job needs network access, and set
-`TMPDIR=/tmp` before Python.
+On Polaris, the [PBS template](../../pbs-hpc/assets/polaris-chemgraph.pbs.template)
+and IRI's `iri_prepare.py` supply the environment, GPU, proxy, and log-directory
+settings; on other sites, fill the generic PBS template from the site reference.
+Write `input.json` with JSON serialization, not hand-built strings.
 
 Before staging/submission, parse `input.json`, inspect scientific settings and
 path mappings, check the structure, and run `bash -n` on the launch script.

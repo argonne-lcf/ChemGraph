@@ -45,7 +45,8 @@ metadata:
    legacy compatibility field. Distinguish optimization convergence from job
    completion. Never invent numerical results or label pending work successful.
 
-Facility-specific values belong in user configuration.
+Facility-specific values belong in user configuration, except documented
+site defaults such as the shared Polaris ChemGraph environment.
 
 ## Resource paths
 

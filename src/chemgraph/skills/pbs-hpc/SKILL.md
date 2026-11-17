@@ -12,63 +12,41 @@ metadata:
 
 ## Establish the environment
 
-Identify the target system, submission host, project/account, queue, walltime,
-node count, required filesystems, and application environment. Obtain missing
-values from the user or deployment configuration. Do not copy another user's
-allocation, endpoint, private path, or environment.
+Identify the target system, submission host, project/account, queue, and walltime.
+Obtain missing values from the user or deployment configuration; Polaris ChemGraph
+jobs use the [shared environment](references/polaris.md#chemgraph-environment) by
+default. Do not copy another user's allocation, endpoint, private path, or environment.
 
-Check whether `execute` runs on that host. A local shell on a laptop cannot run
-remote PBS commands merely because a skill or an HPC MCP server is attached.
-Preserve the user's selected execution method. If none was selected and the shell
-runs on the submission host, write the job files and submit with PBS commands
-directly. For remote submission, use [iri-hpc](../iri-hpc/SKILL.md) for ALCF jobs
-or suitable attached HPC tools. If submission is unavailable, prepare the script
-and state where the user must submit it.
+Check whether `execute` runs on the submission host: a laptop shell cannot run remote
+PBS commands because a skill or MCP server is attached. Preserve the user's selected
+execution method. Without one, submit directly when the shell is on the submission
+host; otherwise use [iri-hpc](../iri-hpc/SKILL.md) for ALCF or suitable attached HPC
+tools. If neither is available, prepare the script and say where to submit it.
 
-Read the applicable site-reference sections before choosing launch settings:
-[Polaris](references/polaris.md), [Aurora](references/aurora.md),
-[Crux](references/crux.md), or [Bebop](references/bebop.md). Consult the linked
-official guides for current queue limits and site policies.
-
-For a simple Polaris job, start with [queues](references/polaris.md#queues),
-[filesystems](references/polaris.md#filesystems),
-[application modules](references/polaris.md#software--modules), and
-[network proxy setup](references/polaris.md#internet-proxy-login-and-compute-nodes).
-For single-process ASE launch settings, use the
-[ASE batch example](../chemgraph/references/ase-batch.md). Consult the site's MPI,
-affinity, and MPS/MIG sections when the application needs those features.
-
-For Aurora, start with [system basics](references/aurora.md#system-basics) for
-filesystems and the application environment, and
-[queues and submission](references/aurora.md#pbs-queues-and-submission). Consult
-PALS, GPU affinity, monitoring, and `/soft` troubleshooting sections as needed.
-Use the [Crux reference](references/crux.md) for its site-specific settings.
+Site references: [Polaris](references/polaris.md), [Aurora](references/aurora.md),
+[Crux](references/crux.md), [Bebop](references/bebop.md). Check the linked official
+guides for current queue limits.
 
 ## Prepare and track a job
 
-For ASE calculations, also read the `chemgraph` skill's
-[Python batch example](../chemgraph/references/ase-batch.md). Write the calculation
-script in the workspace and run it inside PBS; no MCP server or Parsl is needed.
-
-1. Read [the PBS template](assets/job.pbs.template) and write a completed copy
-   into the execution filesystem. Replace every placeholder, keep PBS directives
-   before executable statements, and quote shell paths. Choose the launch command
-   for the target site and application.
-2. Check input visibility on compute nodes. Arrange staging first when the
-   submitting host and workers do not share files. Validate the script syntax
-   with `bash -n` when the execution environment provides Bash.
-3. Submit once on the authorized submission host, following existing tool approvals.
-   Save submission evidence and the complete scheduler ID in the run directory.
-4. Inspect with `qstat -f JOB_ID`; distinguish queued, held, running, and terminal
-   states. Explain scheduler comments rather than submitting duplicate jobs.
-   For a submission-only request, report the accepted ID and observed status.
-5. When results are requested, monitor to a terminal state and inspect stdout/stderr
-   and application result files. A job disappearing from the active queue does not
-   prove success. Use available job history and exit status, and report missing
-   evidence explicitly. Cancel only the requested job.
-
-Run this submission sequence from the fresh host run directory after completing
-and inspecting the files:
+1. Make a fresh run directory on a filesystem compute nodes can see (on Polaris,
+   under `/eagle` or `/grand`, not `/home`). Write `input.json` with absolute paths as
+   in the [ASE batch example](../chemgraph/references/ase-batch.md) and copy the
+   `chemgraph` skill's [calculate.py](../chemgraph/assets/calculate.py) unchanged.
+2. Write `job.pbs`:
+   - **Polaris ChemGraph calculation:** copy the
+     [Polaris template](assets/polaris-chemgraph.pbs.template) and fill only
+     `JOB_NAME`, `PROJECT`, `QUEUE` (usually `debug`), and `WALLTIME`.
+   - **Other sites or applications:** fill the [generic template](assets/job.pbs.template)
+     from the site reference; keep `#PBS` lines before commands and quote paths.
+3. Check the files (`bash -n job.pbs`, parse `input.json`), then submit once with the
+   sequence below from the run directory, following existing tool approvals.
+4. Inspect with `qstat -f JOB_ID`: distinguish queued, held, running, and finished,
+   and explain scheduler comments instead of resubmitting. For a submission-only
+   request, report the ID and observed state.
+5. When results are requested, monitor to a terminal state, then read the job output
+   and result JSON. A job leaving the queue does not prove success; use `qstat -xf`
+   history and report missing evidence. Cancel (`qdel JOB_ID`) only when asked.
 
 ```bash
 set -euo pipefail
@@ -83,23 +61,13 @@ test -s job.id
 cat job.id
 ```
 
-Keep the marker and stderr if `qsub` fails or returns no ID: acceptance can be
-uncertain. Inspect PBS by job name and run directory before any retry. A later
-agent session reads the existing `job.id`, checks that job with `qstat -f` (or
-`qstat -xf` for retained history), and inspects output files without resubmitting.
-An explicitly requested retry uses a fresh directory after resolving the prior
-job's state. Cancellation uses `qdel JOB_ID` only when requested.
-
-PBS command reference: [ALCF running jobs](https://docs.alcf.anl.gov/running-jobs/).
+If `qsub` fails or prints no ID, keep the marker and stderr: acceptance can be
+uncertain, so inspect PBS by job name and run directory before any retry. A later
+session reads `job.id` and checks that job without resubmitting. A requested retry
+uses a fresh directory after resolving the prior job.
 
 ## ChemGraph execution boundaries
 
-ChemGraph's `hpc_configs` Parsl configurations for these systems use
-`LocalProvider` inside existing allocations; they do not acquire a PBS
-allocation automatically. Aurora and Crux require `PBS_NODEFILE`; Polaris has
-a local/testing fallback, which is not evidence of a valid allocation.
-
-Use `CHEMGRAPH_WORKER_INIT` or the configured Python environment for worker
-setup. Check the deployment's shared filesystem assumption: Globus Compute
-workers may not see files written by the submitting server. A Globus endpoint
-has its own execution configuration and is distinct from direct `qsub` usage.
+ChemGraph's `hpc_configs` Parsl configurations run inside an existing allocation
+(`LocalProvider`); they never submit a PBS job. Globus Compute endpoints have their
+own execution configuration and may not see files written by the submitting host.
