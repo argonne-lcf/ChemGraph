@@ -359,7 +359,7 @@ Examples:
     # ---- "models" subcommand ---------------------------------------------
     subparsers.add_parser("models", help="List all available LLM models.")
 
-    subparsers.add_parser("doctor", help="Check optional Globus and IRI prerequisites.")
+    subparsers.add_parser("doctor", help="Check optional Globus, IRI, and ALCF prerequisites.")
 
     # ---- "ui" subcommand ---------------------------------------------------
     ui_parser = subparsers.add_parser(

@@ -7,6 +7,7 @@ import sys
 import time
 
 import pytest
+from rich.console import Console
 
 from chemgraph.cli import preflight
 
@@ -17,6 +18,7 @@ ENDPOINT = "11111111-1111-1111-1111-111111111111"
 
 @pytest.fixture
 def probes(monkeypatch):
+    monkeypatch.setenv("ALCF_ACCESS_TOKEN", "secret-token")
     responses = {
         "whoami": (0, "person@example.org"),
         "local-id": (0, ENDPOINT),
@@ -44,7 +46,7 @@ def results():
 
 def test_ready_report_uses_stderr_without_exposing_credentials(probes, capsys):
     report = results()
-    assert [row.status for row in report.values()] == ["Ready"] * 3
+    assert [row.status for row in report.values()] == ["Ready"] * 3 + ["Set"]
     preflight.show_report()
     captured = capsys.readouterr()
     text = captured.err
@@ -53,8 +55,33 @@ def test_ready_report_uses_stderr_without_exposing_credentials(probes, capsys):
 
 
 def test_missing_tools_do_not_claim_gcp_is_uninstalled(monkeypatch):
+    monkeypatch.delenv("ALCF_ACCESS_TOKEN", raising=False)
     monkeypatch.setattr(preflight.shutil, "which", lambda name: None)
-    assert [row.status for row in preflight.collect_checks()] == ["Missing", "Not checked", "Missing"]
+    assert [row.status for row in preflight.collect_checks()] == ["Missing", "Not checked", "Missing", "Missing"]
+
+
+@pytest.mark.parametrize("token,status", [(None, "Missing"), ("", "Missing"), (" \t", "Missing"), ("secret-token", "Set")])
+def test_alcf_token_report(monkeypatch, capsys, token, status):
+    if token is None:
+        monkeypatch.delenv("ALCF_ACCESS_TOKEN", raising=False)
+    else:
+        monkeypatch.setenv("ALCF_ACCESS_TOKEN", token)
+    monkeypatch.setattr(preflight.shutil, "which", lambda name: None)
+    preflight.show_report(console=Console(stderr=True, width=160))
+    output = capsys.readouterr().err
+    table = output.split("└", 1)[0]
+    assert status in next(line for line in table.splitlines() if "ALCF_ACCESS_TOKEN" in line)
+    assert "secret-token" not in output
+    if status == "Missing":
+        for step in (
+            "uv pip install alcf-tokens",
+            "alcf-tokens login inference",
+            'export ALCF_ACCESS_TOKEN="$(alcf-tokens get-token inference)"',
+            "Then launch or restart ChemGraph.",
+        ):
+            assert step in table
+    else:
+        assert "Token validity is not checked." in table
 
 
 @pytest.mark.parametrize("command,name,response,status", [
