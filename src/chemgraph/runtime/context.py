@@ -24,6 +24,13 @@ class ScopedExecutionError(RuntimeError):
     """Execution control failed; the run must stop rather than retry the action."""
 
 
+class JobPending(Exception):
+    """An acknowledged calculation needs a checkpointed wait outside execution."""
+
+    def __init__(self, operation_id, job_id):
+        self.payload = {"kind": "job_wait", "operation_id": operation_id, "job_id": job_id}
+
+
 @dataclass
 class RunContext:
     """Authenticated caller scope for one conversation.
@@ -39,6 +46,7 @@ class RunContext:
     policy: ExecutionPolicy
     journal: OperationJournal
     lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+    cancelled: bool = False
 
     def __post_init__(self):
         if not all((self.owner, self.thread_id, self.task_id)):
@@ -50,6 +58,7 @@ class RunContext:
 _context: ContextVar[RunContext | None] = ContextVar("chemgraph_run_context", default=None)
 _preparation: ContextVar[PreparedAction | None] = ContextVar("chemgraph_preparation", default=None)
 _outputs: ContextVar[set[str] | None] = ContextVar("chemgraph_outputs", default=None)
+_cleanup: ContextVar[list[str] | None] = ContextVar("chemgraph_cleanup", default=None)
 
 
 def current_context() -> RunContext | None:
@@ -67,14 +76,23 @@ def run_context(context: RunContext):
 
 
 @contextmanager
-def invocation(action: PreparedAction, outputs: set[str]):
+def invocation(action: PreparedAction, outputs: set[str], cleanup: list[str] | None = None):
     """Expose the approved preparation and collect registered outputs."""
     preparation, registered = _preparation.set(action), _outputs.set(outputs)
+    cleanup_token = _cleanup.set(cleanup)
     try:
         yield
     finally:
         _outputs.reset(registered)
+        _cleanup.reset(cleanup_token)
         _preparation.reset(preparation)
+
+
+def register_cleanup(pattern: str) -> None:
+    """Record calculator cleanup intent even in a fresh private job directory."""
+    patterns = _cleanup.get()
+    if patterns is not None and pattern not in patterns:
+        patterns.append(pattern)
 
 
 def scoped_path(path) -> str | None:

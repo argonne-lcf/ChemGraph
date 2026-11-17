@@ -103,6 +103,8 @@ class LocalBackend(ExecutionBackend):
             silence = os.environ.get("CHEMGRAPH_LOCAL_SILENCE_STDOUT") == "1"
 
         pool_kwargs: dict[str, Any] = {"max_workers": max_workers}
+        if kwargs.get("max_tasks_per_child") is not None:
+            pool_kwargs["max_tasks_per_child"] = kwargs["max_tasks_per_child"]
         if silence:
             pool_kwargs["initializer"] = _silence_worker_stdout
 

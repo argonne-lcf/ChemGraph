@@ -26,7 +26,7 @@ from chemgraph.schemas.ase_input import ASEInputSchema, ASEOutputSchema
 from chemgraph.schemas.calculators.mace_calc import MaceCalc
 from chemgraph.utils.artifacts import artifact_directory
 from chemgraph.runtime.context import (
-    current_context, register_artifact, scoped_path, standalone_log_record,
+    current_context, register_artifact, register_cleanup, scoped_path, standalone_log_record,
 )
 
 logger = logging.getLogger(__name__)
@@ -81,6 +81,15 @@ def _resolve_path(path: str) -> str:
         os.makedirs(log_dir, exist_ok=True)
         return os.path.join(log_dir, path)
     return path
+
+
+def _remove_output_patterns(patterns) -> None:
+    """Apply and record the same cleanup intent for synchronous and job execution."""
+    for pattern in patterns:
+        register_cleanup(pattern)
+        root = glob.escape(_resolve_path(""))
+        for path in glob.glob(os.path.join(root, pattern)):
+            Path(path).unlink(missing_ok=True)
 
 
 def _write_ir_peaks_csv(path: str, rows) -> None:
@@ -896,14 +905,10 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
             )
             freq_file = Path(_resolve_path(f"frequencies_{mol_stem}.csv"))
             traj_dest_dir = _resolve_path("")
-            stale_traj_pattern = (
-                glob.escape(_resolve_path(f"{mol_stem}_vib.")) + "*.traj"
-            )
+            stale_traj_pattern = glob.escape(f"{mol_stem}_vib.") + "*.traj"
             if len(atoms) == 1:
                 # Single atoms have no replacement vibration artifacts.
-                freq_file.unlink(missing_ok=True)
-                for stale_traj_file in glob.glob(stale_traj_pattern):
-                    os.unlink(stale_traj_file)
+                _remove_output_patterns([glob.escape(freq_file.name), stale_traj_pattern])
 
             if driver == "ir":
                 ir_data = {
@@ -913,12 +918,11 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                     "spectrum_intensities_units": "D/Å^2 amu^-1",
                 }
                 if len(atoms) == 1:
-                    for name in (
+                    _remove_output_patterns([glob.escape(name) for name in (
                         f"ir_spectrum_{mol_stem}.png",
                         f"ir_spectrum_{mol_stem}.csv",
                         f"ir_peaks_{mol_stem}.csv",
-                    ):
-                        Path(_resolve_path(name)).unlink(missing_ok=True)
+                    )])
 
         if driver in {"vib", "thermo", "ir"} and len(atoms) > 1:
             logger.info("Starting vibrational analysis (driver=%s)", driver)
@@ -984,8 +988,7 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                 if traj_dest_dir:
                     os.makedirs(traj_dest_dir, exist_ok=True)
                 # Keep previous modes until all replacements have been written.
-                for stale_traj_file in glob.glob(stale_traj_pattern):
-                    os.unlink(stale_traj_file)
+                _remove_output_patterns([stale_traj_pattern])
                 for mode_index in mode_indices:
                     traj_file = os.path.join(tmpdir, f"vib.{mode_index}.traj")
                     dest_name = f"{mol_stem}_{Path(traj_file).name}"
