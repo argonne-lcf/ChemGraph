@@ -182,9 +182,16 @@ Interactive sessions preserve conversation context and can be resumed later.
 At the query prompt, commands require `/`; plain text is sent to the agent.
 Words such as `retry`, `expand`, `help`, and `quit` are ordinary messages.
 Use `/quit`, `/exit`, or `/q` to exit. `/retry` resumes a failed `main_agent`
-checkpoint; a failed session must recover with `/retry` before accepting a new
-message. Responses to approval and clarification prompts keep their displayed
+checkpoint; use `/retry` to continue that session or `/new` to start fresh.
+Responses to approval and clarification prompts keep their displayed
 controls, such as `y`, `n`, and `auto` for tool reviews.
+
+Use `/new` to start a fresh conversation without restarting ChemGraph. `/clear`
+also starts a fresh conversation and clears the terminal; it no longer only
+clears the screen. Both commands take no arguments and retain your model,
+workflow, workspace, skills, approval settings, and `/auto` mode. Saved sessions,
+workspace files, artifacts, and input history are preserved. `/expand` output is
+reset, while the token total reported on exit includes earlier conversations.
 
 The shell starts at the query prompt with a compact header showing the model,
 workflow, approval mode, and workspace when configured. Choose these with CLI

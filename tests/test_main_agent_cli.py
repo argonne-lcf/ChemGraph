@@ -496,6 +496,10 @@ def test_interactive_main_agent_retry_command(monkeypatch):
         ("/model Provider/Model-X", ("model", "Provider/Model-X")),
         ("/workflow single_agent", ("workflow", "single_agent")),
         ("/SHOW MixedCase", ("show", "MixedCase")),
+        ("/NEW", ("new", "")),
+        ("/clear", ("clear", "")),
+        ("new", None),
+        ("clear", None),
         ("help", None),
         ("retry", None),
         ("show me the tools", None),
@@ -504,6 +508,102 @@ def test_interactive_main_agent_retry_command(monkeypatch):
 )
 def test_parse_interactive_input(value, expected):
     assert commands._parse_interactive_input(value) == expected
+
+
+@pytest.mark.parametrize("command", ["/new", "/clear"])
+@pytest.mark.parametrize("workflow,fail_first", [
+    ("main_agent", False), ("deep_agent", False), ("single_agent", False),
+    ("main_agent", True),
+])
+def test_interactive_new_conversation(monkeypatch, tmp_path, command, workflow, fail_first):
+    from unittest.mock import Mock
+    from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.graph import END, START, MessagesState, StateGraph
+    from chemgraph.agent.llm_agent import ChemGraph
+    from chemgraph.models.endpoints import PreparedModel
+    from tests.test_usage import answer
+
+    model = FakeMessagesListChatModel(responses=[answer() for _ in range(3)])
+    monkeypatch.setattr("chemgraph.agent.llm_agent.load_chat_model_prepared", lambda **_: (
+        model, PreparedModel(endpoint_name="test", protocol="openai_compatible", client_kwargs={}),
+    ))
+    monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(tmp_path))
+    seen = []
+
+    def reply(state):
+        seen.append([message.content for message in state["messages"] if message.type == "human"])
+        response = model.invoke(state["messages"])
+        if fail_first and seen[-1] == ["first"]:
+            raise RuntimeError("Failed first conversation")
+        return {"messages": [response]}
+
+    def construct(*args, **kwargs):
+        builder = StateGraph(MessagesState)
+        builder.add_node("reply", reply)
+        builder.add_edge(START, "reply")
+        builder.add_edge("reply", END)
+        return builder.compile(checkpointer=kwargs.get("checkpointer") or InMemorySaver())
+
+    monkeypatch.setattr(f"chemgraph.agent.llm_agent.construct_{workflow}_graph", construct)
+    agents = []
+
+    def initialize(*args, **kwargs):
+        agent = ChemGraph(
+            workflow_type=workflow, generate_report=False, log_dir=str(tmp_path),
+            checkpointer=kwargs["checkpointer"],
+            configuration_id="cli-new-test" if workflow == "main_agent" else None,
+        )
+        agents.append(agent)
+        return agent
+
+    monkeypatch.setattr(commands, "initialize_agent", initialize)
+    confirm = Mock(return_value=True)
+    clear = Mock()
+    monkeypatch.setattr(commands.Confirm, "ask", confirm)
+    monkeypatch.setattr(console, "clear", clear)
+    old_queries = ["first"] if fail_first else ["first", "second"]
+    inputs = iter(["/auto on", *old_queries, f"{command} extra", command, "/config", "fresh", "/quit"])
+    snapshots = {}
+
+    def ask(*args, **kwargs):
+        value = next(inputs, "/quit")
+        agent = agents[0]
+        if value == command:
+            snapshots["old_id"] = agent.session_id
+            snapshots["workflow"] = agent.workflow
+            commands.tool_output_log.record("old tool", {}, "old output")
+        elif value == "fresh":
+            snapshots["last_usage"] = agent.last_usage
+            snapshots["tool_output"] = commands.tool_output_log.entries()
+        return value
+
+    monkeypatch.setattr(commands.Prompt, "ask", ask)
+    with console.capture() as capture:
+        commands.interactive_mode(workflow=workflow, generate_report=False)
+
+    assert len(agents) == 1
+    agent = agents[0]
+    assert agent.workflow is snapshots["workflow"]
+    assert agent.session_id != snapshots["old_id"]
+    assert seen[-1] == ["fresh"] and len(seen) == len(old_queries) + 1
+    if len(old_queries) == 2:
+        assert seen[1] == (["second"] if workflow == "single_agent" else old_queries)
+    for session_id, queries in ((snapshots["old_id"], old_queries), (agent.session_id, ["fresh"])):
+        saved = agent.session_store.get_session(session_id)
+        assert [message.content for message in saved.messages if message.role == "human"] == queries
+    if fail_first:
+        assert agent.session_store.get_session(snapshots["old_id"]).status == "failed"
+    assert snapshots["last_usage"] is None and snapshots["tool_output"] == []
+    assert agent.session_store.get_usage(agent.session_id)["total_tokens"] == 12
+    assert clear.call_count == (command == "/clear")
+    confirm.assert_called_once()  # Only /auto on; resetting needs no confirmation.
+    output = capture.get()
+    assert f"Usage: {command}" in output
+    assert f"Started a new conversation. Session ID: {agent.session_id}" in output
+    assert f"Workflow: {workflow}" in output and "Auto mode: on" in output
+    turns = len(old_queries) + 1
+    assert f"Session tokens: {turns * 10} input · {turns * 2} output · {turns * 12} total" in output
 
 
 def test_interactive_show_prompt_reaches_main_agent(monkeypatch):

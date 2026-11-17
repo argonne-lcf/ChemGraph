@@ -700,7 +700,7 @@ def create_session_header(
         text.append(" [auto]", style="yellow")
     if workspace:
         text.append(f"\nworkspace {workspace}", style="dim")
-    text.append("\n/help commands · /expand tool output · ↑/↓ history · /quit exit", style="dim")
+    text.append("\n/new conversation · /help commands · /expand tool output · ↑/↓ history · /quit exit", style="dim")
     return Panel(text, title="ChemGraph", border_style="blue", expand=False)
 
 
@@ -711,7 +711,8 @@ def create_interactive_help() -> Group:
     for command, description in (
         ("/help", "Show commands"),
         ("/quit", "Exit interactive mode (also /exit or /q)"),
-        ("/clear", "Clear the screen"),
+        ("/new", "Start a fresh conversation"),
+        ("/clear", "Start a fresh conversation and clear the screen"),
         ("/config", "Show current configuration"),
         ("/doctor", "Recheck optional Globus and IRI prerequisites"),
         ("/expand", "View the last turn's full tool calls and results"),

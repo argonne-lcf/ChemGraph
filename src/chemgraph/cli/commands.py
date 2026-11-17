@@ -10,6 +10,7 @@ import logging
 import os
 import sys
 import time
+import uuid
 from asyncio import CancelledError
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from contextlib import contextmanager
@@ -1458,6 +1459,7 @@ _INTERACTIVE_COMMANDS = {
     "help",
     "history",
     "model",
+    "new",
     "quit",
     "resume",
     "retry",
@@ -1862,14 +1864,17 @@ def interactive_mode(
             format_response(result, verbose=verbose)
             _print_interactive_usage(main_session)
 
-    header_workspace = main_options["workspace"] if workflow == "main_agent" else None
-    if workflow == "deep_agent":
-        header_workspace = getattr(getattr(agent, "deepagent_backend", None), "cwd", deepagent_workspace)
-    console.print(create_session_header(
-        model, workflow, approval_mode,
-        workspace=str(header_workspace) if header_workspace is not None else None,
-        auto=auto_mode.enabled,
-    ))
+    def print_header():
+        header_workspace = main_options["workspace"] if workflow == "main_agent" else None
+        if workflow == "deep_agent":
+            header_workspace = getattr(getattr(agent, "deepagent_backend", None), "cwd", deepagent_workspace)
+        console.print(create_session_header(
+            model, workflow, approval_mode,
+            workspace=str(header_workspace) if header_workspace is not None else None,
+            auto=auto_mode.enabled,
+        ))
+
+    print_header()
 
     while True:
         try:
@@ -1914,11 +1919,29 @@ def interactive_mode(
                     continue
                 show_tool_output_log()
                 continue
-            elif command == "clear":
+            elif command in {"new", "clear"}:
                 if argument:
-                    console.print("[red]Usage: /clear[/red]")
+                    console.print(f"[red]Usage: /{command}[/red]")
                     continue
-                console.clear()
+                session_id = str(uuid.uuid4())
+                if workflow != "main_agent":
+                    session_id = session_id[:8]
+                new_session = (
+                    create_main_agent_session(
+                        agent, thread_id=session_id,
+                        checkpoint_db=checkpoint_db or DEFAULT_CHECKPOINT_DB,
+                    )
+                    if workflow == "main_agent" else None
+                )
+                new_thread_id = _next_thread_id() if workflow == "deep_agent" else None
+                agent._reset_session_tracking(session_id)
+                main_session = new_session
+                standalone_thread_id = new_thread_id
+                tool_output_log.start_turn()
+                if command == "clear":
+                    console.clear()
+                print_header()
+                console.print(f"[green]Started a new conversation. Session ID: {session_id}[/green]")
                 continue
             elif command == "doctor":
                 if argument:

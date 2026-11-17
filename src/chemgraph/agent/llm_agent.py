@@ -955,6 +955,16 @@ class ChemGraph:
         """All recorded turns in this session, including in-memory usage."""
         return session_usage(self._usage_turns, self.session_store, self.session_id)
 
+    def _reset_session_tracking(self, session_id: str) -> None:
+        """Start fresh bookkeeping; the CLI must also select a new graph thread."""
+        self.uuid = session_id
+        self._session_created = False
+        self._saved_message_keys = {}
+        self._session_title = None
+        self._usage = None
+        self._usage_turns = []
+        self._usage_operation = 0
+
     def _ensure_session(self, query: str) -> None:
         """Create a session record on first run if memory is enabled."""
         if self.session_store is None:
