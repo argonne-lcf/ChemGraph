@@ -1,0 +1,10 @@
+%Chk={{CHECKPOINT}}
+%Mem={{MEMORY}}
+%NProcShared={{NPROC}}
+#p {{METHOD}}/{{BASIS}} Opt {{EXTRA_ROUTE}}
+
+{{TITLE}}
+
+{{CHARGE}} {{MULTIPLICITY}}
+{{COORDINATES}}
+
