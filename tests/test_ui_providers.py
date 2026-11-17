@@ -53,10 +53,6 @@ def _config(argo_user=""):
     }
 
 
-def test_no_provider_ready_without_credentials(clean_env):
-    assert providers.any_provider_ready(_config()) is False
-
-
 def test_argo_ready_with_config_username(clean_env):
     config = _config(argo_user="aturing")
 
@@ -66,7 +62,6 @@ def test_argo_ready_with_config_username(clean_env):
 
     assert status.ready is True
     assert "aturing" in status.detail
-    assert providers.any_provider_ready(config) is True
 
 
 def test_argo_ready_with_env_username(clean_env, monkeypatch):
@@ -90,15 +85,6 @@ def test_api_key_provider_ready_from_env(clean_env, monkeypatch):
     assert statuses[providers.OPENAI] is False
 
 
-def test_local_provider_does_not_satisfy_first_run_check(clean_env):
-    statuses = {
-        s.info.id: s.ready for s in providers.all_provider_statuses(_config())
-    }
-
-    assert statuses[providers.OLLAMA] is True  # nominally ready...
-    assert providers.any_provider_ready(_config()) is False  # ...but excluded
-
-
 def test_selected_provider_ready_ignores_unrelated_credentials(clean_env, monkeypatch):
     # A credential for a different provider must not make the chosen model
     # count as ready (the setup-gating regression Codex flagged).
@@ -106,8 +92,7 @@ def test_selected_provider_ready_ignores_unrelated_credentials(clean_env, monkey
     config = _config()
     config["general"] = {"model": "gpt-4o-mini"}  # OpenAI, no key set
 
-    assert providers.any_provider_ready(config) is True  # some provider is...
-    assert providers.selected_provider_ready(config) is False  # ...but not this one
+    assert providers.selected_provider_ready(config) is False
 
 
 def test_selected_provider_ready_when_model_matches_credential(clean_env, monkeypatch):
@@ -332,7 +317,6 @@ def test_codex_provider_maps_prefix_and_reports_login_state(clean_env, monkeypat
     )
     assert providers.provider_status(info, _config()).ready is True
     assert providers.selected_provider_ready(config) is True
-    assert providers.any_provider_ready(config) is True
 
 
 def test_codex_api_key_login_is_not_ready(clean_env, monkeypatch):

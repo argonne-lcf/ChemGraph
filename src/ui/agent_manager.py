@@ -213,20 +213,3 @@ def transfer_conversation_state(source, target) -> None:
     if getattr(source, "checkpointer", None) is not None:
         target.checkpointer = source.checkpointer
 
-
-def run_async_callable(fn):
-    """Run an async callable and return its result in a sync context.
-
-    Parameters
-    ----------
-    fn : Callable
-        Zero-argument callable returning an awaitable.
-
-    Returns
-    -------
-    Any
-        Result produced by the awaited callable.
-    """
-    from chemgraph.utils.async_utils import run_async_callable as _impl
-
-    return _impl(fn)

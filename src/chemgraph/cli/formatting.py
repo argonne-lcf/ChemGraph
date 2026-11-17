@@ -174,11 +174,6 @@ def build_action_review(
     ), truncated
 
 
-def format_action_review(action: dict, index: int, total: int) -> Panel:
-    """Preview an action using only its arguments, without reading host files."""
-    return build_action_review(action, index, total)[0]
-
-
 # ---------------------------------------------------------------------------
 # Compact tool activity
 # ---------------------------------------------------------------------------

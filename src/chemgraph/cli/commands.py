@@ -28,10 +28,7 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich.text import Text
 
-from chemgraph.agent.deepagent_backend import (
-    DEEPAGENT_ENV_ALLOWLIST,
-    resolve_workspace,
-)
+from chemgraph.agent.deepagent_backend import resolve_workspace
 from chemgraph.agent.approvals import ApprovalMode, normalize_approval_mode
 from chemgraph.agent.interrupts import (
     collect_pending_interrupts,
@@ -173,11 +170,6 @@ def check_api_keys(
 # ---------------------------------------------------------------------------
 
 _INIT_TIMEOUT_SECONDS = 30
-
-# Kept as an alias for existing imports; the list lives with the shared
-# backend builder used by both the CLI and the Streamlit UI.
-_DEEPAGENT_ENV_ALLOWLIST = DEEPAGENT_ENV_ALLOWLIST
-
 
 def _create_experimental_deepagent_backend(
     workspace: str | None,

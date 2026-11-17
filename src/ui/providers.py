@@ -276,24 +276,10 @@ def all_provider_statuses(config: Dict[str, Any]) -> list[ProviderStatus]:
     return [provider_status(info, config) for info in PROVIDERS]
 
 
-def any_provider_ready(config: Dict[str, Any]) -> bool:
-    """Return whether at least one credentialed provider is usable.
-
-    The local server is excluded: it is always nominally "ready" and
-    would defeat first-run detection.
-    """
-    return any(
-        status.ready
-        for status in all_provider_statuses(config)
-        if status.info.auth_kind != "none"
-    )
-
-
 def selected_provider_ready(config: Dict[str, Any]) -> bool:
     """Return whether the provider for the *configured model* is usable.
 
-    Unlike :func:`any_provider_ready`, this checks the specific provider
-    the selected model dispatches to. A credential for some other provider
+    This checks the specific provider the selected model dispatches to. A credential for some other provider
     (e.g. ``ANTHROPIC_API_KEY`` while the model is ``gpt-4o-mini``) does not
     make the chosen model work, so gating setup on "any provider ready"
     would drop the user into a broken chat. A local-server model has

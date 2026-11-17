@@ -7,7 +7,6 @@ import toml
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional
-from chemgraph.utils.config_utils import flatten_config as _flatten_config
 from chemgraph.utils.calculator_defaults import get_default_mace_calculator_type
 
 CONFIG_PATH_ENV = "CHEMGRAPH_CONFIG"
@@ -212,18 +211,3 @@ def get_default_config() -> Dict[str, Any]:
         },
     }
 
-
-def flatten_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Flatten nested configuration for easier access.
-
-    Parameters
-    ----------
-    config : dict[str, Any]
-        Nested configuration dictionary.
-
-    Returns
-    -------
-    dict[str, Any]
-        Flattened configuration dictionary.
-    """
-    return _flatten_config(config)

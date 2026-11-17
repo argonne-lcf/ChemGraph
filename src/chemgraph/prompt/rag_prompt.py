@@ -14,12 +14,3 @@ Instructions:
 6. Never fabricate information. If the document does not contain the answer, say so.
 7. When summarizing, be thorough but concise. Organize information logically.
 """
-
-rag_retriever_prompt = """You are a retrieval agent. Your task is to:
-1. Determine if a document needs to be loaded (use `load_document`).
-2. Formulate effective search queries based on the user's question.
-3. Use `query_knowledge_base` to retrieve relevant passages.
-4. Pass the retrieved context to the main agent for answer generation.
-
-Always retrieve context before the main agent generates an answer.
-"""

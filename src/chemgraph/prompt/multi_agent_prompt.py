@@ -134,9 +134,6 @@ def get_planner_prompt(human_supervised: bool = True) -> str:
     )
 
 
-# Legacy alias kept for backward compatibility with older configs.
-planner_prompt_json = planner_prompt
-
 # Legacy alias — the aggregator role is now handled by the planner on FINISH.
 aggregator_prompt = """
 You are a strict aggregation agent for computational chemistry tasks. Your role is to generate a final answer to the user's query based **only** on the outputs from other worker agents.

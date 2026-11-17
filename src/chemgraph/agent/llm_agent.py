@@ -1065,33 +1065,6 @@ class ChemGraph:
         except Exception as e:
             logger.warning(f"Failed to save messages to session store: {e}")
 
-    def persist_run_state(self, config: dict) -> None:
-        """Write the current checkpoint state to the configured log directory."""
-        log_dir = self.log_dir or "cg_logs"
-        os.makedirs(log_dir, exist_ok=True)
-        self.write_state(config=config)
-
-    def finalize_completed_run(
-        self,
-        last_state: dict,
-        config: dict,
-        query: str,
-    ) -> Any:
-        """Persist a completed run and return the configured result shape."""
-        self._save_messages_to_store(
-            last_state, query, thread_id=str(config["configurable"]["thread_id"])
-        )
-        self.persist_run_state(config)
-
-        if self.return_option == "last_message":
-            return last_state["messages"][-1]
-        if self.return_option == "state":
-            return serialize_state(self.get_state(config=config))
-        raise ValueError(
-            f"Unsupported return_option: {self.return_option}. "
-            "Use 'last_message' or 'state'."
-        )
-
     async def apersist_run_state(self, config: dict) -> dict | None:
         """Retrieve and log a checkpoint without calling a sync saver API."""
         try:
@@ -1120,33 +1093,6 @@ class ChemGraph:
             f"Unsupported return_option: {self.return_option}. "
             "Use 'last_message' or 'state'."
         )
-
-    def load_previous_context(
-        self,
-        session_id: str,
-        max_messages: Optional[int] = None,
-    ) -> str:
-        """Load context from a previous session as a summary string.
-
-        This can be injected into the conversation to give the agent
-        awareness of prior work.
-
-        Parameters
-        ----------
-        session_id : str
-            Previous session ID (or unique prefix).
-        max_messages : int, optional
-            Limit the number of messages included.
-
-        Returns
-        -------
-        str
-            Formatted context summary, or empty string if not found.
-        """
-        if self.session_store is None:
-            logger.warning("Memory is disabled; cannot load previous context.")
-            return ""
-        return self.session_store.build_context_summary(session_id)
 
     async def _call_human_input_handler(
         self,

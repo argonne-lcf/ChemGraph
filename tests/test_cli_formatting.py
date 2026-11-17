@@ -7,7 +7,7 @@ from rich.console import Console
 from chemgraph.agent.main_session import MainAgentTurnResult
 from chemgraph.cli.formatting import (
     StreamMessageRenderer, ToolEventRenderer, _content_text, action_review_summary, build_action_review, console,
-    format_action_review, format_response, list_models, show_tool_output_log, summarize_tool_args,
+    format_response, list_models, show_tool_output_log, summarize_tool_args,
     summarize_tool_result, tool_output_log,
 )
 from chemgraph.models.endpoints.codex import SPEC as CODEX_SPEC
@@ -60,7 +60,7 @@ def test_action_preview_is_literal_and_does_not_read_files(
     )
     terminal = Console(width=120)
     with terminal.capture() as capture:
-        terminal.print(format_action_review({"name": name, "args": args}, 2, 3))
+        terminal.print(build_action_review({"name": name, "args": args}, 2, 3)[0])
     output = capture.get()
     assert "Review action 2 of 3" in output
     assert all(text in output for text in expected)
@@ -101,9 +101,9 @@ def test_tool_reason_is_shown_once_and_escaped_in_review_and_event_line():
 
     terminal = Console(width=120, color_system=None)
     with terminal.capture() as capture:
-        terminal.print(format_action_review(
+        terminal.print(build_action_review(
             {"name": "execute", "args": {"command": "ls", "reason": "List the run directory."}}, 1, 1,
-        ))
+        )[0])
     output = capture.get()
     assert "Reason: List the run directory." in output
     assert '"reason"' not in output

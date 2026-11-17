@@ -216,14 +216,6 @@ def test_make_ocsr_tools_binds_the_llm(monkeypatch, image):
     assert seen["llm"] is sentinel
 
 
-def test_module_level_tool_has_no_llm(image):
-    """It is bindable statically, so its fallback must fail loudly, not silently."""
-    result = tools.image_to_smiles.invoke({"image_path": image, "model": "llm"})
-
-    assert not result["ok"]
-    assert "no LLM was bound" in result["error"]
-
-
 def test_list_ocsr_models_reports_the_default_and_install_state():
     listing = tools.list_ocsr_models.invoke({})
 

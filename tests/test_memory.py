@@ -254,23 +254,6 @@ class TestSessionStore:
     def test_delete_session_not_found(self, store):
         assert store.delete_session("nonexistent") is False
 
-    def test_session_count(self, store):
-        assert store.session_count() == 0
-
-        store.create_session(
-            session_id="count1",
-            model_name="gpt-4o",
-            workflow_type="single_agent",
-        )
-        assert store.session_count() == 1
-
-        store.create_session(
-            session_id="count2",
-            model_name="gpt-4o",
-            workflow_type="single_agent",
-        )
-        assert store.session_count() == 2
-
     def test_prefix_resolution(self, store):
         store.create_session(
             session_id="abcd1234",
@@ -310,46 +293,6 @@ class TestSessionStore:
 
 
 class TestContextBuilding:
-    def test_build_context_messages(self, store):
-        store.create_session(
-            session_id="ctx_test",
-            model_name="gpt-4o",
-            workflow_type="single_agent",
-        )
-        messages = [
-            SessionMessage(role="human", content="What is water?"),
-            SessionMessage(role="ai", content="Water is H2O."),
-            SessionMessage(role="tool", content="tool output", tool_name="lookup"),
-            SessionMessage(role="human", content="What about ethanol?"),
-            SessionMessage(role="ai", content="Ethanol is C2H5OH."),
-        ]
-        store.save_messages("ctx_test", messages)
-
-        # Default: human + ai + tool
-        ctx = store.build_context_messages("ctx_test")
-        assert len(ctx) == 5  # 2 human + 2 ai + 1 tool
-        assert all(m["role"] in ("human", "ai", "tool") for m in ctx)
-
-    def test_build_context_messages_with_limit(self, store):
-        store.create_session(
-            session_id="ctx_limit",
-            model_name="gpt-4o",
-            workflow_type="single_agent",
-        )
-        messages = [
-            SessionMessage(role="human", content=f"Query {i}") for i in range(10)
-        ]
-        store.save_messages("ctx_limit", messages)
-
-        ctx = store.build_context_messages("ctx_limit", max_messages=3)
-        assert len(ctx) == 3
-        # Should be the last 3
-        assert ctx[0]["content"] == "Query 7"
-
-    def test_build_context_messages_not_found(self, store):
-        ctx = store.build_context_messages("nonexistent")
-        assert ctx == []
-
     def test_build_context_summary(self, store):
         store.create_session(
             session_id="sum_test",

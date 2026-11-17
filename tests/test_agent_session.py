@@ -362,7 +362,7 @@ class TestEnsureSession:
         agent._ensure_session("Second query")
 
         # Should still have only one session
-        assert agent.session_store.session_count() == 1
+        assert len(agent.session_store.list_sessions()) == 1
         # Title should be from the first query
         session = agent.session_store.get_session(agent.uuid)
         assert "First" in session.title
@@ -461,7 +461,7 @@ class TestSaveMessagesToStore:
         state = {"messages": [{"type": "human", "content": "Hello"}]}
         agent._save_messages_to_store(state, "test query")
         # Store should have no sessions
-        assert agent.session_store.session_count() == 0
+        assert agent.session_store.list_sessions() == []
 
     def test_skips_messages_without_content(
         self, clean_env, mock_agent_patches, tmp_db
@@ -689,7 +689,7 @@ class TestResumeFrom:
 class TestEndToEndSessionLifecycle:
     @pytest.mark.asyncio
     async def test_full_lifecycle(self, clean_env, mock_agent_patches, tmp_db):
-        """init -> run -> messages saved -> load_previous_context -> resume"""
+        """init -> run -> messages saved -> resume"""
         agent = _make_agent(clean_env, mock_agent_patches, tmp_db)
 
         human_msg = Mock()
@@ -724,15 +724,10 @@ class TestEndToEndSessionLifecycle:
         assert session is not None
         assert len(session.messages) == 2
 
-        # Step 3: Verify load_previous_context works
-        context = agent.load_previous_context(agent.uuid)
-        assert "Previous Session Context" in context
-        assert "H2" in context
-
-        # Step 4: Verify session_id property
+        # Step 3: Verify session_id property
         assert agent.session_id == agent.uuid
 
-        # Step 5: Create new agent and resume
+        # Step 4: Create new agent and resume
         if "CHEMGRAPH_LOG_DIR" in os.environ:
             del os.environ["CHEMGRAPH_LOG_DIR"]
 
@@ -744,11 +739,3 @@ class TestEndToEndSessionLifecycle:
         # Second agent should also have a session
         assert agent2._session_created is True
         assert agent2.uuid != agent.uuid
-
-    @pytest.mark.asyncio
-    async def test_load_previous_context_disabled_memory(
-        self, clean_env, mock_agent_patches, tmp_db
-    ):
-        agent = _make_agent(clean_env, mock_agent_patches, tmp_db, enable_memory=False)
-        result = agent.load_previous_context("some_id")
-        assert result == ""

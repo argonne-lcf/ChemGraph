@@ -19,7 +19,6 @@ if _SRC_DIR not in sys.path:
 
 import streamlit as st  # noqa: E402
 
-from chemgraph import __version__ as chemgraph_version  # noqa: E402
 
 from ui.branding import ICON_IMAGES, LOGO_IMAGES, first_existing_asset  # noqa: E402
 from ui.system_info import render_sidebar_host_and_build_info  # noqa: E402
@@ -28,12 +27,6 @@ from ui.visualization import warn_viewer_unavailable  # noqa: E402
 # ---------------------------------------------------------------------------
 # Page configuration -- MUST be the first Streamlit call
 # ---------------------------------------------------------------------------
-app_version = (
-    chemgraph_version
-    if isinstance(chemgraph_version, str) and chemgraph_version != "unknown"
-    else "dev"
-)
-
 st.set_page_config(
     page_title="ChemGraph",
     page_icon=first_existing_asset(ICON_IMAGES) or "\U0001f9ea",

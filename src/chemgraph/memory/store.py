@@ -735,12 +735,6 @@ class SessionStore:
             )
             return cursor.rowcount > 0
 
-    def session_count(self) -> int:
-        """Return total number of stored sessions."""
-        with self._connect() as conn:
-            row = conn.execute("SELECT COUNT(*) as cnt FROM sessions").fetchone()
-            return row["cnt"]
-
     def create_usage_turn(self, session_id: str, turn_id: str, thread_id: str) -> None:
         """Register a turn without resetting an existing continuation."""
         with self._connect() as conn:
@@ -836,44 +830,6 @@ class SessionStore:
     # ------------------------------------------------------------------
     # Context building for session resume
     # ------------------------------------------------------------------
-
-    def build_context_messages(
-        self,
-        session_id: str,
-        max_messages: Optional[int] = None,
-        roles: Optional[list[str]] = None,
-    ) -> list[dict]:
-        """Build a list of message dicts suitable for injecting as LangGraph context.
-
-        Extracts human, AI, and tool messages in chronological order.
-
-        Parameters
-        ----------
-        session_id : str
-            Session to extract context from.
-        max_messages : int, optional
-            Maximum number of messages to include (from the end).
-        roles : list[str], optional
-            Roles to include. Defaults to ``["human", "ai", "tool"]``.
-
-        Returns
-        -------
-        list[dict]
-            List of ``{"role": ..., "content": ...}`` dicts.
-        """
-        session = self.get_session(session_id)
-        if session is None:
-            return []
-
-        if roles is None:
-            roles = ["human", "ai", "tool"]
-
-        filtered = [m for m in session.messages if m.role in roles]
-
-        if max_messages and len(filtered) > max_messages:
-            filtered = filtered[-max_messages:]
-
-        return [{"role": m.role, "content": m.content} for m in filtered]
 
     def build_context_summary(self, session_id: str) -> str:
         """Build a text summary of a previous session for context injection.

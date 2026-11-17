@@ -368,13 +368,12 @@ def test_get_planner_prompt_keeps_default_delegation_without_ask_human():
     from chemgraph.prompt.multi_agent_prompt import (
         get_planner_prompt,
         planner_prompt,
-        planner_prompt_json,
     )
 
     prompt_with = get_planner_prompt(human_supervised=True)
     prompt_without = get_planner_prompt(human_supervised=False)
 
-    assert prompt_with == planner_prompt == planner_prompt_json
+    assert prompt_with == planner_prompt
     assert "ask_human" in prompt_with
     assert "ask_human" not in prompt_without
     assert "PHASE 1b" not in prompt_without

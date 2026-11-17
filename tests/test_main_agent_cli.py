@@ -270,7 +270,6 @@ def test_experimental_backend_requires_confirmation_and_filters_environment(
     assert cli_backend_descriptor(backend)["type"] == "cli-local-shell-v1"
     assert backend._env == create_host_shell_backend(tmp_path)._env
     assert cli_backend_descriptor(backend)["environment_policy"] == list(DEEPAGENT_ENV_ALLOWLIST)
-    assert commands._DEEPAGENT_ENV_ALLOWLIST is DEEPAGENT_ENV_ALLOWLIST
 
 
 def test_experimental_backend_stops_when_confirmation_is_declined(

@@ -1,57 +1,7 @@
 import json
-import logging
 from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
-
-
-def get_workflow_from_log(file_path: str) -> dict:
-    """Convert a run_logs file to a workflow dictionary for evaluations.
-
-    This function reads a JSON log file containing tool calls and their results,
-    and converts it into a standardized workflow dictionary format.
-
-    Parameters
-    ----------
-    file_path : str
-        Path to the run logs file in JSON format
-
-    Returns
-    -------
-    dict
-        A dictionary containing:
-        - tool_calls: List of tool call arguments
-        - result: The final result or answer from the workflow
-
-    Notes
-    -----
-    The function expects the log file to contain:
-    - A 'state' list with tool calls and their arguments
-    - A final message with either a JSON 'answer' field or direct content
-    """
-    with open(file_path, "r") as f:
-        data = json.load(f)
-    # Extract tool names and arguments
-    workflow_dict = {"tool_calls": []}
-    for state in data.get("state", []):
-        tool_calls = state.get("tool_calls", [])
-        for call in tool_calls:
-            name = call.get("name")
-            args = call.get("args")
-            dat = {}
-            dat[name] = args
-            workflow_dict["tool_calls"].append(args)
-    last_message = data.get("state", [])[-1]
-    try:
-        if "answer" in last_message["content"]:
-            result_data = json.loads(last_message["content"])
-            workflow_dict["result"] = result_data.get("answer")
-    except Exception as e:
-        result_data = last_message["content"]
-        workflow_dict["result"] = result_data
-        logging.debug(f"Exception thrown while parsing result: {e}")
-
-    return workflow_dict
 
 
 def get_workflow_from_state(state) -> dict:
