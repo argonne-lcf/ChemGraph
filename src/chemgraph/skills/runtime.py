@@ -183,7 +183,7 @@ class ChemGraphSkillsMiddleware(SkillsMiddleware):
             return None
         backend, path = self._backend, source
         # Use the same routing rules as file tools, including nested composites.
-        # Private deepagents==0.7.5 API: recheck skill routing tests on upgrades.
+        # Private deepagents==0.7.32 API: recheck skill routing tests on upgrades.
         while isinstance(backend, CompositeBackend):
             backend, path = backend._get_backend_and_key(path)
         if isinstance(backend, (StateBackend, StoreBackend)):

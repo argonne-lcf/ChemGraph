@@ -3,6 +3,8 @@
 from importlib import resources
 from pathlib import PurePosixPath
 
+from wcmatch import glob as wcglob
+
 from deepagents.backends.protocol import (
     BackendProtocol,
     DeleteResult,
@@ -14,10 +16,9 @@ from deepagents.backends.protocol import (
     ReadResult,
     WriteResult,
 )
-# Upstream internals are coupled to deepagents==0.7.5. Recheck the skill backend
+# Upstream internals are coupled to deepagents==0.7.32. Recheck the skill backend
 # and distribution tests when upgrading its parser or file-protocol helpers.
 from deepagents.backends.utils import (
-    compile_recursive_glob,
     create_file_data,
     grep_matches_from_files,
     slice_read_response,
@@ -120,12 +121,16 @@ class BundledSkillsBackend(BackendProtocol):
         prefix = (path or "/").rstrip("/") + "/"
         if not self._valid_path(prefix):
             return GlobResult(error="invalid_path")
-        matches = compile_recursive_glob(pattern)
+        # Preserve the recursive matcher removed in Deep Agents 0.7.32.
+        matches = wcglob.compile(
+            "**/" + pattern.lstrip("/"),
+            flags=wcglob.BRACE | wcglob.GLOBSTAR | wcglob.DOTMATCH,
+        )
         return GlobResult(
             matches=[
                 self._info(filename)
                 for filename in sorted(self._files)
-                if filename.startswith(prefix) and matches(filename[len(prefix) :])
+                if filename.startswith(prefix) and matches.match(filename[len(prefix) :])
             ]
         )
 
