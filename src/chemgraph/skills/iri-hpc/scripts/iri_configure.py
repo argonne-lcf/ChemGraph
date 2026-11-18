@@ -1,10 +1,7 @@
-"""Write WORKSPACE/target.toml for iri-hpc runs on Polaris with Eagle storage.
+"""Write WORKSPACE/target.toml for a ChemGraph job on Polaris, Crux, or Aurora.
 
-Resource IDs, the user's projects, and the ALCF username come from the IRI API;
-the laptop's Globus collection comes from `globus endpoint local-id`. The remote
-environment defaults to ChemGraph's shared Polaris environment. Values that cannot
-be discovered are returned as questions instead of guessed. Other systems and
-filesystems are configured by hand from assets/target.example.toml.
+Discover resource IDs, projects, and the local Globus collection. Use the site's
+shared environment unless both activation and Python overrides are supplied.
 
 Exit codes: 0 target.toml written, 1 error or unsupported target,
 2 questions for the user, printed as JSON {"ask": [...], "choices": {...}}.
@@ -21,7 +18,12 @@ import urllib.request
 from iri_submit import _OPENER, BASE_URL, TIMEOUT_S, get_token
 
 EAGLE_COLLECTION = "05d2c76a-e867-4f67-aa57-76edeb0beda0"  # alcf#dtn_eagle, root /eagle
-POLARIS_ENV = "/grand/catalyst/world-shared/chemgraph/alcf_chemgraph_env"
+FLARE_COLLECTION = "f39a7a0f-5bfc-46ce-9615-ba9f8592814f"  # alcf#dtn_flare
+SHARED_ENVS = {
+    "polaris": "/grand/catalyst/world-shared/chemgraph/alcf_chemgraph_env",
+    "crux": "/grand/catalyst/world-shared/chemgraph/crux/alcf_chemgraph_env",
+    "aurora": "/lus/flare/projects/catalyst/world_shared/chemgraph/alcf_chemgraph_env",
+}
 NEEDS = ("project", "username")
 
 
@@ -37,19 +39,16 @@ def local_collection():
     return result.stdout.strip()
 
 
-def eagle_root(path):
-    """Return PATH as /eagle/..., or None when it is not on Eagle.
-
-    /lus/eagle/projects/P is the same directory as /eagle/P.
-    """
-    parts = PurePosixPath(path).parts
-    if any(part in (".", "..") for part in parts):
+def project_path(path, filesystem):
+    """Return the project-relative path for either compute mount spelling."""
+    root = PurePosixPath(path)
+    if ".." in root.parts:
         return None
-    if parts[:4] == ("/", "lus", "eagle", "projects"):
-        parts = ("/", "eagle") + parts[4:]
-    if parts[:2] != ("/", "eagle") or len(parts) < 3:
-        return None
-    return str(PurePosixPath(*parts))
+    for mount in (f"/{filesystem}", f"/lus/{filesystem}/projects"):
+        if root.is_relative_to(mount):
+            relative = root.relative_to(mount)
+            return relative if relative.parts else None
+    return None
 
 
 def globus_path(workspace):
@@ -60,16 +59,18 @@ def globus_path(workspace):
         return workspace.as_posix()
 
 
-def configure(workspace, *, project=None, username=None, environment_setup=None,
+def configure(workspace, *, system="polaris", project=None, username=None, environment_setup=None,
               python=None, remote_root=None, base_url=BASE_URL):
     workspace = Path(workspace).resolve()
     target = workspace / "target.toml"
     if target.exists():
-        print(f"{target} already exists; use it as is.", file=sys.stderr)
+        print(f"{target} already exists; verify its compute resource before reuse.", file=sys.stderr)
         return 1
-    if remote_root is not None and eagle_root(remote_root) is None:
-        print("Automatic setup supports Polaris with Eagle only. For other systems or "
-              "filesystems, fill assets/target.example.toml by hand.", file=sys.stderr)
+    filesystem = "flare" if system == "aurora" else "eagle"
+    mount = "/lus/flare/projects" if filesystem == "flare" else "/eagle"
+    if remote_root is not None and project_path(remote_root, filesystem) is None:
+        print(f"Automatic setup for {system} requires a run directory on {filesystem}. "
+              "For other storage, fill assets/target.example.toml by hand.", file=sys.stderr)
         return 1
 
     try:
@@ -85,12 +86,18 @@ def configure(workspace, *, project=None, username=None, environment_setup=None,
     except (OSError, ValueError) as error:  # URLError/HTTPError are OSErrors.
         print(f"IRI discovery failed: {error}", file=sys.stderr)
         return 1
+    try:
+        compute_id = resources[(system.capitalize(), "urn:doe-iri:resource:compute")]
+        storage_id = resources[(filesystem.capitalize(), "urn:doe-iri:resource:storage")]
+    except KeyError as error:
+        print(f"IRI discovery lacks the requested resource {error}.", file=sys.stderr)
+        return 1
     names = sorted(p["name"] for p in projects)
     shared = set.intersection(*(set(p.get("user_ids") or ()) for p in projects)) if projects else set()
 
     if environment_setup is None and python is None:
-        environment_setup = f"source {POLARIS_ENV}/bin/activate"
-        python = f"{POLARIS_ENV}/bin/python"
+        environment_setup = f"source {SHARED_ENVS[system]}/bin/activate"
+        python = f"{SHARED_ENVS[system]}/bin/python"
     elif environment_setup is None or python is None:
         print("Pass both --environment-setup and --python, or neither for the default "
               "ChemGraph environment.", file=sys.stderr)
@@ -109,37 +116,42 @@ def configure(workspace, *, project=None, username=None, environment_setup=None,
         print(json.dumps({"ask": ask, "choices": {k: v for k, v in choices.items() if k in ask}}))
         return 2
 
-    root = eagle_root(remote_root or
-                      f"/eagle/{values['project']}/{values['username']}/chemgraph-runs")
-    if root is None:
-        print("Project or username does not form an Eagle path.", file=sys.stderr)
+    if remote_root is None:
+        remote_root = f"{mount}/{values['project']}/{values['username']}/chemgraph-runs"
+    relative = project_path(remote_root, filesystem)
+    if relative is None:
+        print(f"Invalid project path on {filesystem}.", file=sys.stderr)
         return 1
+    root = str(PurePosixPath(mount) / relative)
     try:
         local = local_collection()
     except (OSError, subprocess.CalledProcessError):
         print("No local Globus collection: install globus-cli, start Globus Connect "
               "Personal, and have the user run: globus login", file=sys.stderr)
         return 1
+    filesystems = "flare" if filesystem == "flare" else "home:eagle"
+    if filesystem == "eagle" and python.startswith(("/grand/", "/lus/grand/projects/")):
+        filesystems += ":grand"
     settings = {
-        "compute_resource_id": resources[("Polaris", "urn:doe-iri:resource:compute")],
-        "storage_resource_id": resources[("Eagle", "urn:doe-iri:resource:storage")],
+        "compute_resource_id": compute_id,
+        "storage_resource_id": storage_id,
         "account": values["project"],
         "username": values["username"],
         "queue": "debug",
         # PBS holds jobs that use an undeclared filesystem, such as a /grand environment.
-        "filesystems": "home:eagle:grand" if python.startswith("/grand/") else "home:eagle",
+        "filesystems": filesystems,
         "node_count": 1,
         "duration": 300,
         "remote_root": root,
         "local_collection_id": local,
         "local_globus_root": globus_path(workspace),
-        "remote_collection_id": EAGLE_COLLECTION,
-        "remote_globus_root": root.removeprefix("/eagle"),
+        "remote_collection_id": FLARE_COLLECTION if filesystem == "flare" else EAGLE_COLLECTION,
+        "remote_globus_root": f"/{relative}",
         "environment_setup": environment_setup,
         "python": python,
     }
     # JSON strings without ASCII escaping are valid TOML basic strings.
-    text = "# Written by iri_configure.py for Polaris with Eagle storage.\n" + "".join(
+    text = f"# Written by iri_configure.py for {system} with {filesystem} storage.\n" + "".join(
         f"{key} = {json.dumps(value, ensure_ascii=False)}\n" for key, value in settings.items())
     if tomllib.loads(text) != settings:
         print("Generated target.toml does not round-trip; not written.", file=sys.stderr)
@@ -153,15 +165,16 @@ def configure(workspace, *, project=None, username=None, environment_setup=None,
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("workspace")
+    parser.add_argument("--system", choices=sorted(SHARED_ENVS), default="polaris")
     parser.add_argument("--project")
     parser.add_argument("--username", help="ALCF username")
     parser.add_argument("--environment-setup", help="shell line that activates ChemGraph on "
-                        "Polaris (default: the shared ChemGraph environment)")
+                        "the compute node (default: the shared ChemGraph environment)")
     parser.add_argument("--python", help="Python executable of that environment")
-    parser.add_argument("--remote-root", help="parent of remote run directories, on /eagle")
+    parser.add_argument("--remote-root", help="parent of remote run directories, on the target project filesystem")
     parser.add_argument("--base-url", default=BASE_URL)
     args = parser.parse_args(argv)
-    return configure(args.workspace, project=args.project, username=args.username,
+    return configure(args.workspace, system=args.system, project=args.project, username=args.username,
                      environment_setup=args.environment_setup, python=args.python,
                      remote_root=args.remote_root, base_url=args.base_url)
 

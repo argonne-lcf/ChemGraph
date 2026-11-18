@@ -83,15 +83,26 @@ def test_documented_calculation_and_batch(job, tmp_path, outcome):
             assert (tmp_path / "frequencies_hydrogen.csv").exists()
 
 
-def test_polaris_template_runs_calculation(job, tmp_path):
+@pytest.mark.parametrize("site,select,filesystems,default", [
+    ("polaris", "1:system=polaris", "home:eagle:grand", "/grand/catalyst/world-shared/chemgraph/alcf_chemgraph_env"),
+    ("crux", "1:system=crux", "home:eagle:grand", "/grand/catalyst/world-shared/chemgraph/crux/alcf_chemgraph_env"),
+    ("aurora", "1", "flare", "/lus/flare/projects/catalyst/world_shared/chemgraph/alcf_chemgraph_env"),
+])
+def test_site_template_runs_calculation(job, tmp_path, site, select, filesystems, default):
     payload, env = job
     shared_env = tmp_path / "shared env"
     (shared_env / "bin").mkdir(parents=True)
     (shared_env / "bin/activate").write_text("")
     (shared_env / "bin/python").write_text(f'#!/bin/bash\nexec {shlex.quote(sys.executable)} "$@"\n')
     (shared_env / "bin/python").chmod(0o755)
-    batch = (SKILLS / "pbs-hpc/assets/polaris-chemgraph.pbs.template").read_text()
-    default = "/grand/catalyst/world-shared/chemgraph/alcf_chemgraph_env"
+    batch = (SKILLS / f"pbs-hpc/assets/{site}-chemgraph.pbs.template").read_text()
+    assert f"#PBS -l select={select}" in batch.splitlines()
+    assert f"#PBS -l filesystems={filesystems}" in batch.splitlines()
+    assert f"CHEMGRAPH_ENV={default}" in batch.splitlines()
+    for key, value in {"JOB_NAME": "test", "PROJECT": "A", "QUEUE": "debug", "WALLTIME": "00:05:00"}.items():
+        batch = batch.replace("{{" + key + "}}", value)
+    assert "{{" not in batch
+    subprocess.run(["bash", "-n"], input=batch, text=True, check=True)
     batch = batch.replace(default, shlex.quote(str(shared_env)))
     (tmp_path / "job.pbs").write_text(batch)
     (tmp_path / "input.json").write_text(json.dumps(payload))

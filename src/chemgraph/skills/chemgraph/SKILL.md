@@ -46,7 +46,7 @@ metadata:
    completion. Never invent numerical results or label pending work successful.
 
 Facility-specific values belong in user configuration, except documented
-site defaults such as the shared Polaris ChemGraph environment.
+site defaults such as the shared Polaris, Crux, and Aurora ChemGraph environments.
 
 ## Resource paths
 

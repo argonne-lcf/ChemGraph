@@ -17,7 +17,8 @@ laptop paths to the remote calculation.
 
 Use the requested calculator and a supported model name, or omit `model` to use
 that calculator's default. A model file path is optional for custom or pre-staged
-checkpoints. This direct-PBS example uses MACE-Polar:
+checkpoints. This Polaris example uses MACE-Polar. For Crux set `device` to `cpu`. For
+an XPU-capable MACE installation on Aurora use `xpu` and `"default_dtype": "float32"`.
 
 ```json
 {
@@ -46,7 +47,7 @@ checkpoint files or use files already accessible on compute nodes; for IRI,
 checkpoints staged with the run can use run-relative paths. Named pretrained
 models need no user-supplied file: the calculator downloads missing weights during
 initialization inside the allocation. This needs compute-node network access or
-an existing cache; the Polaris templates set the
+an existing cache; the ALCF templates set the
 [proxy](../../pbs-hpc/references/polaris.md#internet-proxy-login-and-compute-nodes).
 Do not execute the calculation on a login node to download or initialize a model.
 
@@ -54,16 +55,15 @@ Copy [calculate.py](../assets/calculate.py) into the run directory unchanged. It
 PBS host check precedes chemistry imports and rejects accidental execution on a
 login node. It reads `input.json` from the working directory.
 
-On Polaris, the [PBS template](../../pbs-hpc/assets/polaris-chemgraph.pbs.template)
-and IRI's `iri_prepare.py` supply the environment, GPU, proxy, and log-directory
-settings; on other sites, fill the generic PBS template from the site reference.
+Use the [site PBS template](../../pbs-hpc/SKILL.md#prepare-and-track-a-job)
+or IRI's `iri_prepare.py` for the environment, proxy, and log directory.
 Write `input.json` with JSON serialization, not hand-built strings.
 
 Before staging/submission, parse `input.json`, inspect scientific settings and
 path mappings, check the structure, and run `bash -n` on the launch script.
 Local `ASEInputSchema` validation depends on locally installed calculator extras:
 an unavailable-calculator error on a laptop does not establish that the remote
-environment lacks it. Do not install Polaris's calculator stack on the laptop
+environment lacks it. Do not install the remote calculator stack on the laptop
 solely for validation or substitute a calculator to make validation pass. Report
 which checks ran and defer environment-dependent schema validation to the
 configured compute environment. The unchanged `calculate.py` validates the schema

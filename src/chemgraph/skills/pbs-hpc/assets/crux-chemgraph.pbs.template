@@ -1,0 +1,19 @@
+#!/bin/bash
+#PBS -N {{JOB_NAME}}
+#PBS -A {{PROJECT}}
+#PBS -q {{QUEUE}}
+#PBS -l select=1:system=crux
+#PBS -l place=scatter
+#PBS -l walltime={{WALLTIME}}
+#PBS -l filesystems=home:eagle:grand
+#PBS -j oe
+
+set -eo pipefail
+cd "${PBS_O_WORKDIR:?PBS submission directory is required}"
+CHEMGRAPH_ENV=/grand/catalyst/world-shared/chemgraph/crux/alcf_chemgraph_env
+source "$CHEMGRAPH_ENV/bin/activate"
+set -u
+export http_proxy=http://proxy.alcf.anl.gov:3128 https_proxy=http://proxy.alcf.anl.gov:3128
+export HTTP_PROXY="$http_proxy" HTTPS_PROXY="$https_proxy"
+export OMP_NUM_THREADS=8 TMPDIR=/tmp CHEMGRAPH_LOG_DIR="$PWD"
+exec "$CHEMGRAPH_ENV/bin/python" calculate.py

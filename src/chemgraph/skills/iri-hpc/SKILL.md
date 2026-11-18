@@ -40,22 +40,26 @@ inspect saved state per [Resume](references/api-v2.md#resume).
 
 At the start of each session:
 
-1. **Tools and logins.** Check `jq`, `curl` 7.76+, `alcf-tokens test-token iri`
+1. **Tools and logins.** `chemgraph doctor` or `/doctor` reports local readiness. Check `jq`, `curl` 7.76+, `alcf-tokens test-token iri`
    (`"ready": true`), and `globus whoami`. Tell the user what to install
    (`pip install alcf-tokens globus-cli`) or the exact login to run in their own
    terminal (`alcf-tokens login iri`, `globus login`, or the printed `--gcs` consent).
    A connection failure is not a login problem; see
    [diagnostics](references/api-v2.md#connection-and-authentication).
-2. **Target.** Use an existing `./target.toml` as is. Otherwise, for Polaris with
-   Eagle storage, run `python "$SKILLS/iri-hpc/scripts/iri_configure.py" .`. It
-   discovers IDs, projects, username, and Globus collections, and uses the
-   [ChemGraph environment](../pbs-hpc/references/polaris.md#chemgraph-environment)
-   unless the user names another (`--environment-setup` and `--python`). Exit 2
-   prints JSON questions: ask them all in one message, then rerun with `--project`
-   (and `--username`/`--remote-root` if asked). For Aurora, Crux, or non-Eagle roots,
-   fill [target.example.toml](assets/target.example.toml) with the user. Never guess
-   projects or paths. State the configuration's path, account, and remote
-   environment; this is informational, not an approval step.
+2. **Target.** For a new workspace run
+   `python "$SKILLS/iri-hpc/scripts/iri_configure.py" . --system SYSTEM` with
+   `polaris` (default), `crux`, or `aurora`. The helper discovers resources and
+   collections, uses Eagle for Polaris/Crux or Flare for Aurora, and selects the
+   site's shared ChemGraph environment. For a user-supplied environment pass both
+   `--environment-setup` and `--python`. Exit 2 prints the missing values as JSON.
+   Ask together and rerun with the same system and the requested
+   `--project` or `--username`. For other storage
+   use [target.example.toml](assets/target.example.toml).
+3. **Verify the target.** For an existing or newly created target, use the
+   [discovery recipe](references/api-v2.md#discover) to match the compute resource
+   name to the requested system before staging. Check the account and run storage.
+   If the system differs, use a separate workspace and preserve the prior target
+   and job records. Report the selected system, account, and environment.
 
 `target.toml` is the only place IDs live; `scripts/iri.sh` loads them as shell
 variables. Never ask for, print, store, or pass a token; send authenticated requests
