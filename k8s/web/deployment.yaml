@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chemgraph-web-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chemgraph-web-api
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app: chemgraph-web-api}
+  template:
+    metadata:
+      labels: {app: chemgraph-web-api}
+    spec:
+      terminationGracePeriodSeconds: 20
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        runAsNonRoot: true
+      containers:
+        - name: api
+          image: chemgraph-web-api:local # Replace with your built registry image/digest.
+          ports: [{containerPort: 8000}]
+          env:
+            - {name: CHEMGRAPH_WEB_DATA_DIR, value: /data}
+            - {name: CHEMGRAPH_WEB_PUBLIC_ORIGIN, value: "https://chemgraph-react.example.com"}
+            - {name: CHEMGRAPH_WEB_PROVIDERS_FILE, value: /etc/chemgraph/providers.toml}
+            - name: ARGO_USER
+              valueFrom:
+                secretKeyRef: {name: chemgraph-secrets, key: argo-user, optional: true}
+            - name: ALCF_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef: {name: chemgraph-secrets, key: alcf-access-token, optional: true}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: providers, mountPath: /etc/chemgraph, readOnly: true}
+          resources:
+            requests: {cpu: "1", memory: 2Gi}
+            limits: {cpu: "4", memory: 8Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          startupProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8000}
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 15
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: chemgraph-web-data}
+        - name: providers
+          configMap: {name: chemgraph-web-providers}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chemgraph-web-api
+spec:
+  selector: {app: chemgraph-web-api}
+  ports: [{port: 8000, targetPort: 8000}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chemgraph-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: chemgraph-web}
+  template:
+    metadata:
+      labels: {app: chemgraph-web}
+    spec:
+      containers:
+        - name: frontend
+          image: chemgraph-web:local # Replace with your built registry image/digest.
+          ports: [{containerPort: 8080}]
+          env: [{name: API_UPSTREAM, value: "chemgraph-web-api:8000"}]
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {cpu: "1", memory: 256Mi}
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8080}
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8080}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chemgraph-web
+spec:
+  selector: {app: chemgraph-web}
+  ports: [{port: 8080, targetPort: 8080}]

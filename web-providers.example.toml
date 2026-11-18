@@ -1,0 +1,30 @@
+# Shared, administrator-managed providers for the internal SSO deployment.
+# Credentials belong in the API environment or deployment secrets, never here.
+# File edits and credential rotation require an API restart.
+
+[providers.Argo]
+model = "argo:gpt-4o"
+# Set ARGO_USER to the institution-approved shared service identity.
+# argo_user = "approved-service-user"
+# Optional: override the registry's institutional URL.
+# base_url = "https://apps.inside.anl.gov/argoapi/v1"
+
+# Uncomment an ALCF entry after selecting a supported model from your endpoint.
+# [providers.ALCF]
+# model = "alcf:meta-llama/Llama-3.3-70B-Instruct"
+# api_key_env = "ALCF_ACCESS_TOKEN"
+# The registry selects the serving cluster unless base_url is supplied.
+
+# Existing hosted and local integrations remain available.
+# [providers.OpenAI]
+# model = "gpt-4o-mini"
+# api_key_env = "OPENAI_API_KEY"
+# [providers.Ollama]
+# model = "llama3.2"
+# base_url = "http://host.docker.internal:11434"
+# [providers.Custom]
+# model = "lab-model"
+# base_url = "http://model-server:8000/v1"
+# api_key_env = "LAB_MODEL_API_KEY"
+# Without api_key_env, custom routes use VLLM_API_KEY or a no-auth placeholder.
+# OPENAI_API_KEY is never inherited by a custom route in the web service.

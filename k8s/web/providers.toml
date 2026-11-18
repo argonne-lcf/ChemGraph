@@ -1,0 +1,5 @@
+# Shared credentials are injected separately through chemgraph-secrets.
+[providers.Argo]
+model = "argo:gpt-4o"
+# Add an ALCF entry using a supported model and api_key_env="ALCF_ACCESS_TOKEN".
+# See web-providers.example.toml and the operator guide.

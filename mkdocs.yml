@@ -64,6 +64,7 @@ nav:
       - Deep Agent Skills: skills.md
       - PBS Jobs with Skills: pbs_jobs_with_skills.md
       - Streamlit interface: streamlit_web_interface.md
+      - React interface (pilot): react_web_interface.md
       - Configuration: configuration_with_toml.md
       - Examples: example_usage.md
   - Integrations and scale:

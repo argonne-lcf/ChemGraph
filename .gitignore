@@ -44,6 +44,11 @@ test_outputs/
 *ir/
 
 .venv
+web_data/
+frontend/node_modules/
+frontend/test-results/
+frontend/playwright-report/
+frontend/*.tsbuildinfo
 combine*
 
 # OpenCode (user-local config; copy from opencode.example.jsonc)

@@ -176,6 +176,8 @@ class ChemGraph:
         Base URL for API calls, by default None
     api_key : str, optional
         API key for authentication, by default None
+    model_timeout : float, optional
+        Timeout in seconds per provider request. Defaults to the model settings.
     reasoning_effort : str, optional
         Reasoning effort for manually verified Argo GPT-5.6 and Claude
         models. Both families default to ``"medium"``.
@@ -327,6 +329,7 @@ class ChemGraph:
         configuration_id: str | None = None,
         approval_mode: ApprovalMode | None = None,
         _model_endpoint=None,
+        model_timeout: float | None = None,
     ):
         migration_message = get_removed_workflow_message(workflow_type)
         if migration_message:
@@ -494,6 +497,7 @@ class ChemGraph:
                 argo_user=argo_user,
                 reasoning_effort=reasoning_effort,
                 **({"endpoint": _model_endpoint} if _model_endpoint is not None else {}),
+                **({"timeout_s": model_timeout} if model_timeout is not None else {}),
             )
         except Exception as e:
             logger.error(f"Exception thrown when loading {model_name}: {str(e)}")

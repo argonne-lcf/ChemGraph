@@ -1,0 +1,58 @@
+# Local-only pilot. For a shared service, set DEV_USER empty and place the
+# frontend behind the institution's authenticating gateway (see docs).
+services:
+  web-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        CHEMGRAPH_BASE_IMAGE: ${CHEMGRAPH_BASE_IMAGE:-ghcr.io/argonne-lcf/chemgraph:latest}
+    image: chemgraph-web-api:local
+    init: true
+    environment:
+      CHEMGRAPH_WEB_PUBLIC_ORIGIN: ${CHEMGRAPH_WEB_PUBLIC_ORIGIN:-http://localhost:8080}
+      CHEMGRAPH_WEB_DEV_USER: ${CHEMGRAPH_WEB_DEV_USER:-}
+      CHEMGRAPH_WEB_DEMO: ${CHEMGRAPH_WEB_DEMO:-false}
+      CHEMGRAPH_WEB_PROVIDERS:
+      CHEMGRAPH_WEB_PROVIDERS_FILE: /etc/chemgraph/providers.toml
+      CHEMGRAPH_WEB_CALCULATORS: ${CHEMGRAPH_WEB_CALCULATORS:-["emt"]}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      ARGO_USER: ${ARGO_USER:-}
+      ALCF_ACCESS_TOKEN: ${ALCF_ACCESS_TOKEN:-}
+      VLLM_API_KEY: ${VLLM_API_KEY:-}
+      CHEMGRAPH_WEB_MAX_WORKERS: ${CHEMGRAPH_WEB_MAX_WORKERS:-2}
+      CHEMGRAPH_WEB_MAX_QUEUED: ${CHEMGRAPH_WEB_MAX_QUEUED:-20}
+      CHEMGRAPH_WEB_MAX_USER_RUNS: ${CHEMGRAPH_WEB_MAX_USER_RUNS:-2}
+      CHEMGRAPH_WEB_RUN_TIMEOUT: ${CHEMGRAPH_WEB_RUN_TIMEOUT:-3600}
+      CHEMGRAPH_WEB_CLARIFICATION_TIMEOUT: ${CHEMGRAPH_WEB_CLARIFICATION_TIMEOUT:-900}
+      CHEMGRAPH_WEB_PROVIDER_TIMEOUT: ${CHEMGRAPH_WEB_PROVIDER_TIMEOUT:-120}
+      CHEMGRAPH_WEB_USER_STORAGE_LIMIT: ${CHEMGRAPH_WEB_USER_STORAGE_LIMIT:-1073741824}
+      CHEMGRAPH_WEB_RETENTION_DAYS: ${CHEMGRAPH_WEB_RETENTION_DAYS:-30}
+    volumes:
+      - web-data:/data
+      - web-model-cache:/home/chemgraph-web/.cache
+      - type: bind
+        source: ${CHEMGRAPH_WEB_PROVIDERS_HOST_FILE:-./web-providers.example.toml}
+        target: /etc/chemgraph/providers.toml
+        read_only: true
+        bind:
+          create_host_path: false
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    stop_grace_period: 15s
+    restart: unless-stopped
+  web:
+    build: ./frontend
+    image: chemgraph-web:local
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      web-api:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  web-data:
+  web-model-cache:
