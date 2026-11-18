@@ -12,10 +12,12 @@ from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
 
+from chemgraph.models.protocols.usage_capture import bind_collector
+
 logger = logging.getLogger(__name__)
 TOKEN_FIELDS = (
     "input_tokens", "output_tokens", "total_tokens",
-    "cached_input_tokens", "reasoning_output_tokens",
+    "cached_input_tokens", "reasoning_output_tokens", "cache_creation_input_tokens",
 )
 USAGE_EVENT = "chemgraph_usage"
 
@@ -37,6 +39,16 @@ def _count(values: dict, *names: str) -> int | None:
     return None
 
 
+def _detail(values: dict, name: str) -> int | None:
+    # Service-tier details are mutually exclusive partitions, not extra tokens.
+    direct = _count(values, name)
+    if direct is not None:
+        return direct
+    parts = [_count(values, f"{tier}_{name}") for tier in ("priority", "flex")]
+    known = [part for part in parts if part is not None]
+    return sum(known) if known else None
+
+
 def normalize_usage(value: Any, *, canonical: bool = False) -> dict:
     """Normalize one provider record without inventing missing token counts."""
     usage = _mapping(value)
@@ -49,12 +61,17 @@ def normalize_usage(value: Any, *, canonical: bool = False) -> dict:
     completion_details = _mapping(usage.get("output_tokens_details") or usage.get("completion_tokens_details"))
     cached = _count(usage, "cached_input_tokens", "cache_read_input_tokens", "cachedInputTokens")
     if cached is None:
-        cached = _count(input_details, "cache_read")
+        cached = _detail(input_details, "cache_read")
     if cached is None:
         cached = _count(prompt_details, "cached_tokens")
+    creation = _count(usage, "cache_creation_input_tokens")
+    if creation is None:
+        creation = _detail(input_details, "cache_creation")
+    if creation is None:
+        creation = _count(prompt_details, "cache_write_tokens")
     reasoning = _count(usage, "reasoning_output_tokens", "reasoningOutputTokens")
     if reasoning is None:
-        reasoning = _count(output_details, "reasoning")
+        reasoning = _detail(output_details, "reasoning")
     if reasoning is None:
         reasoning = _count(completion_details, "reasoning_tokens")
     # Native Anthropic input_tokens excludes cache reads/writes; LangChain's
@@ -71,7 +88,7 @@ def normalize_usage(value: Any, *, canonical: bool = False) -> dict:
                 inputs += count
     if total is None and inputs is not None and outputs is not None:
         total = inputs + outputs
-    return dict(zip(TOKEN_FIELDS, (inputs, outputs, total, cached, reasoning)))
+    return dict(zip(TOKEN_FIELDS, (inputs, outputs, total, cached, reasoning, creation)))
 
 
 def summarize_usage(records: list[dict]) -> dict:
@@ -87,7 +104,7 @@ def summarize_usage(records: list[dict]) -> dict:
         for field in TOKEN_FIELDS
     }
     result["incomplete_calls"] = sum(
-        not r.get("complete", False)
+        not r.get("complete", False) or r.get("sink_failed", False)
         or any(r.get("counts", {}).get(key) is None for key in TOKEN_FIELDS[:3])
         for r in records
     )
@@ -100,6 +117,7 @@ def response_usage(response: Any) -> dict | None:
     try:
         records = []
         raw = []
+        sources = []
         for group in getattr(response, "generations", None) or []:
             found = None
             for generation in group or []:
@@ -108,12 +126,15 @@ def response_usage(response: Any) -> dict | None:
                 metadata = _mapping(getattr(message, "response_metadata", None))
                 if value:
                     found = normalize_usage(value, canonical=True)
+                    source = "adapter_derived"
                 else:
                     value = _mapping(metadata.get("usage") or metadata.get("token_usage"))
                     if value:
                         found = normalize_usage(value)
+                        source = "provider_raw"
                 if found is not None:
                     raw.append(value)
+                    sources.append(source)
                     break
             if group:
                 records.append({"counts": found or {}, "complete": found is not None})
@@ -123,13 +144,14 @@ def response_usage(response: Any) -> dict | None:
         if fallback and (not records or any(not r["complete"] for r in records)):
             counts = normalize_usage(fallback)
             if any(counts[key] is not None for key in TOKEN_FIELDS[:3]):
-                return {**counts, "raw_usage": fallback, "source": "provider"}
+                return {**counts, "raw_usage": fallback, "source": "provider_raw"}
         if not raw:
             return None
         totals = summarize_usage(records)
         return {
             **{key: totals[key] for key in TOKEN_FIELDS},
-            "partial": totals["partial"], "raw_usage": raw, "source": "provider",
+            "partial": totals["partial"], "raw_usage": raw,
+            "source": sources[0] if len(set(sources)) == 1 else "mixed",
         }
     except Exception:
         logger.debug("Could not extract provider usage.", exc_info=True)
@@ -200,18 +222,26 @@ def combine_usage(summaries: list[dict]) -> dict:
 
 
 class UsageCollector(BaseCallbackHandler):
-    """One user turn, including nested workers and approval/retry continuations."""
+    """One user turn, including nested workers and approval/retry continuations.
+
+    ``capture_evidence`` retains provider snapshots outside model messages.
+    ``usage_sink`` receives a defensive call snapshot on start, update, and end;
+    it must be synchronous. Sink failures retain counts and mark coverage partial.
+    """
 
     run_inline = True
 
     def __init__(self, session_id: str, thread_id: str, *, store=None,
                  model: str | None = None, turn_id: str | None = None,
-                 records=()):
+                 records=(), capture_evidence: bool = False, usage_sink=None):
         self.session_id = session_id
         self.thread_id = thread_id
         self.turn_id = turn_id or str(uuid.uuid4())
         self.model = model
         self.store = store
+        self.capture_evidence = capture_evidence
+        self.usage_sink = usage_sink
+        self._sink_failed = False
         self._records = {r["call_id"]: deepcopy(r) for r in records}
         self._started: dict[str, float] = {}
         self._lock = threading.RLock()
@@ -247,13 +277,23 @@ class UsageCollector(BaseCallbackHandler):
             "call_id": key, "model": self.model, "provider": None,
             "worker": None, "status": "running", "counts": {},
             "complete": False, "duration_s": None,
+            "source": None, "raw_capture": "unverified",
             "started_at": datetime.now(timezone.utc).isoformat(),
         })
 
     def _save(self, record):
+        if self.usage_sink is not None:
+            try:
+                self.usage_sink(deepcopy(record))
+            except Exception:
+                record["sink_failed"] = True
+                if not self._sink_failed:
+                    logger.warning("Could not write usage sink; retaining in-memory counts.", exc_info=True)
+                    self._sink_failed = True
         self._persist("save_usage_call", self.turn_id, record)
 
     def on_chat_model_start(self, serialized, messages, *, run_id, metadata=None, **kwargs):
+        bind_collector(self, run_id)
         with self._lock:
             record = self._record(run_id)
             self._started.setdefault(str(run_id), time.monotonic())
@@ -268,6 +308,23 @@ class UsageCollector(BaseCallbackHandler):
     def on_llm_start(self, serialized, prompts, **kwargs):
         self.on_chat_model_start(serialized, prompts, **kwargs)
 
+    def on_usage_evidence(self, run_id, usage, *, provider, model, event, raw, complete):
+        """Receive a cumulative provider snapshot independently of model messages."""
+        with self._lock:
+            record = self._record(run_id)
+            record["counts"] = normalize_usage(usage)
+            record["source"] = "provider_raw"
+            record["raw_capture"] = "captured"
+            record["adapter_usage"] = True
+            record["provider"] = provider
+            if model is not None:
+                record["model"] = model
+            record["complete"] = complete
+            if self.capture_evidence:
+                record["raw_usage"] = deepcopy(usage)
+                record.setdefault("usage_evidence", []).append({"event": event, "usage": deepcopy(raw)})
+            self._save(record)
+
     def on_custom_event(self, name, data, **kwargs):
         if name != USAGE_EVENT or not isinstance(data, dict) or not data.get("call_id"):
             return
@@ -275,8 +332,16 @@ class UsageCollector(BaseCallbackHandler):
             record = self._record(data["call_id"])
             # Adapter snapshots are cumulative for this model invocation. The
             # ordinary completion callback updates this row, never adds a bill.
-            record["counts"] = {key: data.get("counts", {}).get(key) for key in TOKEN_FIELDS}
-            record["raw_usage"] = data.get("raw_usage")
+            counts = record.setdefault("counts", {})
+            counts.update({key: value for key, value in data.get("counts", {}).items()
+                           if key in TOKEN_FIELDS and value is not None})
+            if counts.get("input_tokens") is not None and counts.get("output_tokens") is not None:
+                counts["total_tokens"] = data.get("counts", {}).get("total_tokens")
+                if counts["total_tokens"] is None:
+                    counts["total_tokens"] = counts["input_tokens"] + counts["output_tokens"]
+            record["source"] = "adapter_snapshot"
+            if data.get("raw_usage") is not None:
+                record["raw_usage"] = deepcopy(data["raw_usage"])
             record["complete"] = bool(data.get("complete"))
             record["provider"] = data.get("provider", record["provider"])
             record["model"] = data.get("model", record["model"])
@@ -290,6 +355,7 @@ class UsageCollector(BaseCallbackHandler):
             if counts is not None and not record.get("adapter_usage"):
                 record["counts"] = {key: counts.get(key) for key in TOKEN_FIELDS}
                 record["raw_usage"] = counts.get("raw_usage")
+                record["source"] = counts.get("source")
                 record["complete"] = not counts.get("partial", False)
             self._end(record, "completed")
 
@@ -300,6 +366,7 @@ class UsageCollector(BaseCallbackHandler):
             if counts is not None and not record.get("adapter_usage"):
                 record["counts"] = {key: counts.get(key) for key in TOKEN_FIELDS}
                 record["raw_usage"] = counts.get("raw_usage")
+                record["source"] = counts.get("source")
                 # A failed stream may only contain usage for its received chunks.
                 record["complete"] = False
             self._end(record, "failed")
