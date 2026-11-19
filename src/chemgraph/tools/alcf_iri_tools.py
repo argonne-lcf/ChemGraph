@@ -101,8 +101,7 @@ def alcf_compute(action: str, params: dict | None = None) -> Any:
     "Pick the `machine` argument by path prefix: /eagle/... -> "
     "'eagle', /home/... -> 'home'. Do NOT pass 'aurora', 'crux', or "
     "'polaris' -- those are compute UUIDs and IRI's filesystem "
-    "endpoints will 400. /flare/... is not exposed by IRI at all; "
-    "tell the user to use scp for /flare paths."
+    "endpoints will 400."
     + _DISCOVERY_HINT
 ))
 def alcf_filesystem(action: str, params: dict | None = None) -> Any:
