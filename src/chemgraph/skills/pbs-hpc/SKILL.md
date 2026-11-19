@@ -12,15 +12,15 @@ metadata:
 
 ## Establish the environment
 
+Use the user's selected submission method. For Polaris, Crux, or Aurora, if
+the route is undecided, run `command -v qsub` in the execution shell. Use
+direct PBS if it succeeds and [IRI](../iri-hpc/SKILL.md) if it fails.
+For other PBS sites without `qsub`, use a suitable attached HPC tool or prepare
+the script and say where to submit it.
+
 Identify the target system, submission host, project/account, queue, and walltime.
 Obtain missing values from the user or deployment configuration. On Polaris, Crux, and
 Aurora, use the shared environment in the site reference by default.
-
-Check whether `execute` runs on the submission host: a laptop shell cannot run remote
-PBS commands because a skill or MCP server is attached. Preserve the user's selected
-execution method. Without one, submit directly when the shell is on the submission
-host; otherwise use [iri-hpc](../iri-hpc/SKILL.md) for ALCF or suitable attached HPC
-tools. If neither is available, prepare the script and say where to submit it.
 
 Site references: [Polaris](references/polaris.md), [Aurora](references/aurora.md),
 [Crux](references/crux.md), [Bebop](references/bebop.md). Check the linked official

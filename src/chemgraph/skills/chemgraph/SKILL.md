@@ -9,6 +9,12 @@ metadata:
 
 # Use ChemGraph
 
+For Polaris, Crux, or Aurora, choose the submission route first. If the user
+specified a method, use it. Otherwise, run `command -v qsub` in the execution
+shell. If it succeeds, use [direct PBS](../pbs-hpc/SKILL.md). If it fails, use
+[IRI](../iri-hpc/SKILL.md). Open references for the selected route as each step
+needs them.
+
 1. Identify the requested calculation, input structures, calculator/model,
    execution system, and output location. Preserve explicit scientific choices.
    For omitted choices, use configured or schema defaults for the selected
@@ -20,16 +26,11 @@ metadata:
    a capability is unavailable or a separate batch script is needed.
    Report missing dependencies. This skill does not grant tools or override
    approvals.
-3. Preserve the user's selected execution method. Otherwise, choose a route based
-   on the available tools and execution host:
-   - Local chemistry tools: use [MCP workflow guidance](references/mcp-workflows.md)
-     for attached tools, or [Python and CLI guidance](references/python-and-cli.md)
-     when using those interfaces.
-   - Direct PBS on an authorized submission host: use
-     [the ASE batch example](references/ase-batch.md) and
-     [pbs-hpc](../pbs-hpc/SKILL.md); no chemistry MCP server or Parsl is required.
-   - ALCF submission through the IRI API, including from a host without `qsub`:
-     use [iri-hpc](../iri-hpc/SKILL.md).
+3. For direct PBS jobs, use [pbs-hpc](../pbs-hpc/SKILL.md) and the
+   [ASE batch example](references/ase-batch.md) when preparing the job.
+   For local calculations, use [MCP workflow guidance](references/mcp-workflows.md)
+   for attached tools or [Python and CLI guidance](references/python-and-cli.md)
+   when using those interfaces.
    When inputs need construction, follow
    [local structure preparation](references/structure-preparation.md).
 4. Establish where every file lives: the agent's virtual filesystem, its shell,

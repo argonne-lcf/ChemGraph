@@ -10,10 +10,10 @@ metadata:
 
 # Remote PBS jobs through the IRI API
 
-Use this when the user selects IRI or needs ALCF batch execution from a host that
-cannot run `qsub`. If no method was selected and the shell is on a submission host,
-prefer [pbs-hpc](../pbs-hpc/SKILL.md). Never mix submission methods for one run. The
-JobSpec selects resources, so `#PBS` lines do not apply.
+Use IRI when the user selects it. If the submission route is undecided, run
+`command -v qsub` in the execution shell. Use [direct PBS](../pbs-hpc/SKILL.md)
+if it succeeds. If it fails, continue with IRI. Keep one submission method per
+run. For IRI, the JobSpec selects resources.
 
 ## Setup
 
@@ -40,7 +40,8 @@ inspect saved state per [Resume](references/api-v2.md#resume).
 
 At the start of each session:
 
-1. **Tools and logins.** `chemgraph doctor` or `/doctor` reports local readiness. Check `jq`, `curl` 7.76+, `alcf-tokens test-token iri`
+1. **Tools and logins.** Limit the setup check to `jq --version`, `curl --version`
+   (7.76+), `alcf-tokens test-token iri`
    (`"ready": true`), and `globus whoami`. Tell the user what to install
    (`pip install alcf-tokens globus-cli`) or the exact login to run in their own
    terminal (`alcf-tokens login iri`, `globus login`, or the printed `--gcs` consent).
