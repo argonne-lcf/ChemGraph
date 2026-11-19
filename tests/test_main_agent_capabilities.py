@@ -186,6 +186,28 @@ async def test_direct_return_uses_current_tool_result_and_restores():
     assert isinstance(snapshot.values["messages"][-1], ToolMessage)
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows keeps the virtual /workspace mount")
+def test_real_path_cli_checkpoint_route_keeps_reported_paths(tmp_path):
+    from chemgraph.graphs.deep_agent import construct_deep_agent_graph
+
+    paths = ("/chemgraph-state/large_tool_results/same.md", "/chemgraph-state/conversation_history/same.md")
+    calls = [("write_file", {"file_path": path, "content": path}) for path in paths]
+    calls += [("read_file", {"file_path": path}) for path in paths]
+    model = _ScriptedChatModel(responses=[
+        *[AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": f"c{i}", "type": "tool_call"}])
+          for i, (name, args) in enumerate(calls)],
+        AIMessage(content="done"),
+    ])
+    workflow = construct_deep_agent_graph(model, backend=create_cli_workspace_backend(tmp_path),
+                                          interrupt_on=None, discover_skills=False)
+    state = workflow.invoke({"messages": [HumanMessage(content="go")]}, {"configurable": {"thread_id": "t"}})
+    reads = [str(message.content) for message in state["messages"] if message.type == "tool"][2:]
+    assert [paths[0] in reads[0], paths[1] in reads[1]] == [True, True]
+    # A checkpoint-only supervisor looks up a worker's reported path verbatim.
+    assert set(paths) <= set(state["files"])
+    assert list(tmp_path.iterdir()) == []
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("cli_workspace", [
     False, pytest.param(True, marks=pytest.mark.skipif(os.name == "nt", reason="POSIX real paths")),
@@ -202,6 +224,8 @@ async def test_summarization_keeps_readable_history_and_private_state(monkeypatc
                                          AIMessage(content="third")])
     workspace = tmp_path / "workspace"
     workspace.mkdir()
+    host_roots = ("/chemgraph-state", "/large_tool_results", "/conversation_history")
+    existed = [os.path.lexists(path) for path in host_roots]
     workflow = graph(model, **({"backend": create_cli_workspace_backend(workspace), "discover_skills": False}
                                if cli_workspace else {}))
     store = SessionStore(str(tmp_path / "sessions.db"))
@@ -211,8 +235,9 @@ async def test_summarization_keeps_readable_history_and_private_state(monkeypatc
     state = (await workflow.aget_state(session.config)).values
     assert state.get("_summarization_event")
     # Offloaded history stays in checkpoint state, never on the host filesystem.
-    assert any(path.startswith("/conversation_history/") for path in state.get("files", {}))
-    assert not any(os.path.exists(path) for path in ("/chemgraph-state", "/conversation_history"))
+    prefix = "/chemgraph-state/conversation_history/" if cli_workspace else "/conversation_history/"
+    assert any(path.startswith(prefix) for path in state.get("files", {}))
+    assert [os.path.lexists(path) for path in host_roots] == existed
     assert list(workspace.iterdir()) == []
     assert [message.content for message in state["messages"] if isinstance(message, HumanMessage)] == [
         "question one", "question two", "question three",

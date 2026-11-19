@@ -75,6 +75,7 @@ from chemgraph.cli.formatting import (
     format_token_usage,
     StreamMessageRenderer,
     ToolEventRenderer,
+    _safe_review_text,
     show_tool_output_log,
     tool_output_log,
 )
@@ -189,7 +190,8 @@ def _create_experimental_deepagent_backend(
 
     console.print(
         Panel(
-            (
+            # Literal text: a workspace name must never be read as Rich markup.
+            Text(_safe_review_text((
                 f"The workspace agent starts its shell in {root}. Its file tools use "
                 "real host paths: they take absolute paths (a relative path is read "
                 "from /) and can read any host file without prompting. Neither the "
@@ -203,7 +205,7 @@ def _create_experimental_deepagent_backend(
                 "Every shell command and file mutation will require approval."
                 if require_confirmation
                 else "Default tool approvals are disabled for this run."
-            ),
+            ))),
             title="[bold red]Experimental host-shell access[/bold red]",
             style="red",
         )

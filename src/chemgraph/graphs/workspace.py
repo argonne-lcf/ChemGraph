@@ -1,8 +1,10 @@
 """Workspace capabilities shared by independently constructed agent graphs."""
 
 import os
+import shutil
 from collections.abc import Sequence
 from copy import deepcopy
+from pathlib import Path
 
 from deepagents.backends import CompositeBackend, LocalShellBackend, StateBackend
 from deepagents.backends.protocol import BackendProtocol, DeleteResult
@@ -65,21 +67,35 @@ class _CLIWorkspaceBackend(LocalShellBackend):
         }
 
     def delete(self, file_path):
-        """Refuse to recursively delete the filesystem root, the workspace, or its ancestors."""
-        if not self.virtual_mode:
-            try:
-                target = self._resolve_path(file_path)
-                # Compare identities: /tmp/x and /private/tmp/x name the same directory.
-                protected = not target.is_symlink() and target.is_dir() and any(
-                    os.path.samefile(target, path) for path in (self.cwd, *self.cwd.parents)
-                )
-            except (OSError, RuntimeError, ValueError):
-                protected = False
-            if protected:
-                return DeleteResult(
-                    error=f"Error: refusing to delete '{file_path}' because it contains the workspace."
-                )
-        return super().delete(file_path)
+        """Unlink symlinks; refuse to remove the filesystem root, the workspace, or its ancestors."""
+        if self.virtual_mode:
+            return super().delete(file_path)
+        target = Path(file_path)
+        if not target.is_absolute():
+            target = self.cwd / target
+        try:
+            if target.is_symlink():  # Includes cyclic links, which the resolver rejects.
+                target.unlink()
+                return DeleteResult(path=file_path)
+            if not target.is_dir():
+                return super().delete(file_path)
+            # Compare identities: /tmp/x and /private/tmp/x name the same directory. Fail
+            # closed when the target cannot be inspected; skip ancestors that no longer exist.
+            found = os.stat(target)
+            for candidate in (Path("/"), self.cwd, *self.cwd.parents):
+                try:
+                    other = os.stat(candidate)
+                except FileNotFoundError:
+                    continue
+                if (other.st_dev, other.st_ino) == (found.st_dev, found.st_ino):
+                    return DeleteResult(
+                        error=f"Error: refusing to delete '{file_path}' because it contains the workspace."
+                    )
+            # Remove the inspected path itself; rmtree refuses a top-level symlink.
+            shutil.rmtree(target)
+            return DeleteResult(path=file_path)
+        except (OSError, RuntimeError) as exc:
+            return DeleteResult(error=f"Error deleting '{file_path}': {exc}")
 
     def with_artifact_directory(self, directory):
         """Copy a supported backend so sessions never share mutable shell state."""
@@ -204,12 +220,32 @@ def real_path_workspace_note(backend):
     )
 
 
+class _PrefixedStateBackend(StateBackend):
+    """Keep routed checkpoint files under the full path the agent was shown.
+
+    A checkpoint-only supervisor reads a worker's reported path verbatim, so the
+    shared ``files`` channel must store ``/chemgraph-state/...``, not the stripped key.
+    """
+
+    def __init__(self, prefix):
+        super().__init__()
+        self._prefix = prefix.rstrip("/")
+
+    def _read_files(self):
+        start = self._prefix + "/"
+        return {key[len(self._prefix):]: value for key, value in super()._read_files().items()
+                if key.startswith(start)}
+
+    def _send_files_update(self, update):
+        super()._send_files_update({self._prefix + key: value for key, value in update.items()})
+
+
 def _normalize_backend(backend: BackendProtocol) -> BackendProtocol:
     """Mount a virtual local workspace at the path Deep Agent expects."""
     if _real_path_cli(backend):
         # Keep offloaded results off the host root; one route keeps their names distinct.
         return CompositeBackend(
-            default=backend, routes={_CLI_STATE_PREFIX: StateBackend()},
+            default=backend, routes={_CLI_STATE_PREFIX: _PrefixedStateBackend(_CLI_STATE_PREFIX)},
             artifacts_root=_CLI_STATE_PREFIX.rstrip("/"),
         )
     if isinstance(backend, LocalShellBackend) and backend.virtual_mode:

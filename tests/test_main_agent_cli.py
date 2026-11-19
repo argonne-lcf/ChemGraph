@@ -259,17 +259,20 @@ def test_experimental_backend_requires_confirmation_and_filters_environment(
     monkeypatch.setenv("SYSTEMROOT", "C:\\Windows")
     monkeypatch.setenv("OPENAI_API_KEY", "must-not-leak")
 
+    workspace = tmp_path / "[red]run"
+    workspace.mkdir()
     with console.capture() as capture:
-        backend = commands._create_experimental_deepagent_backend(str(tmp_path))
+        backend = commands._create_experimental_deepagent_backend(str(workspace))
+    panel = " ".join(capture.get().replace("│", " ").split())
+    assert "[red]run" in panel  # Shown literally, not as Rich markup.
     if os.name != "nt":
-        panel = " ".join(capture.get().replace("│", " ").split())
         assert "can read any host file without prompting" in panel
         assert "a relative path is read from /" in panel
 
     from chemgraph.agent.deepagent_backend import DEEPAGENT_ENV_ALLOWLIST, create_host_shell_backend
     from chemgraph.graphs.workspace import cli_backend_descriptor
 
-    assert backend.cwd == tmp_path.resolve()
+    assert backend.cwd == workspace.resolve()
     assert backend.virtual_mode is (os.name == "nt")
     assert backend._env["PATH"] == "/test/bin"
     assert backend._env["SYSTEMROOT"] == "C:\\Windows"
@@ -307,6 +310,14 @@ def test_real_path_cli_backend_guards_host_paths(monkeypatch, tmp_path):
     assert removed == []
     (workspace / "scratch").mkdir()
     assert backend.delete(f"{workspace}/scratch").error is None and removed
+    removed.clear()
+    (workspace / "loop").symlink_to(workspace / "loop")
+    assert backend.delete(f"{workspace}/loop").error is None and not (workspace / "loop").is_symlink()
+    # A renamed workspace must not disable the guard for its surviving ancestors.
+    workspace.rename(tmp_path / "real" / "moved")
+    for target in (str(tmp_path / "real"), "/"):
+        assert "refusing" in backend.delete(target).error
+    assert removed == []
 
 
 def test_experimental_backend_stops_when_confirmation_is_declined(

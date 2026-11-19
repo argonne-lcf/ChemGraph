@@ -322,10 +322,11 @@ confirmation.
 
 On macOS and Linux the selected directory is used through its real host path:
 `--deepagent-workspace test/` makes `<absolute test>/example.py` the path for
-both file tools and the shell, and the system prompt names the workspace. File
-tools do not follow a symlink that is the final path component (the shell does),
-and deleting the filesystem root, the workspace, or one of its ancestors is
-refused. Under `--dangerously-skip-approvals`, a relative mutation path such as
+both file tools and the shell, and the system prompt names the workspace. For
+host paths, file tools do not follow a symlink that is the final path component
+(the shell does; `delete` removes only the link), and deleting the filesystem
+root, the workspace, or one of its ancestors is refused. That protection does not
+yet cover writable skill mounts such as `--skill` folders. Under `--dangerously-skip-approvals`, a relative mutation path such as
 `tmp/out` resolves from `/`. On Windows the directory is mounted for file tools at
 `/workspace`, and shell execution uses the absolute host-path mapping supplied to
 the model.
