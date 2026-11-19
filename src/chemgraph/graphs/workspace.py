@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import stat
 from collections.abc import Sequence
 from copy import deepcopy
 from pathlib import Path
@@ -48,8 +49,9 @@ _DEFAULT_INTERRUPT_POLICY = object()
 _WORKSPACE_MOUNT = "/workspace/"
 # Deep Agents file tools reject drive-letter paths, so Windows keeps the virtual mount.
 _CLI_VIRTUAL_MODE = os.name == "nt"
-# Checkpoint storage for Deep Agents' offloaded tool results and summarized history.
-_CLI_STATE_PREFIX = "/chemgraph-state/"
+# Deep Agents' offloaded tool results and summarized history stay in checkpoint state,
+# at the same paths a checkpoint-only supervisor uses.
+_CLI_STATE_PREFIXES = ("/large_tool_results/", "/conversation_history/")
 
 
 class _CLIWorkspaceBackend(LocalShellBackend):
@@ -73,24 +75,32 @@ class _CLIWorkspaceBackend(LocalShellBackend):
         target = Path(file_path)
         if not target.is_absolute():
             target = self.cwd / target
+        refused = DeleteResult(
+            error=f"Error: refusing to delete '{file_path}' because it contains the workspace."
+        )
         try:
-            if target.is_symlink():  # Includes cyclic links, which the resolver rejects.
+            found = os.lstat(target)  # One inspection; fail closed if it is impossible.
+            if not stat.S_ISDIR(found.st_mode):
+                # Symlinks (even cyclic ones) and files: unlink never recurses, and it fails
+                # safely if a directory replaced the entry meanwhile.
                 target.unlink()
                 return DeleteResult(path=file_path)
-            if not target.is_dir():
-                return super().delete(file_path)
-            # Compare identities: /tmp/x and /private/tmp/x name the same directory. Fail
-            # closed when the target cannot be inspected; skip ancestors that no longer exist.
-            found = os.stat(target)
+            # Compare identities: /tmp/x and /private/tmp/x name the same directory. Skip
+            # ancestors that no longer exist.
+            protected = set()
             for candidate in (Path("/"), self.cwd, *self.cwd.parents):
                 try:
                     other = os.stat(candidate)
                 except FileNotFoundError:
                     continue
-                if (other.st_dev, other.st_ino) == (found.st_dev, found.st_ino):
-                    return DeleteResult(
-                        error=f"Error: refusing to delete '{file_path}' because it contains the workspace."
-                    )
+                protected.add((other.st_dev, other.st_ino))
+            if (found.st_dev, found.st_ino) in protected:
+                return refused
+            # The workspace may also sit inside the tree under another name (a bind mount).
+            for directory, _subdirs, _files in os.walk(target, followlinks=False):
+                inner = os.lstat(directory)
+                if (inner.st_dev, inner.st_ino) in protected:
+                    return refused
             # Remove the inspected path itself; rmtree refuses a top-level symlink.
             shutil.rmtree(target)
             return DeleteResult(path=file_path)
@@ -133,7 +143,7 @@ def _require_file_tool_path(root):
         unchanged = False
     if not unchanged:
         raise ValueError(f"Workspace path cannot be used unchanged by file tools: {text}")
-    for prefix in (BUNDLED_SKILLS_PATH, USER_SKILLS_PATH, EXTERNAL_SKILLS_PATH, _CLI_STATE_PREFIX):
+    for prefix in (BUNDLED_SKILLS_PATH, USER_SKILLS_PATH, EXTERNAL_SKILLS_PATH, *_CLI_STATE_PREFIXES):
         if (text.rstrip("/") + "/").startswith(prefix):
             raise ValueError(f"Workspace {text} overlaps the reserved file-tool path {prefix}.")
 
@@ -223,8 +233,8 @@ def real_path_workspace_note(backend):
 class _PrefixedStateBackend(StateBackend):
     """Keep routed checkpoint files under the full path the agent was shown.
 
-    A checkpoint-only supervisor reads a worker's reported path verbatim, so the
-    shared ``files`` channel must store ``/chemgraph-state/...``, not the stripped key.
+    Workers and a checkpoint-only supervisor share the ``files`` channel, so keys must
+    stay ``/large_tool_results/...``, not the key the composite route strips.
     """
 
     def __init__(self, prefix):
@@ -243,11 +253,10 @@ class _PrefixedStateBackend(StateBackend):
 def _normalize_backend(backend: BackendProtocol) -> BackendProtocol:
     """Mount a virtual local workspace at the path Deep Agent expects."""
     if _real_path_cli(backend):
-        # Keep offloaded results off the host root; one route keeps their names distinct.
-        return CompositeBackend(
-            default=backend, routes={_CLI_STATE_PREFIX: _PrefixedStateBackend(_CLI_STATE_PREFIX)},
-            artifacts_root=_CLI_STATE_PREFIX.rstrip("/"),
-        )
+        # Keep offloaded results off the host root, under their unchanged state keys.
+        return CompositeBackend(default=backend, routes={
+            prefix: _PrefixedStateBackend(prefix) for prefix in _CLI_STATE_PREFIXES
+        })
     if isinstance(backend, LocalShellBackend) and backend.virtual_mode:
         return CompositeBackend(
             default=_WorkspaceShellBackend(backend),

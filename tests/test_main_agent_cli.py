@@ -311,6 +311,14 @@ def test_real_path_cli_backend_guards_host_paths(monkeypatch, tmp_path):
     (workspace / "scratch").mkdir()
     assert backend.delete(f"{workspace}/scratch").error is None and removed
     removed.clear()
+    # The workspace can also appear inside a tree under another name (a bind mount).
+    from chemgraph.graphs import workspace as workspace_module
+    elsewhere, real_lstat = tmp_path / "data" / "project", os.lstat
+    elsewhere.mkdir(parents=True)
+    monkeypatch.setattr(workspace_module.os, "lstat",
+                        lambda path, *args, **kwargs: real_lstat(workspace if str(path) == str(elsewhere) else path))
+    assert "refusing" in backend.delete(str(tmp_path / "data")).error
+    monkeypatch.setattr(workspace_module.os, "lstat", real_lstat)
     (workspace / "loop").symlink_to(workspace / "loop")
     assert backend.delete(f"{workspace}/loop").error is None and not (workspace / "loop").is_symlink()
     # A renamed workspace must not disable the guard for its surviving ancestors.

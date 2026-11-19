@@ -239,9 +239,11 @@ shell is exposed. With a workspace on macOS or Linux, file tools and the shell
 use the same real host paths: the workspace is the shell's starting directory,
 file tools take absolute paths (a relative file-tool path resolves from `/`), and
 read tools can read any host file without prompting. On Windows the workspace is
-still mounted for file tools at `/workspace/`. Registry tools run on the host
-independently of this backend; use absolute host paths for registry artifacts.
-Neither the shell nor the file tools are confined to the workspace.
+still mounted for file tools at `/workspace/`, and other absolute file-tool
+paths stay in checkpoint state. Registry tools run on the host independently of
+this backend; use absolute host paths for registry artifacts. On macOS and Linux
+neither the shell nor the file tools are confined to the workspace; on Windows
+the shell is not confined.
 File mutations, shell commands, and reviewed registry operations pause for review.
 
 Start a new session after the capabilities upgrade. Old transcripts remain
@@ -323,8 +325,9 @@ confirmation.
 On macOS and Linux the selected directory is used through its real host path:
 `--deepagent-workspace test/` makes `<absolute test>/example.py` the path for
 both file tools and the shell, and the system prompt names the workspace. For
-host paths, file tools do not follow a symlink that is the final path component
-(the shell does; `delete` removes only the link), and deleting the filesystem
+host paths, `read_file`, `write_file` and `edit_file` do not follow a symlink that
+is the final path component (the shell does; `ls` lists a linked directory, and
+`delete` removes only the link), and deleting the filesystem
 root, the workspace, or one of its ancestors is refused. That protection does not
 yet cover writable skill mounts such as `--skill` folders. Under `--dangerously-skip-approvals`, a relative mutation path such as
 `tmp/out` resolves from `/`. On Windows the directory is mounted for file tools at
