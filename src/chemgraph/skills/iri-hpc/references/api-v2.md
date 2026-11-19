@@ -53,11 +53,11 @@ need not be the scheduler username; do not use it to replace the configured
 
 ALCF's IRI `upload` and `download` return 501. Create the directory here, transfer
 the files with the `globus-transfer` skill, then list them. All `iri_fs` calls use
-the configured `storage_resource_id` (`STORAGE`): an Eagle resource can inspect
-Eagle paths, not `/home`. Use the matching configured storage resource for the
-path; a failure through Eagle does not prove a `/home` environment is absent.
-Compute paths and Globus collection paths can differ; use the mappings in
-`target.toml`.
+the configured `storage_resource_id` (`STORAGE`). On Aurora, use the Flare
+storage resource and the absolute `/lus/flare/projects/<project>/…` path for
+IRI filesystem operations. The same directory on the `alcf#dtn_flare` Globus
+collection is `/<project>/…`. Use the mappings in `target.toml` for both
+staging and collection. Use the Home storage resource when inspecting `/home`.
 
 ```bash
 exec bash /dev/fd/3 3<<'BASH' </dev/null

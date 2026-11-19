@@ -20,6 +20,7 @@ from langchain_core.tools import tool
 from chemgraph.tools.alcf_iri_core import (
     # Re-export so existing `from alcf_iri_tools import ...` keeps working
     CATEGORIES,
+    FILESYSTEM_RESOURCE_HINT,
     dispatch,
 )
 
@@ -97,11 +98,7 @@ def alcf_compute(action: str, params: dict | None = None) -> Any:
     "...) will succeed if the server is configured to permit them and "
     "raise a clear RuntimeError otherwise -- ALWAYS ATTEMPT them if "
     "the user asks; do NOT refuse preemptively. Needs $ALCF_API_TOKEN. "
-    "IMPORTANT: filesystem targets STORAGE resources, NOT compute. "
-    "Pick the `machine` argument by path prefix: /eagle/... -> "
-    "'eagle', /home/... -> 'home'. Do NOT pass 'aurora', 'crux', or "
-    "'polaris' -- those are compute UUIDs and IRI's filesystem "
-    "endpoints will 400."
+    + FILESYSTEM_RESOURCE_HINT
     + _DISCOVERY_HINT
 ))
 def alcf_filesystem(action: str, params: dict | None = None) -> Any:

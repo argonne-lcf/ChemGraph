@@ -682,25 +682,24 @@ def _compute_actions():
     }
 
 
+FILESYSTEM_RESOURCE_HINT = (
+    "Set machine to the storage resource for the path. Use 'flare' for /flare or "
+    "/lus/flare/projects, 'eagle' for /eagle or /lus/eagle/projects, and 'home' for /home. "
+    "Use 'aurora' for Aurora compute jobs."
+)
+
+
 def _filesystem_actions():
     def _r(name):
         return _resource_id(name)
-    # ALCF's fs endpoints target either compute-resource UUIDs (Crux,
-    # Aurora, Polaris) OR storage-resource UUIDs (Eagle, Home). The docs
-    # examples use storage UUIDs. Either works; agent picks based on
-    # which filesystem it wants to touch.
+
+    storage_param = ("str", True, FILESYSTEM_RESOURCE_HINT)
     return {
         "ls": (
             "read",
             "List directory contents.",
             {
-                "machine": ("str", True,
-                    "STORAGE resource, NOT the compute machine. Pick "
-                    "by path prefix: /eagle/... -> 'eagle', /home/... "
-                    "-> 'home'. Do NOT pass 'aurora', 'crux', or "
-                    "'polaris' here -- IRI's filesystem endpoints "
-                    "target storage UUIDs, not compute UUIDs. "
-                    "/flare/... is not exposed."),
+                "machine": storage_param,
                 "path": ("str", True, "Absolute path to list."),
                 "show_hidden": ("bool", False, "Include dotfiles."),
                 "recursive": ("bool", False, "Recurse into subdirs."),
@@ -718,12 +717,7 @@ def _filesystem_actions():
             "File metadata (size, mode, mtime). NOTE: ALCF returned "
             "501 'not implemented yet' as of 2026-08-11 -- use `ls` "
             "which returns similar per-entry metadata.",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "path": ("str", True, "Absolute path.")},
             lambda machine, path, **_: _get(
                 f"/filesystem/stat/{_r(machine)}", params={"path": path},
@@ -732,12 +726,7 @@ def _filesystem_actions():
         "cat": (
             "read",
             "Read full file contents (use `view` for large files with pagination).",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "path": ("str", True, "Absolute path.")},
             lambda machine, path, **_: _get(
                 f"/filesystem/file/{_r(machine)}", params={"path": path},
@@ -747,12 +736,7 @@ def _filesystem_actions():
             "read",
             "Paginated file read. Returns up to `size` bytes starting "
             "at `offset`. Preferred over `cat` for large files.",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "path": ("str", True, "Absolute path."),
              "size": ("int", False, "Max bytes to return (facility default if omitted)."),
              "offset": ("int", False, "Byte offset to start from (default 0).")},
@@ -768,12 +752,7 @@ def _filesystem_actions():
         "head": (
             "read",
             "First N lines of a file.",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "path": ("str", True, "Absolute path."),
              "lines": ("int", False, "Number of lines (facility default if omitted).")},
             lambda machine, path, lines=None, **_: _get(
@@ -788,12 +767,7 @@ def _filesystem_actions():
         "tail": (
             "read",
             "Last N lines of a file (useful for job stderr/stdout).",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "path": ("str", True, "Absolute path."),
              "lines": ("int", False, "Number of lines.")},
             lambda machine, path, lines=None, **_: _get(
@@ -808,12 +782,7 @@ def _filesystem_actions():
         "checksum": (
             "read",
             "MD5/SHA of a file.",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "path": ("str", True, "Absolute path.")},
             lambda machine, path, **_: _get(
                 f"/filesystem/checksum/{_r(machine)}", params={"path": path},
@@ -822,12 +791,7 @@ def _filesystem_actions():
         "download": (
             "read",
             "Download a file to the caller (returns bytes; small files only).",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "path": ("str", True, "Absolute path.")},
             lambda machine, path, **_: _get(
                 f"/filesystem/download/{_r(machine)}", params={"path": path},
@@ -836,12 +800,7 @@ def _filesystem_actions():
         "mkdir": (
             "write",
             "Create directory. UNSAFE.",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "path": ("str", True, "Absolute path."),
              "parent": ("bool", False,
                  "If true, create parent dirs (like mkdir -p). Default false.")},
@@ -855,12 +814,7 @@ def _filesystem_actions():
         "rm": (
             "write",
             "Remove file/dir. UNSAFE.",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "path": ("str", True, "Absolute path.")},
             lambda machine, path, **_: (
                 _check_unsafe("rm") or _delete_with_query(
@@ -871,12 +825,7 @@ def _filesystem_actions():
         "chmod": (
             "write",
             "Change permissions. UNSAFE. mode is octal string like '700'.",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "path": ("str", True, "Absolute path."),
              "mode": ("str", True, "Octal mode like '700' or '755'.")},
             lambda machine, path, mode, **_: (
@@ -889,12 +838,7 @@ def _filesystem_actions():
         "chown": (
             "write",
             "Change owner/group. UNSAFE.",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "path": ("str", True, "Absolute path."),
              "owner": ("str", False, "New owner username or uid."),
              "group": ("str", False, "New group name or gid.")},
@@ -915,12 +859,7 @@ def _filesystem_actions():
             "write",
             "Rename/move. UNSAFE. Body shape is unofficial (ALCF has "
             "not documented an example).",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "src": ("str", True, "Source path."),
              "dst": ("str", True, "Destination path.")},
             lambda machine, src, dst, **_: (
@@ -933,12 +872,7 @@ def _filesystem_actions():
         "cp": (
             "write",
             "Copy. UNSAFE. Body shape unofficial.",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "src": ("str", True, "Source path."),
              "dst": ("str", True, "Destination path.")},
             lambda machine, src, dst, **_: (
@@ -951,12 +885,7 @@ def _filesystem_actions():
         "symlink": (
             "write",
             "Create symlink. UNSAFE. Body shape unofficial.",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "target": ("str", True, "Existing path being linked to."),
              "link_path": ("str", True, "New symlink path.")},
             lambda machine, target, link_path, **_: (
@@ -969,12 +898,7 @@ def _filesystem_actions():
         "compress": (
             "write",
             "tar/gzip files. UNSAFE. Body shape unofficial.",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "paths": ("list[str]", True, "Absolute paths to include."),
              "archive": ("str", True, "Output archive path.")},
             lambda machine, paths, archive, **_: (
@@ -987,12 +911,7 @@ def _filesystem_actions():
         "extract": (
             "write",
             "Untar. UNSAFE. Body shape unofficial.",
-            {"machine": ("str", True,
-                "STORAGE resource, NOT the compute machine. Pick by "
-                "path prefix: /eagle/... -> 'eagle', /home/... -> "
-                "'home'. Do NOT pass 'aurora', 'crux', or 'polaris' "
-                "here -- IRI's filesystem endpoints target storage "
-                "UUIDs, not compute UUIDs. /flare/... is not exposed."),
+            {"machine": storage_param,
              "archive": ("str", True, "Archive path."),
              "dest": ("str", True, "Destination directory.")},
             lambda machine, archive, dest, **_: (
