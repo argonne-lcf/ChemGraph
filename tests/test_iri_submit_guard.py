@@ -23,6 +23,9 @@ REQUEST = {"resource_id": "polaris-id", "job_spec": {"executable": "/bin/bash"}}
 PAGES = {
     "/status/resources": [
         {"name": "Polaris", "resource_type": "urn:doe-iri:resource:compute", "id": "polaris-id"},
+        {"name": "Aurora", "resource_type": "urn:doe-iri:resource:compute", "id": "aurora-id"},
+        {"name": "Crux", "resource_type": "urn:doe-iri:resource:compute", "id": "crux-id"},
+        {"name": "Flare", "resource_type": "urn:doe-iri:resource:storage", "id": "flare-id"},
         {"name": "Eagle", "resource_type": "urn:doe-iri:resource:storage", "id": "eagle-id"},
     ],
     "/account/projects": [
@@ -375,30 +378,41 @@ def configure(monkeypatch):
     return module
 
 
-def test_configure_asks_once_then_writes_an_eagle_target(configure, tmp_path, capsys):
-    assert configure.eagle_root("/lus/eagle/projects/P/u") == "/eagle/P/u"
-    assert configure.eagle_root("/lus/eagle/other/u") is None
-    assert configure.eagle_root("/eagle/../home/u") is None
+@pytest.mark.parametrize("system,env,mount,filesystem,collection", [
+    ("polaris", "/grand/catalyst/world-shared/chemgraph/alcf_chemgraph_env",
+     "/eagle", "eagle", "05d2c76a-e867-4f67-aa57-76edeb0beda0"),
+    ("crux", "/grand/catalyst/world-shared/chemgraph/crux/alcf_chemgraph_env",
+     "/eagle", "eagle", "05d2c76a-e867-4f67-aa57-76edeb0beda0"),
+    ("aurora", "/lus/flare/projects/catalyst/world_shared/chemgraph/alcf_chemgraph_env",
+     "/lus/flare/projects", "flare", "f39a7a0f-5bfc-46ce-9615-ba9f8592814f"),
+])
+def test_configure_and_prepare_site(configure, tmp_path, capsys, system, env, mount, filesystem, collection):
+    filesystems = "flare" if system == "aurora" else "home:eagle:grand"
+    args = [] if system == "polaris" else ["--system", system]
+    assert configure.project_path(f"/lus/{filesystem}/projects/P/u", filesystem).as_posix() == "P/u"
+    assert configure.project_path(f"/{filesystem}/../home/u", filesystem) is None
     tmp_path = tmp_path / "w-\N{GRINNING FACE}"
     tmp_path.mkdir()
-    assert configure.configure(tmp_path) == 2
+    assert configure.main([str(tmp_path), *args]) == 2
     assert json.loads(capsys.readouterr().out) == {
         "ask": ["project"],
         "choices": {"project": ["A", "B"]},
     }
-    assert configure.configure(tmp_path, remote_root="/home/me/runs") == 1
+    assert configure.main([str(tmp_path), *args, "--remote-root", "/eagle/u" if system == "aurora" else "/flare/u"]) == 1
     assert not (tmp_path / "target.toml").exists()
 
-    answers = {"project": "A"}
-    assert configure.configure(tmp_path, **answers) == 0
+    answers = [str(tmp_path), *args, "--project", "A"]
+    assert configure.main(answers) == 0
     target = tomllib.loads((tmp_path / "target.toml").read_text(encoding="utf-8"))
-    assert target["python"] == configure.POLARIS_ENV + "/bin/python"
-    assert target["filesystems"] == "home:eagle:grand"
-    assert target["username"] == "me" and target["storage_resource_id"] == "eagle-id"
-    assert target["remote_root"] == "/eagle/A/me/chemgraph-runs"
+    assert target["python"] == env + "/bin/python"
+    assert target["filesystems"] == filesystems
+    assert target["compute_resource_id"] == f"{system}-id"
+    assert target["remote_collection_id"] == collection
+    assert target["username"] == "me" and target["storage_resource_id"] == f"{filesystem}-id"
+    assert target["remote_root"] == f"{mount}/A/me/chemgraph-runs"
     assert target["remote_globus_root"] == "/A/me/chemgraph-runs"
     assert target["local_globus_root"].endswith("w-\N{GRINNING FACE}")
-    assert configure.configure(tmp_path, **answers) == 1
+    assert configure.main(answers) == 1
 
     spec = importlib.util.spec_from_file_location("iri_prepare", SCRIPT.with_name("iri_prepare.py"))
     prepare = importlib.util.module_from_spec(spec)
@@ -409,13 +423,31 @@ def test_configure_asks_once_then_writes_an_eagle_target(configure, tmp_path, ca
     if shutil.which("bash"):
         assert prepare.prepare("water-1", tmp_path) == 0
         job = json.loads((run / "request.json").read_text())["job_spec"]
-        assert job["directory"] == "/eagle/A/me/chemgraph-runs/water-1"
-        assert job["attributes"]["custom_attributes"] == {"filesystems": "home:eagle:grand"}
-        assert f"source {configure.POLARIS_ENV}/bin/activate" in (run / "launch.sh").read_text()
+        assert job["directory"] == f"{mount}/A/me/chemgraph-runs/water-1"
+        assert job["attributes"]["custom_attributes"] == {"filesystems": filesystems}
+        assert f"source {env}/bin/activate" in (run / "launch.sh").read_text()
     (run / "submission.started").write_text("{}")
     before = {p.name: p.read_bytes() for p in run.iterdir()}
     assert prepare.prepare("water-1", tmp_path) == 1
     assert before == {p.name: p.read_bytes() for p in run.iterdir()}
+
+
+def test_site_configuration_overrides_and_missing_resource(configure, tmp_path, monkeypatch):
+    args = [str(tmp_path), "--system", "crux", "--project", "A",
+            "--environment-setup", "source /eagle/A/env/bin/activate"]
+    assert configure.main(args) == 1
+    assert not (tmp_path / "target.toml").exists()
+    args += ["--python", "/eagle/A/env/bin/python"]
+    resources = PAGES["/status/resources"]
+    with monkeypatch.context() as patch:
+        patch.setitem(PAGES, "/status/resources", [r for r in resources if r["name"] != "Crux"])
+        assert configure.main(args) == 1
+        assert not (tmp_path / "target.toml").exists()
+    assert configure.main(args) == 0
+    target = tomllib.loads((tmp_path / "target.toml").read_text())
+    assert target["environment_setup"] == "source /eagle/A/env/bin/activate"
+    assert target["python"] == "/eagle/A/env/bin/python"
+    assert target["filesystems"] == "home:eagle"
 
 
 @pytest.mark.skipif(sys.platform == "win32" or not shutil.which("bash"), reason="needs bash")

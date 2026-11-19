@@ -11,11 +11,13 @@ a quoted `bash -c` or a stdin heredoc. Bash and `/dev/fd` support are required.
 ```bash
 exec bash /dev/fd/3 3<<'BASH' </dev/null
 LOCAL=...  # configured local collection ID
-EAGLE=...  # configured Eagle collection ID
+REMOTE=...  # configured remote collection ID
+COLLECTION=...  # alcf#dtn_flare for Aurora, alcf#dtn_eagle for Crux or Polaris
+PROJECT=...  # ALCF project directory
 globus endpoint local-id                       # this laptop's Globus Connect Personal
-globus endpoint search "alcf#dtn_eagle"        # ALCF Eagle mapped collection
+globus endpoint search "$COLLECTION"
 globus ls "$LOCAL:/~/"                         # Globus Connect Personal home
-globus ls "$EAGLE:/<project>/"                 # Eagle: compute path /eagle/<project>/
+globus ls "$REMOTE:/$PROJECT/"
 BASH
 ```
 
