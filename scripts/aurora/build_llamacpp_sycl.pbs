@@ -1,0 +1,99 @@
+#!/bin/bash -l
+#PBS -l select=1
+#PBS -l place=scatter
+#PBS -l walltime=00:59:00
+#PBS -q debug
+#PBS -A MatSciAI
+#PBS -l filesystems=flare
+#PBS -N llamacpp-sycl-build
+#PBS -j oe
+
+# Build llama.cpp with the Intel SYCL backend for Aurora (Intel Data Center GPU Max / PVC).
+# Produces llama-server (+ llama-cli, llama-bench) that runs all four Aurora recipe models:
+# gpt-oss-120b, Nemotron-3-Ultra (nemotron_h), Nemotron-4-340B (nemotron), and Inkling.
+#
+# There is NO facility-wide llama.cpp module on Aurora, so each user must build it once. This script
+# is self-contained: it uses only Aurora modules (oneapi compiler, cmake, ninja) and system git —
+# no personal conda/env required.
+#
+# Usage:
+#   qsub -q debug -v LLAMA_ROOT=$HOME/llamacpp-sycl scripts/aurora/build_llamacpp_sycl.pbs
+#   # then point recipes at:  BIN=$LLAMA_ROOT/build/bin
+#
+# Inkling note: the `inkling` architecture is not on llama.cpp main yet; it requires PR #25731.
+# Set BUILD_INKLING=1 (default) to merge that PR so all four models work. The other three models
+# work from a recent main tip on their own.
+
+set -euo pipefail
+
+# ---- config (override with qsub -v) ----
+LLAMA_ROOT=${LLAMA_ROOT:-$HOME/llamacpp-sycl}     # where to clone + build
+LLAMA_REF=${LLAMA_REF:-master}                    # base ref (branch/tag/commit) with gpt-oss/nemotron
+BUILD_INKLING=${BUILD_INKLING:-1}                 # 1 = also merge PR #25731 for Inkling support
+SRC=$LLAMA_ROOT/llama.cpp
+BUILD=$LLAMA_ROOT/build
+LOGS=$LLAMA_ROOT/logs
+export http_proxy=${http_proxy:-http://proxy.alcf.anl.gov:3128}
+export https_proxy=${https_proxy:-http://proxy.alcf.anl.gov:3128}
+export ftp_proxy=${ftp_proxy:-http://proxy.alcf.anl.gov:3128}
+
+mkdir -p "$LOGS" "$BUILD"
+
+# ---- toolchain from Aurora modules (no conda needed) ----
+module load oneapi/release/2025.3.1     # provides icx / icpx + SYCL runtime
+module load cmake ninja 2>/dev/null || module load cmake/3.31.11 ninja/1.13.0
+
+echo "host=$(hostname) date=$(date -Is)"
+echo "icpx=$(icpx --version 2>&1 | head -1)"
+echo "cmake=$(cmake --version | head -1)  ninja=$(ninja --version 2>/dev/null)"
+
+# ---- fetch source ----
+if [ ! -d "$SRC/.git" ]; then
+  echo "Cloning llama.cpp into $SRC ..."
+  git clone https://github.com/ggml-org/llama.cpp.git "$SRC"
+fi
+cd "$SRC"
+git fetch --all --tags
+git checkout -f "$LLAMA_REF"
+git pull --ff-only 2>/dev/null || true
+echo "base git=$(git rev-parse HEAD) $(git log -1 --oneline)"
+
+# ---- optional: merge Inkling PR #25731 ----
+if [ "$BUILD_INKLING" = "1" ]; then
+  if ! grep -RIl -i 'inkling' src include ggml >/dev/null 2>&1; then
+    echo "Merging PR #25731 for Inkling architecture ..."
+    git fetch origin pull/25731/head:pr-25731
+    # rebase the PR onto the chosen base so the other 3 models stay current
+    git checkout -f pr-25731
+  fi
+  grep -RIl -i 'inkling' src include ggml 2>/dev/null | head -3 \
+    || { echo "ERROR: inkling arch not present after merge"; exit 3; }
+fi
+
+# ---- sanity: all four architectures present ----
+echo "=== architecture presence check ==="
+for a in "gpt-oss" "nemotron_h" "nemotron" "inkling"; do
+  if grep -RIl -i "$a" src include ggml >/dev/null 2>&1; then echo "  OK   $a"; else echo "  MISS $a"; fi
+done
+
+# ---- configure + build (SYCL for PVC) ----
+rm -rf "$BUILD"
+cmake -S "$SRC" -B "$BUILD" -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DGGML_SYCL=ON \
+  -DGGML_SYCL_F16=ON \
+  -DGGML_SYCL_DEVICE_ARCH=pvc \
+  -DCMAKE_C_COMPILER=icx \
+  -DCMAKE_CXX_COMPILER=icpx \
+  -DLLAMA_BUILD_TESTS=OFF \
+  -DLLAMA_BUILD_EXAMPLES=ON \
+  -DLLAMA_BUILD_SERVER=ON
+
+cmake --build "$BUILD" -j "$(nproc)"
+
+echo "=== binaries ==="
+ls -lh "$BUILD/bin/llama-server" "$BUILD/bin/llama-cli" "$BUILD/bin/llama-bench" 2>/dev/null
+echo
+echo "Build complete. Point the ChemGraph Aurora recipes at this build:"
+echo "  export BIN=$BUILD/bin"
+echo "BUILD_OK=1 date=$(date -Is)"
