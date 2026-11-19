@@ -2,6 +2,8 @@
 
 import importlib
 import json
+import os
+import shutil
 from types import SimpleNamespace
 
 import pytest
@@ -257,13 +259,21 @@ def test_experimental_backend_requires_confirmation_and_filters_environment(
     monkeypatch.setenv("SYSTEMROOT", "C:\\Windows")
     monkeypatch.setenv("OPENAI_API_KEY", "must-not-leak")
 
-    backend = commands._create_experimental_deepagent_backend(str(tmp_path))
+    workspace = tmp_path / "[red]run"
+    workspace.mkdir()
+    with console.capture() as capture:
+        backend = commands._create_experimental_deepagent_backend(str(workspace))
+    panel = " ".join(capture.get().replace("│", " ").split())
+    assert "[red]run" in panel  # Shown literally, not as Rich markup.
+    if os.name != "nt":
+        assert "can read any host file without prompting" in panel
+        assert "a relative path is read from /" in panel
 
     from chemgraph.agent.deepagent_backend import DEEPAGENT_ENV_ALLOWLIST, create_host_shell_backend
     from chemgraph.graphs.workspace import cli_backend_descriptor
 
-    assert backend.cwd == tmp_path.resolve()
-    assert backend.virtual_mode is True
+    assert backend.cwd == workspace.resolve()
+    assert backend.virtual_mode is (os.name == "nt")
     assert backend._env["PATH"] == "/test/bin"
     assert backend._env["SYSTEMROOT"] == "C:\\Windows"
     assert "OPENAI_API_KEY" not in backend._env
@@ -271,6 +281,46 @@ def test_experimental_backend_requires_confirmation_and_filters_environment(
     assert backend._env == create_host_shell_backend(tmp_path)._env
     assert cli_backend_descriptor(backend)["environment_policy"] == list(DEEPAGENT_ENV_ALLOWLIST)
     assert commands._DEEPAGENT_ENV_ALLOWLIST is DEEPAGENT_ENV_ALLOWLIST
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows keeps the virtual /workspace mount")
+def test_real_path_cli_backend_guards_host_paths(monkeypatch, tmp_path):
+    from chemgraph.graphs.workspace import _normalize_backend, create_cli_workspace_backend
+
+    with pytest.raises(ValueError, match="unchanged"):
+        create_cli_workspace_backend((tmp_path / "back\\slash").mkdir() or tmp_path / "back\\slash")
+
+    workspace, results = tmp_path / "real" / "ws", tmp_path / "results"
+    workspace.mkdir(parents=True)
+    results.mkdir()
+    (results / "keep.txt").write_text("kept")
+    (workspace / "latest").symlink_to(results, target_is_directory=True)
+    (tmp_path / "alias").symlink_to(tmp_path / "real", target_is_directory=True)
+    backend = _normalize_backend(create_cli_workspace_backend(workspace))
+    assert backend.delete(f"{workspace}/latest").error is None
+    assert (results / "keep.txt").read_text() == "kept"
+
+    removed = []
+    monkeypatch.setattr(shutil, "rmtree", lambda path, *args, **kwargs: removed.append(path))
+    for target in ("", ".", "/", str(workspace), str(tmp_path / "alias" / "ws"), str(workspace.parent)):
+        assert "refusing" in backend.delete(target).error
+    assert removed == []
+    (workspace / "scratch").mkdir()
+    assert backend.delete(f"{workspace}/scratch").error is None and removed
+    removed.clear()
+    # The workspace can also appear inside a tree under another name (a bind mount).
+    from chemgraph.graphs import workspace as workspace_module
+    elsewhere, real_lstat = tmp_path / "data" / "project", os.lstat
+    elsewhere.mkdir(parents=True)
+    monkeypatch.setattr(workspace_module.os, "lstat",
+                        lambda path, *args, **kwargs: real_lstat(workspace if str(path) == str(elsewhere) else path))
+    assert "refusing" in backend.delete(str(tmp_path / "data")).error
+    monkeypatch.setattr(workspace_module.os, "lstat", real_lstat)
+    # A renamed workspace must not disable the guard for its surviving ancestors.
+    workspace.rename(tmp_path / "real" / "moved")
+    for target in (str(tmp_path / "real"), "/"):
+        assert "refusing" in backend.delete(target).error
+    assert removed == []
 
 
 def test_experimental_backend_stops_when_confirmation_is_declined(
@@ -1881,6 +1931,7 @@ def test_cli_reconstructs_pending_workspace_action_from_sqlite(monkeypatch, tmp_
     from chemgraph.models.endpoints import PreparedModel
     from chemgraph.registry.tools import ToolRegistry
     from langchain_core.messages import AIMessage
+    from tests.conftest import cli_file_path
     from tests.test_main_agent import _ScriptedChatModel
 
     saved_workspace, supplied_workspace = tmp_path / "saved", tmp_path / "supplied"
@@ -1893,7 +1944,7 @@ def test_cli_reconstructs_pending_workspace_action_from_sqlite(monkeypatch, tmp_
         return write(self, *args, **kwargs)
     monkeypatch.setattr(_CLIWorkspaceBackend, "write", record_write)
     responses = [AIMessage(content="", tool_calls=[{
-        "name": "write_file", "args": {"file_path": "/workspace/review.txt", "content": "approved"},
+        "name": "write_file", "args": {"file_path": cli_file_path(saved_workspace, "review.txt"), "content": "approved"},
         "id": "write-1", "type": "tool_call",
     }])]
     monkeypatch.setattr("chemgraph.agent.llm_agent.load_chat_model_prepared", lambda **kwargs: (

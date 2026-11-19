@@ -96,6 +96,24 @@ def test_action_reviews_escape_terminal_controls(monkeypatch, name, args, full):
     assert action == original
 
 
+@pytest.mark.parametrize("name,path,target", [
+    ("delete", "tmp/run-output", "/tmp/run-output"),
+    ("write_file", "/p/run\\old.xyz", "/p/run/old.xyz"),
+    ("load_document", "data/report.pdf", None),
+])
+def test_action_review_shows_the_file_tool_target(name, path, target):
+    action = {"name": name, "args": {"file_path": path}}
+    terminal = Console(width=200, color_system=None)
+    with terminal.capture() as capture:
+        terminal.print(build_action_review(action, 1, 1)[0])
+    summary = action_review_summary(action).plain
+    if target is None:
+        assert summary.endswith(f"Path: {path}") and "Target path" not in capture.get()
+    else:
+        assert summary.endswith(f"Path: {target} (given: {path})")
+        assert f"Target path: {target}" in capture.get()
+
+
 def test_tool_reason_is_shown_once_and_escaped_in_review_and_event_line():
     from chemgraph.cli.commands import make_tool_event_renderer
 

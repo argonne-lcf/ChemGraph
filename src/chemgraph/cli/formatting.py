@@ -72,6 +72,16 @@ def _safe_review_text(value: str) -> str:
     )
 
 
+def _safe_path_text(value: str) -> str:
+    """Show a path on one line, with layout and bidirectional controls made visible."""
+    return re.sub(
+        r"[\x00-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]",
+        lambda match: f"\\x{ord(match.group()):02x}" if ord(match.group()) < 256
+        else f"\\u{ord(match.group()):04x}",
+        value,
+    )
+
+
 def _limit_review_text(
     value: str, max_lines: int = 40, max_chars: int = 8000,
 ) -> tuple[str, bool]:
@@ -86,12 +96,37 @@ def _limit_review_text(
     return f"{head}\n{note}\n{tail}", True
 
 
+_FILE_TOOL_MUTATIONS = frozenset({"write_file", "edit_file", "delete"})
+
+
+def _file_tool_target(action: dict) -> str | None:
+    """Return the path a built-in file mutation will use when it differs from the input."""
+    args = action.get("args")
+    if action.get("name") not in _FILE_TOOL_MUTATIONS or not isinstance(args, dict):
+        return None
+    path = args.get("file_path")
+    if not isinstance(path, str):
+        return None
+    from deepagents.backends.utils import validate_path
+
+    try:
+        target = validate_path(path)
+    except ValueError:
+        return "(invalid path)"
+    return None if target == path else target
+
+
 def action_review_summary(action: dict) -> Text:
     """Repeat a short, literal tool/path identity beside the decision prompt."""
     values = [f"Tool: {action.get('name', 'unknown')}"]
     args = action.get("args", {})
     if isinstance(args, dict) and "file_path" in args:
-        values.append(f"Path: {args['file_path']}")
+        target = _file_tool_target(action)
+        raw = str(args["file_path"])
+        values.append(f"Path: {raw}" if target is None else
+                      f"Path: {raw} {target}" if target == "(invalid path)" else
+                      f"Path: {target} (given: {raw})")
+        values = [_safe_path_text(value) for value in values]
     text = _safe_review_text(" | ".join(values)).replace("\n", "\\n").replace("\t", "\\t")
     if len(text) > 240:
         text = text[:120] + " … " + text[-120:]
@@ -142,6 +177,8 @@ def build_action_review(
     except (TypeError, ValueError):
         arguments = (repr(args), None)
     parts = [(f"Tool: {name}", None)]
+    if (target := _file_tool_target(action)) is not None:
+        parts.append((_safe_path_text(f"Target path: {target}"), None))
     if reason is not None:
         parts.append((f"Reason: {reason}", None))
     if args or not preview:

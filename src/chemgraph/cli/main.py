@@ -140,7 +140,8 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument("--workspace", default=None, metavar="PATH",
-                        help="Enable main_agent file and shell access in this workspace")
+                        help="Enable main_agent file and shell access in this workspace "
+                             "(real host paths; mounted at /workspace on Windows)")
     parser.add_argument("--skill", dest="skills", action="append", default=None,
                         metavar="PATH", help="Add a main_agent host skill collection")
     parser.add_argument("--discover-skills", action=argparse.BooleanOptionalAction,
@@ -162,7 +163,8 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         metavar="PATH",
         help=(
-            "Workspace root mounted at /workspace for file tools; shell "
+            "Workspace directory where shell commands start; file tools use real "
+            "host paths (mounted at /workspace on Windows), and shell "
             "commands are not confined to it"
         ),
     )

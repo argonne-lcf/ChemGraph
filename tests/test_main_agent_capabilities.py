@@ -1,5 +1,6 @@
 """Direct main-agent work, configured delegation, and durable approvals."""
 
+import os
 from typing import Any, NotRequired
 
 import pytest
@@ -11,6 +12,7 @@ from langgraph.graph import END, START, StateGraph
 from chemgraph.agent.main_session import MainAgentSession
 from chemgraph.cli.checkpoint_runtime import CheckpointRuntime
 from chemgraph.graphs.main_agent import construct_main_agent_graph
+from chemgraph.graphs.workspace import create_cli_workspace_backend
 from chemgraph.memory.schemas import MainAgentGraphConfig, MainAgentSessionMetadata
 from chemgraph.memory.store import SessionStore
 from chemgraph.registry.tools import ToolRegistry
@@ -182,6 +184,28 @@ async def test_direct_return_uses_current_tool_result_and_restores():
     assert (await session.restore()).assistant_response == "current result"
     snapshot = await workflow.aget_state(session.config)
     assert isinstance(snapshot.values["messages"][-1], ToolMessage)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows keeps the virtual /workspace mount")
+def test_real_path_cli_checkpoint_route_keeps_reported_paths(tmp_path):
+    from chemgraph.graphs.deep_agent import construct_deep_agent_graph
+
+    paths = ("/large_tool_results/same.md", "/conversation_history/same.md")
+    calls = [("write_file", {"file_path": path, "content": f"marker-{i}"}) for i, path in enumerate(paths)]
+    calls += [("read_file", {"file_path": path}) for path in paths]
+    model = _ScriptedChatModel(responses=[
+        *[AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": f"c{i}", "type": "tool_call"}])
+          for i, (name, args) in enumerate(calls)],
+        AIMessage(content="done"),
+    ])
+    workflow = construct_deep_agent_graph(model, backend=create_cli_workspace_backend(tmp_path),
+                                          interrupt_on=None, discover_skills=False)
+    state = workflow.invoke({"messages": [HumanMessage(content="go")]}, {"configurable": {"thread_id": "t"}})
+    reads = [str(message.content) for message in state["messages"] if message.type == "tool"][2:]
+    assert ["marker-0" in reads[0], "marker-1" in reads[1]] == [True, True]
+    # Keys match a checkpoint-only supervisor's layout, so offloads cross in both directions.
+    assert set(paths) <= set(state["files"])
+    assert list(tmp_path.iterdir()) == [] and not any(os.path.lexists(path) for path in paths)
 
 
 @pytest.mark.asyncio

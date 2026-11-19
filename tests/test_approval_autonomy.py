@@ -1,6 +1,8 @@
 """Approval policy, unattended execution, and durable launch authorization."""
 
 import json
+import os
+import sys
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -19,6 +21,9 @@ from chemgraph.graphs.workspace import create_cli_workspace_backend
 from tests.test_main_agent_configuration import api as api
 from tests.test_main_agent_execution_context import model_loader as model_loader, call
 from tests.test_main_agent_cli import cli_main, _run_args
+from tests.conftest import cli_file_path
+from tests.test_deep_agent import _message_content_text, _shell_command
+from tests.test_main_agent import _ScriptedChatModel
 
 
 @pytest.fixture(autouse=True)
@@ -93,9 +98,10 @@ async def test_native_calculations_follow_shared_policy(model_loader, route, mod
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("route", ["main_agent", "worker", "legacy", "deep_agent"])
-async def test_workspace_bypass_reaches_shell_and_file_tools(tmp_path, model_loader, route):
+async def test_workspace_bypass_reaches_shell_and_file_tools(tmp_path, model_loader, monkeypatch, route):
     responses, _ = model_loader
     backend = create_cli_workspace_backend(tmp_path)
+    root = tmp_path
     options = {"backend": backend, "subagent_names": [], "tool_registry": ToolRegistry([])}
     options["discover_skills"] = False
     if route in {"worker", "legacy"}:
@@ -103,19 +109,38 @@ async def test_workspace_bypass_reaches_shell_and_file_tools(tmp_path, model_loa
             options["subagent_names"] = ["deep_agent"]
             responses.append(call("load_agents", names=["deep_agent"]))
         else:
-            options.update(subagent_names=None, enable_deepagent=True, deepagent_backend=backend,
+            # The legacy worker gets its own workspace, distinct from the supervisor's.
+            root = tmp_path / "worker"
+            root.mkdir()
+            options.update(subagent_names=None, enable_deepagent=True,
+                           deepagent_backend=create_cli_workspace_backend(root),
                            deepagent_discover_skills=False)
         responses.append(call("task", subagent_type="deep_agent", description="write the file"))
     elif route == "deep_agent":
         options = {"deepagent_backend": backend, "deepagent_discover_skills": False,
                    "deepagent_tool_registry": ToolRegistry([])}
-    responses.extend([call("write_file", file_path="/workspace/result.txt", content="autonomous"),
-                      call("execute", command="printf autonomous"), AIMessage(content="done"), AIMessage(content="main done")])
+    write = len(responses)
+    read = _shell_command(sys.executable, "-c", "print(open('result.txt').read())")
+    responses.extend([call("write_file", file_path=cli_file_path(root, "result.txt"), content="autonomous"),
+                      call("execute", command=read), AIMessage(content="done"), AIMessage(content="main done")])
+    seen = []
+    generate = _ScriptedChatModel._generate
+    def record(self, messages, *args, **kwargs):
+        seen.append(messages)
+        return generate(self, messages, *args, **kwargs)
+    monkeypatch.setattr(_ScriptedChatModel, "_generate", record)
     agent = ChemGraph(workflow_type="deep_agent" if route == "deep_agent" else "main_agent",
                       approval_mode="bypass", **options)
     result = await MainAgentSession(agent.workflow).run("write")
     assert result.status == "completed"
-    assert (tmp_path / "result.txt").read_text() == "autonomous"
+    assert (root / "result.txt").read_text() == "autonomous"
+    # The shell sees the file the file tool wrote: one namespace.
+    output = str(seen[write + 2][-1].content)
+    assert "autonomous" in output and "exit code 0" in output
+    if os.name != "nt":
+        system = _message_content_text(seen[write][0])
+        assert f"The workspace is `{root.resolve().as_posix()}`, the shell's starting directory" in system
+        assert "a relative file-tool path resolves from `/`" in system
 
 
 @pytest.fixture
@@ -137,7 +162,7 @@ def test_headless_restart_does_not_replay_completed_tools(headless, tmp_path, ca
     run, responses, requests = headless
     reports = []
     monkeypatch.setattr(commands, "show_startup_report", lambda: reports.append(True))
-    responses[:] = [call("write_file", file_path="/workspace/result.txt", content="first"), AIMessage(content="done")]
+    responses[:] = [call("write_file", file_path=cli_file_path(tmp_path, "result.txt"), content="first"), AIMessage(content="done")]
     assert run(query="write", workspace=str(tmp_path)) == 0
     assert reports == [True]
     reports.clear()
@@ -439,7 +464,7 @@ def test_headless_exports_selected_output_on_run_and_restore(headless, tmp_path,
 @pytest.mark.parametrize("waiting", [False, True])
 def test_export_failure_preserves_checkpoint_for_export_retry(headless, monkeypatch, tmp_path, failure, waiting):
     run, responses, _ = headless
-    responses[:] = [call("write_file", file_path="/workspace/result.txt", content="first")]
+    responses[:] = [call("write_file", file_path=cli_file_path(tmp_path, "result.txt"), content="first")]
     if waiting:
         responses.extend([call("load_tools", names=["ask_human"]), call("ask_human", question="Which calculator?")])
     else:

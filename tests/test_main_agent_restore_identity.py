@@ -111,9 +111,10 @@ def test_builtin_compatibility_across_sqlite_restarts(monkeypatch, tmp_path, cha
     from chemgraph.models.endpoints import PreparedModel
     from chemgraph.registry import tools as catalog
     from chemgraph.registry import agents as agent_catalog
+    from tests.conftest import cli_file_path
 
     action = AIMessage(content="", tool_calls=[{
-        "name": "write_file", "args": {"file_path": "/workspace/review.txt", "content": "approved"},
+        "name": "write_file", "args": {"file_path": cli_file_path(tmp_path, "review.txt"), "content": "approved"},
         "id": "write-1", "type": "tool_call",
     }])
     store = SessionStore(str(tmp_path / "sessions.db"))

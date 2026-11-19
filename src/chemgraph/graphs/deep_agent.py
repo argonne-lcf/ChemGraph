@@ -18,6 +18,7 @@ from chemgraph.graphs.workspace import (
     _normalize_backend as _normalize_backend,
     normalize_skill_sources as normalize_skill_sources,
     prepare_workspace_runtime,
+    real_path_workspace_note,
     tool_reason_names,
 )
 
@@ -91,6 +92,8 @@ def construct_deep_agent_graph(
     if recursion_limit <= 0:
         raise ValueError("recursion_limit must be positive.")
 
+    if note := real_path_workspace_note(backend):
+        system_prompt = (system_prompt or "") + note
     effective_checkpointer = (
         InMemorySaver()
         if checkpointer is _DEFAULT_CHECKPOINTER

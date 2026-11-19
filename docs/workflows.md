@@ -107,11 +107,13 @@ Bundled skills and local personal/project skills load automatically. Repeat
 `deepagent_skills=` / `deepagent_discover_skills=` on the higher-level APIs.
 Metadata refreshes before each new turn. See [skills](skills.md).
 
-With the CLI's virtual local backend, `/workspace` is the project root exposed
-to the Deep Agent. For example, `--deepagent-workspace test/` maps
-`/workspace/script.py` to `test/script.py` on the host. Deep Agents also tells
-the model the corresponding absolute host path to use with shell commands.
-Older files created under `test/workspace/` are not moved automatically.
+On macOS and Linux the CLI's local backend gives the Deep Agent real host
+paths: `--deepagent-workspace test/` makes `<absolute test>/script.py` the path
+for file tools and shell commands alike, and the system prompt names the
+workspace. On Windows, and for the Streamlit UI and Python callers that pass a
+virtual backend, `/workspace` is the project root exposed to the agent (for
+example `/workspace/script.py` is `test/script.py` on the host), and Deep Agents
+tells the model the corresponding host path for shell commands.
 
 Run state and session records remain standard ChemGraph artifacts. By default,
 state snapshots are written under the process's `cg_logs/session_*` directory
