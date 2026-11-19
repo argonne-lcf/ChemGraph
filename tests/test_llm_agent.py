@@ -221,6 +221,83 @@ def test_turn_event_callback_emits_llm_decision_for_tool_calls():
     ]
 
 
+def test_turn_event_callback_emits_anthropic_cache_usage():
+    events = []
+    callback = _TurnEventCallback(
+        lambda event, payload: events.append((event, payload)),
+        "thread-1",
+    )
+    usage = {
+        "input_tokens": 1500,
+        "output_tokens": 120,
+        "total_tokens": 1620,
+        "input_token_details": {
+            "cache_creation": 0,
+            "cache_read": 400,
+            "ephemeral_5m_input_tokens": 1000,
+        },
+    }
+
+    callback.on_llm_end(
+        SimpleNamespace(
+            generations=[
+                [
+                    SimpleNamespace(
+                        message=AIMessage(content="done", usage_metadata=usage),
+                    ),
+                ],
+            ],
+        ),
+        run_id="cache-call",
+    )
+
+    assert events == [
+        (
+            "llm_call_finished",
+            {
+                "thread_id": "thread-1",
+                "token_counts": {
+                    "input_tokens": 1500,
+                    "output_tokens": 120,
+                    "total_tokens": 1620,
+                    "cache_creation_input_tokens": 1000,
+                    "cache_read_input_tokens": 400,
+                    "cached_input_tokens": 400,
+                    "reasoning_output_tokens": None,
+                    "partial": False,
+                    "source": "provider",
+                    "raw_usage": [usage],
+                },
+                "call_id": "cache-call",
+            },
+        ),
+    ]
+
+
+def test_turn_event_callback_ignores_malformed_usage_metadata():
+    class BrokenUsage:
+        def model_dump(self, **kwargs):
+            if kwargs:
+                raise TypeError("mode is unsupported")
+            raise RuntimeError("broken usage metadata")
+
+    events = []
+    callback = _TurnEventCallback(
+        lambda event, payload: events.append((event, payload)),
+        "thread-1",
+    )
+
+    callback.on_llm_end(
+        SimpleNamespace(
+            generations=[
+                [SimpleNamespace(message=SimpleNamespace(usage_metadata=BrokenUsage()))],
+            ],
+        ),
+    )
+
+    assert events == [("llm_call_finished", {"thread_id": "thread-1"})]
+
+
 def test_turn_event_callback_skips_llm_decision_without_tool_calls():
     events = []
     callback = _TurnEventCallback(
