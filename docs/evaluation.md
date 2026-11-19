@@ -307,3 +307,240 @@ for the structured score on leaderboard-style comparisons.
 
 Evaluation runs invoke real models and tools unless your test setup replaces
 them. Estimate cost, isolate credentials, and begin with a small dataset.
+
+## Optional isolated Podman evaluation
+
+The `podman` runtime runs each DeepAgent query, its tools, shell commands, and
+answer formatter in a fresh container. The controller alone reads the dataset,
+scores answers, and writes checkpoints. Local evaluation remains the default.
+This first version requires **native Linux x86-64, rootless Podman with Netavark,
+and cgroup v2 with delegated CPU, memory, and process controllers**. It supports
+CPU chemistry and hosted Argo endpoints only. It fails at startup if its
+isolation probes fail; it never falls back to local execution.
+
+Install Podman, Netavark/Aardvark DNS, the rootless networking helpers, and
+`newuidmap`/`newgidmap` using your distribution's supported packages. An
+administrator must configure subordinate UID/GID ranges and cgroup delegation
+when these are absent. Verify `podman info --format=json`: `host.security.rootless`
+must be true, `host.networkBackend` must be `netavark`, and
+`host.cgroupControllers` must contain `cpu`, `memory`, and `pids`. Do not run the
+benchmark with `sudo`. Older distribution Podman packages may need upgrading.
+
+### Install the host prerequisites
+
+For a fresh **Ubuntu 24.04 x86-64** host, an administrator can install the
+container tools and basic command-line utilities with:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y podman netavark aardvark-dns uidmap \
+  slirp4netns fuse-overlayfs crun jq curl openssl tmux
+```
+
+Ubuntu 22.04's standard repository provides Podman 3.4, which predates this
+Netavark configuration. On that release, have an administrator provide a newer
+supported Podman/Netavark/Aardvark stack, or use a suitable newer Linux host.
+Do not mix packages from different Ubuntu releases. See the
+[Podman installation guide](https://podman.io/docs/installation) and Ubuntu's
+[22.04](https://packages.ubuntu.com/jammy/admin/podman) and
+[24.04](https://packages.ubuntu.com/noble/admin/podman) package versions.
+The startup probes, rather than a version number alone, determine compatibility.
+
+Run the remaining commands as your ordinary login user:
+
+```bash
+# Both files should contain a subordinate-ID allocation for your username.
+awk -F: -v user="$(id -un)" '$1 == user { print }' /etc/subuid /etc/subgid
+
+# Required: true, "netavark", "v2", and controllers including cpu/memory/pids.
+podman info --format=json | jq '.host | {
+  rootless: .security.rootless,
+  networkBackend,
+  cgroupVersion,
+  cgroupControllers
+}'
+```
+
+If the ID allocations or resource controllers are missing, ask your system
+administrator to configure them using the
+[rootless setup guide](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md),
+then log out and back in. Existing Podman installations using CNI need a planned
+network-backend migration; do not reset existing container storage to run this
+benchmark. On a fresh installation, Netavark is the expected backend.
+
+Use a local filesystem for rootless container storage. The host needs room for
+Python/CPU PyTorch images, downloaded weights, and collected artifacts, plus
+memory beyond the worker's default 8 GiB limit for the controller and proxy.
+Hosted Argo must be reachable from this host (including any required Argonne
+network/VPN connection).
+
+Set up the host controller from the checked-out PR branch using `uv`:
+
+```bash
+# In a fresh checkout; reuse an existing suitable virtualenv if one is present.
+uv venv --python 3.11 .venv
+source .venv/bin/activate
+uv pip install -e .
+uv pip check
+```
+
+### Prepare images
+
+From this checkout, using the normal editable ChemGraph environment:
+
+```bash
+python evaluation/build.py \
+  --worker-image localhost/chemgraph-eval:latest \
+  --proxy-image localhost/chemgraph-eval-proxy:latest
+export PODMAN_IMAGE=localhost/chemgraph-eval:latest
+export PODMAN_PROXY_IMAGE=localhost/chemgraph-eval-proxy:latest
+export ARGO_USER=your-argo-identity
+```
+
+Preparation needs internet access. The builder creates a temporary context
+from explicitly selected package sources and metadata, installs a wheel using
+`evaluation/requirements.lock`, and preloads `medium-mpa-0`. It performs real
+CPU MACE and TBLite water calculations and records dependency versions, weight
+SHA-256 digests, and energies in `/opt/chemgraph-evaluation-manifest.json`.
+Datasets, tests, personal configuration, archives, and historical outputs never
+enter either build stage. `python evaluation/lock.py` intentionally refreshes
+the Linux/Python 3.11 dependency lock with `uv`. Base OS images and apt packages
+are resolved at preparation time; record and retain the resulting local images.
+No registry images are published by this workflow.
+
+Every run resolves the prepared worker and proxy tags to immutable local image
+IDs, uses `--pull=never`, and records both IDs and the manifest in its metadata.
+The runtime applies a read-only root filesystem, UID 1000, dropped capabilities,
+`no-new-privileges`, default seccomp, and a fixed process limit of 256. Each query
+gets its own private named volume at `/workspace` and private temporary storage.
+No host paths or container sockets are mounted. Persistent agent memory and
+personal/project skill discovery remain disabled.
+
+Workers join only a run-specific internal bridge. Squid joins that bridge and
+a separate outbound bridge; neither publishes host ports. It permits HTTPS
+CONNECT only to **apps.inside.anl.gov:443** and
+**pubchem.ncbi.nlm.nih.gov:443**, without caching. TLS verification remains on.
+Explicit proxy settings reach both Python tools and shell subprocesses, and
+host proxy variables are not inherited. Startup probes check cgroup limits,
+capabilities, filesystem permissions, direct routing, external DNS rejection,
+proxy denials, and verified TLS connectivity to both allowed services. See the
+[Podman run documentation](https://docs.podman.io/en/latest/markdown/podman-run.1.html)
+and [internal network behavior](https://docs.podman.io/en/latest/markdown/podman-network-create.1.html).
+This is an evaluation boundary, not a general-purpose sandbox. It prevents
+runtime access to host answers; training-data memorization still requires a
+separate held-out benchmark.
+
+### Smoke, full runs, and resume
+
+Download the existing 40-query `output_data.json` at the fixed revision above to
+`evaluation/output_data.json`, or set `DATASET` to its existing host location.
+The build helper excludes this file even when it lives in `evaluation/`.
+For a reproducible download, keep the dataset on the controller host:
+
+```bash
+mkdir -p "$HOME/chemgraph-benchmark-data"
+export DATASET="$HOME/chemgraph-benchmark-data/output_data.json"
+curl --fail --location --output "$DATASET" \
+  https://huggingface.co/datasets/Autonomous-Scientific-Agents/groundtruth/resolve/8fe726352eb0437e4958282ca741d064fcfe6959/output_data.json
+python - <<'PYDATA'
+import os
+from chemgraph.eval.datasets import load_dataset
+items = load_dataset(os.environ["DATASET"])
+assert len(items) == 40, f"Expected 40 queries, got {len(items)}"
+assert {"3", "5", "6", "7", "8", "9", "31"}.issubset({item.id for item in items})
+print(f"Validated {len(items)} queries")
+PYDATA
+```
+
+Run the opt-in container integration test below before starting live evaluation.
+Use an output directory that has not already been used for another run:
+
+```bash
+export DATASET=/absolute/path/to/output_data.json
+OUTPUT_DIR=eval_results/podman-smoke bash run_eval.sh --query-ids 3 5 6 7 8 9 31
+# Inspect execution errors, scores, artifacts and usage before the full run.
+OUTPUT_DIR=eval_results/podman-full bash run_eval.sh
+# Resume only the same dataset, images, selection, and execution settings:
+OUTPUT_DIR=eval_results/podman-full bash run_eval.sh --resume
+```
+
+For a long full run, start `tmux new -s chemgraph-eval`, activate the environment
+and set the variables inside that session, then run the full command. Detach
+with **Ctrl-b**, then **d**; reconnect with `tmux attach -t chemgraph-eval`.
+To change limits, append e.g. `--podman-cpus 4 --podman-memory-gb 8
+--query-timeout-seconds 1800`, and reuse the same values when resuming.
+
+After the smoke run, inspect `benchmark_*.json`/`.md`, model detail files,
+`checkpoints/*.jsonl`, and `artifacts/` inside its output directory. Confirm all
+28 records are present; investigate `timeout`, `worker_error`, `invalid_response`,
+initialization, execution, or formatting errors before the full run. Review
+accuracy separately from runtime health: an incorrect answer is a benchmark
+result, whereas an infrastructure failure needs fixing. Resume reuses failures;
+to retry them after a fix, use a new output directory. Metadata in
+`podman-run.json` records the pinned images and isolation policy.
+
+The launcher selects `argo:gpt-5.6-sol`, `argo:gpt-5.6-luna`,
+`argo:claude-opus-5`, and `argo:claude-opus-4.8`, DeepAgent, structured judging,
+and recursion limit 200. GPT reasoning effort retains its `none` default.
+The smoke set has 28 combinations; the full set has 160 and uses a separate
+output directory. `ARGO_USER`, `PODMAN_IMAGE`, and `PODMAN_PROXY_IMAGE` are
+required. The launcher requires an explicit `OUTPUT_DIR` or `--output-dir` for
+resume and accepts normal CLI overrides, including `--dataset`.
+
+`--deepagent-auto-approve` authorizes unattended tools and shell execution inside
+the worker. It remains required in Podman mode. CLI/profile settings are:
+
+| CLI flag / profile key | Default |
+| --- | --- |
+| `--eval-runtime` / `eval_runtime` | `local`; accepts `local`, `podman` |
+| `--podman-image` / `podman_image` | required in Podman mode |
+| `--podman-proxy-image` / `podman_proxy_image` | required in Podman mode |
+| `--podman-cpus` / `podman_cpus` | `4` |
+| `--podman-memory-gb` / `podman_memory_gb` | `8` GiB |
+| `--query-timeout-seconds` / `query_timeout_seconds` | `1800` in Podman mode |
+
+All resource settings must be finite and positive. `deepagent_workspace` is
+rejected in Podman mode. The versioned stdin request rejects unexpected fields
+and carries only one question, its ID, model, resolved Argo settings, and
+execution settings. It contains no benchmark configuration or ground truth.
+
+The controller stops each worker before collecting its result and artifacts.
+It validates JSON and rejects archive traversal, symbolic/hard links, special
+files, duplicate entries, and excessive sizes. Artifacts are extracted to a
+fresh directory under `OUTPUT_DIR/artifacts`; `artifact_location` records that
+host path. Traces keep their original `/workspace` paths. Timeout, crash, or
+invalid-response records score as failures. Completed failure records are reused
+on resume. Image IDs, dependency/weight manifests, policy, resources, dataset,
+and evaluator source fingerprints must match; old checkpoints are not migrated.
+An exclusive output-directory lock prevents concurrent runs from writing there.
+
+### Offline integration checks and cleanup
+
+Unit tests run in the ordinary offline suite. Real Podman tests are opt-in and
+use prebuilt test images, a temporary TLS certificate, fake Argo/PubChem servers,
+and EMT. They make no live LLM calls or runtime downloads:
+
+```bash
+python evaluation/integration/build.py --worker-image "$PODMAN_IMAGE"
+CHEMGRAPH_TEST_PODMAN=1 \
+CHEMGRAPH_TEST_PODMAN_IMAGE=localhost/chemgraph-eval-test:latest \
+CHEMGRAPH_TEST_PODMAN_PROXY_IMAGE="$PODMAN_PROXY_IMAGE" \
+CHEMGRAPH_TEST_PODMAN_SERVICE_IMAGE=localhost/chemgraph-eval-test-services:latest \
+pytest tests/test_eval_podman_integration.py -q
+```
+
+The test-only worker trusts the test certificate; use the production worker for
+live evaluation. The test plants host and sibling-worker sentinels, exercises
+file/shell/Python/chemistry readers and symlinks, and checks direct-IP, DNS,
+proxy-bypass, host-service, and destination restrictions.
+
+Normal completion, timeout, and cancellation remove containers and volumes.
+After a hard kill or a reported cleanup failure, use the exact `run_id` from
+`OUTPUT_DIR/podman-run.json` or the error message:
+
+```bash
+python evaluation/cleanup.py --run-id YOUR_32_CHARACTER_RUN_ID
+```
+
+Cleanup requires both the exact run label and matching resource-name prefix.
+It does not prune unrelated Podman resources. Collected host artifacts remain.
