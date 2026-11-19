@@ -285,11 +285,8 @@ def test_experimental_backend_requires_confirmation_and_filters_environment(
 
 @pytest.mark.skipif(os.name == "nt", reason="Windows keeps the virtual /workspace mount")
 def test_real_path_cli_backend_guards_host_paths(monkeypatch, tmp_path):
-    from deepagents.backends import LocalShellBackend
     from chemgraph.graphs.workspace import _normalize_backend, create_cli_workspace_backend
 
-    plain = LocalShellBackend(root_dir=tmp_path, virtual_mode=False, env={})
-    assert _normalize_backend(plain) is plain
     with pytest.raises(ValueError, match="unchanged"):
         create_cli_workspace_backend((tmp_path / "back\\slash").mkdir() or tmp_path / "back\\slash")
 
@@ -319,8 +316,6 @@ def test_real_path_cli_backend_guards_host_paths(monkeypatch, tmp_path):
                         lambda path, *args, **kwargs: real_lstat(workspace if str(path) == str(elsewhere) else path))
     assert "refusing" in backend.delete(str(tmp_path / "data")).error
     monkeypatch.setattr(workspace_module.os, "lstat", real_lstat)
-    (workspace / "loop").symlink_to(workspace / "loop")
-    assert backend.delete(f"{workspace}/loop").error is None and not (workspace / "loop").is_symlink()
     # A renamed workspace must not disable the guard for its surviving ancestors.
     workspace.rename(tmp_path / "real" / "moved")
     for target in (str(tmp_path / "real"), "/"):

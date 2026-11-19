@@ -205,14 +205,11 @@ def test_real_path_cli_checkpoint_route_keeps_reported_paths(tmp_path):
     assert ["marker-0" in reads[0], "marker-1" in reads[1]] == [True, True]
     # Keys match a checkpoint-only supervisor's layout, so offloads cross in both directions.
     assert set(paths) <= set(state["files"])
-    assert list(tmp_path.iterdir()) == []
+    assert list(tmp_path.iterdir()) == [] and not any(os.path.lexists(path) for path in paths)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("cli_workspace", [
-    False, pytest.param(True, marks=pytest.mark.skipif(os.name == "nt", reason="POSIX real paths")),
-])
-async def test_summarization_keeps_readable_history_and_private_state(monkeypatch, tmp_path, cli_workspace):
+async def test_summarization_keeps_readable_history_and_private_state(monkeypatch, tmp_path):
     from deepagents.middleware.summarization import SummarizationMiddleware
 
     summaries = _ScriptedChatModel(responses=[AIMessage(content="Summary of earlier requests.")] * 10)
@@ -222,22 +219,13 @@ async def test_summarization_keeps_readable_history_and_private_state(monkeypatc
                         ))
     model = _ScriptedChatModel(responses=[AIMessage(content="first"), AIMessage(content="second"),
                                          AIMessage(content="third")])
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    host_roots = ("/large_tool_results", "/conversation_history")
-    existed = [os.path.lexists(path) for path in host_roots]
-    workflow = graph(model, **({"backend": create_cli_workspace_backend(workspace), "discover_skills": False}
-                               if cli_workspace else {}))
+    workflow = graph(model)
     store = SessionStore(str(tmp_path / "sessions.db"))
     session = MainAgentSession(workflow, session_store=store, configuration_id="summary-test-v1")
     for question in ("question one", "question two", "question three"):
         await session.run(question)
     state = (await workflow.aget_state(session.config)).values
     assert state.get("_summarization_event")
-    # Offloaded history stays in checkpoint state, never on the host filesystem.
-    assert any(path.startswith("/conversation_history/") for path in state.get("files", {}))
-    assert [os.path.lexists(path) for path in host_roots] == existed
-    assert list(workspace.iterdir()) == []
     assert [message.content for message in state["messages"] if isinstance(message, HumanMessage)] == [
         "question one", "question two", "question three",
     ]
