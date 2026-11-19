@@ -37,9 +37,10 @@ For water preparation:
 
 Local registry tools execute in the agent process, on the agent host. Their
 filesystem is independent of a virtual file backend, remote shell, or MCP server.
-`/workspace/...` is a file-tool mount, not a host path to pass to a local chemistry
-tool. Relative writes use `CHEMGRAPH_LOG_DIR`; carry the returned absolute path
-forward instead of guessing where a relative filename landed. For separate
+When a virtual `/workspace` mount exists, `/workspace/...` is a file-tool mount,
+not a host path to pass to a local chemistry tool. Relative writes use
+`CHEMGRAPH_LOG_DIR`; carry the returned absolute path forward instead of
+guessing where a relative filename landed. For separate
 hosts, stage the generated artifact and use the verified compute-visible path.
 
 If native tools are not configured, run this Python fallback from the selected

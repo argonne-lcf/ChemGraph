@@ -1,5 +1,6 @@
 """Direct main-agent work, configured delegation, and durable approvals."""
 
+import os
 from typing import Any, NotRequired
 
 import pytest
@@ -11,6 +12,7 @@ from langgraph.graph import END, START, StateGraph
 from chemgraph.agent.main_session import MainAgentSession
 from chemgraph.cli.checkpoint_runtime import CheckpointRuntime
 from chemgraph.graphs.main_agent import construct_main_agent_graph
+from chemgraph.graphs.workspace import create_cli_workspace_backend
 from chemgraph.memory.schemas import MainAgentGraphConfig, MainAgentSessionMetadata
 from chemgraph.memory.store import SessionStore
 from chemgraph.registry.tools import ToolRegistry
@@ -185,7 +187,10 @@ async def test_direct_return_uses_current_tool_result_and_restores():
 
 
 @pytest.mark.asyncio
-async def test_summarization_keeps_readable_history_and_private_state(monkeypatch, tmp_path):
+@pytest.mark.parametrize("cli_workspace", [
+    False, pytest.param(True, marks=pytest.mark.skipif(os.name == "nt", reason="POSIX real paths")),
+])
+async def test_summarization_keeps_readable_history_and_private_state(monkeypatch, tmp_path, cli_workspace):
     from deepagents.middleware.summarization import SummarizationMiddleware
 
     summaries = _ScriptedChatModel(responses=[AIMessage(content="Summary of earlier requests.")] * 10)
@@ -195,13 +200,20 @@ async def test_summarization_keeps_readable_history_and_private_state(monkeypatc
                         ))
     model = _ScriptedChatModel(responses=[AIMessage(content="first"), AIMessage(content="second"),
                                          AIMessage(content="third")])
-    workflow = graph(model)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    workflow = graph(model, **({"backend": create_cli_workspace_backend(workspace), "discover_skills": False}
+                               if cli_workspace else {}))
     store = SessionStore(str(tmp_path / "sessions.db"))
     session = MainAgentSession(workflow, session_store=store, configuration_id="summary-test-v1")
     for question in ("question one", "question two", "question three"):
         await session.run(question)
     state = (await workflow.aget_state(session.config)).values
     assert state.get("_summarization_event")
+    # Offloaded history stays in checkpoint state, never on the host filesystem.
+    assert any(path.startswith("/conversation_history/") for path in state.get("files", {}))
+    assert not any(os.path.exists(path) for path in ("/chemgraph-state", "/conversation_history"))
+    assert list(workspace.iterdir()) == []
     assert [message.content for message in state["messages"] if isinstance(message, HumanMessage)] == [
         "question one", "question two", "question three",
     ]

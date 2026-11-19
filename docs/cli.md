@@ -235,9 +235,13 @@ The corresponding TOML keys are `workspace`, `skills`, `subagents`, `tools`, and
 
 Direct main-agent and attributed worker tool calls are printed as they start.
 Without `--workspace`, file tools read and write checkpoint-backed files and no
-shell is exposed. With a workspace, `/workspace/` maps to that host directory.
-Registry tools run on the host independently of this backend; use absolute host
-paths for registry artifacts. The shell is not confined to the workspace.
+shell is exposed. With a workspace on macOS or Linux, file tools and the shell
+use the same real host paths: the workspace is the shell's starting directory,
+file tools take absolute paths (a relative file-tool path resolves from `/`), and
+read tools can read any host file without prompting. On Windows the workspace is
+still mounted for file tools at `/workspace/`. Registry tools run on the host
+independently of this backend; use absolute host paths for registry artifacts.
+Neither the shell nor the file tools are confined to the workspace.
 File mutations, shell commands, and reviewed registry operations pause for review.
 
 Start a new session after the capabilities upgrade. Old transcripts remain
@@ -316,18 +320,27 @@ reviewed approval mode and every new launch starts with reviews on. Unlike
 `--dangerously-skip-approvals`, it does not skip the startup host-access
 confirmation.
 
-The selected directory is mounted for file tools at `/workspace`. Thus,
-`--deepagent-workspace test/` makes `/workspace/example.py` refer to
-`test/example.py`, not `test/workspace/example.py`. Shell execution uses the
-absolute host-path mapping supplied to the model. Existing files under a
-previously created `test/workspace/` directory are not migrated.
+On macOS and Linux the selected directory is used through its real host path:
+`--deepagent-workspace test/` makes `<absolute test>/example.py` the path for
+both file tools and the shell, and the system prompt names the workspace. File
+tools do not follow a symlink that is the final path component (the shell does),
+and deleting the filesystem root, the workspace, or one of its ancestors is
+refused. Under `--dangerously-skip-approvals`, a relative mutation path such as
+`tmp/out` resolves from `/`. On Windows the directory is mounted for file tools at
+`/workspace`, and shell execution uses the absolute host-path mapping supplied to
+the model.
+
+CLI sessions saved with a workspace before this change used the `/workspace`
+mount and cannot be resumed on macOS or Linux; start a new session. A standalone
+Deep Agent `/resume` continues from a transcript summary, so `/workspace/...`
+paths it mentions belong to the earlier layout.
 
 Bundled `chemgraph` and `pbs-hpc` skills load automatically, followed by
 `~/.chemgraph/skills/` and the workspace's `.agents/skills/` when present.
 Skill paths are resolved against the CLI invocation directory, independently of
 `--deepagent-workspace`. Absolute paths, `~`, and `../` paths work automatically
 without copies or symlinks. Old CLI `/workspace/...` examples must be replaced
-with host paths; agent file tools continue to use virtual workspace paths.
+with host paths.
 
 Repeat `--deepagent-skill PATH` to add host directories; later sources
 win for matching skill names. `--no-deepagent-discover-skills` disables personal

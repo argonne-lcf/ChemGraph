@@ -108,3 +108,13 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip_globus)
         if skip_el and "ensemble_launcher" in item.keywords:
             item.add_marker(skip_el)
+
+
+def cli_file_path(workspace, name):
+    """Return the file-tool path of *name* in a CLI workspace (virtual on Windows)."""
+    import os
+    from pathlib import Path
+
+    if os.name == "nt":
+        return f"/workspace/{name}"
+    return f"{Path(workspace).resolve().as_posix()}/{name}"

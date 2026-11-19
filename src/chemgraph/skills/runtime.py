@@ -77,9 +77,9 @@ def local_skill_workspace(backend):
     return None
 
 
-def resolve_user_skills_dir(backend, discover_skills, user_skills_dir=None):
+def resolve_user_skills_dir(backend, discover_skills, user_skills_dir=None, local_workspace=None):
     """Freeze the personal root so a saved session does not follow a new home."""
-    if not discover_skills or local_skill_workspace(backend) is None:
+    if not discover_skills or (local_workspace or local_skill_workspace(backend)) is None:
         return None
     return str(
         Path(user_skills_dir or Path.home() / ".chemgraph/skills")
@@ -89,9 +89,14 @@ def resolve_user_skills_dir(backend, discover_skills, user_skills_dir=None):
 
 
 def prepare_skill_backend(
-    backend, skills, *, discover_skills=True, user_skills_dir=None, skill_dirs=None
+    backend, skills, *, discover_skills=True, user_skills_dir=None, skill_dirs=None,
+    local_workspace=None,
 ):
-    """Mount skill collections while preserving the workspace and executor."""
+    """Mount skill collections while preserving the workspace and executor.
+
+    ``local_workspace`` overrides the (host root, backend root) pair detected
+    from *backend*, for workspaces the composite no longer exposes by route.
+    """
     if not isinstance(discover_skills, bool):
         raise TypeError("discover_skills must be a boolean.")
     routes = dict(backend.routes) if isinstance(backend, CompositeBackend) else {}
@@ -107,8 +112,8 @@ def prepare_skill_backend(
     routes[BUNDLED_SKILLS_PATH] = BundledSkillsBackend()
     optional = {}
     sources = [BUNDLED_SKILLS_PATH]
-    workspace = local_skill_workspace(backend)
-    user_root = resolve_user_skills_dir(backend, discover_skills, user_skills_dir)
+    workspace = local_workspace or local_skill_workspace(backend)
+    user_root = resolve_user_skills_dir(backend, discover_skills, user_skills_dir, workspace)
     if user_root is not None:
         routes[USER_SKILLS_PATH] = FilesystemBackend(
             root_dir=user_root, virtual_mode=True

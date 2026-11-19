@@ -1,6 +1,7 @@
 """Portable skill resources, source precedence, and checkpoint discovery."""
 
 import asyncio
+import os
 from pathlib import Path
 
 import pytest
@@ -221,6 +222,20 @@ def test_explicit_missing_source_errors_and_invalid_optional_warns(
     assert "pbs-hpc" in _prompt(model)
     assert "Valid project sibling" in _prompt(model)
     assert graph.get_state({"configurable": {"thread_id": "optional"}}).values["skills_load_errors"] == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows keeps the virtual /workspace mount")
+def test_real_path_cli_workspace_discovers_project_and_personal_skills(monkeypatch, tmp_path):
+    from chemgraph.graphs.workspace import create_cli_workspace_backend
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    _skill(tmp_path / "home/.chemgraph/skills", "personal", "Personal instructions")
+    skill = _skill(tmp_path / "ws/.agents/skills", "project", "Project instructions")
+    model = _RecordingChatModel(responses=[AIMessage(content="Done")])
+    graph = construct_deep_agent_graph(model, backend=create_cli_workspace_backend(tmp_path / "ws"))
+    graph.invoke({"messages": [HumanMessage(content="Hello")]}, {"configurable": {"thread_id": "cli"}})
+    assert "Personal instructions" in _prompt(model)
+    assert f"Read `{skill.resolve().as_posix()}`" in _prompt(model)
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])

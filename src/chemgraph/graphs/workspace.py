@@ -1,10 +1,12 @@
 """Workspace capabilities shared by independently constructed agent graphs."""
 
+import os
 from collections.abc import Sequence
 from copy import deepcopy
 
 from deepagents.backends import CompositeBackend, LocalShellBackend, StateBackend
-from deepagents.backends.protocol import BackendProtocol
+from deepagents.backends.protocol import BackendProtocol, DeleteResult
+from deepagents.backends.utils import validate_path
 
 from chemgraph.agent.deepagent_backend import (
     DEEPAGENT_ENV_ALLOWLIST, host_shell_environment, resolve_workspace,
@@ -12,7 +14,10 @@ from chemgraph.agent.deepagent_backend import (
 from chemgraph.graphs.tool_reasons import ToolReasonMiddleware
 from chemgraph.registry.middleware import RegistryToolsMiddleware
 from chemgraph.registry.tools import ToolRegistry
-from chemgraph.skills.runtime import ChemGraphSkillsMiddleware, prepare_skill_backend
+from chemgraph.skills.runtime import (
+    BUNDLED_SKILLS_PATH, EXTERNAL_SKILLS_PATH, USER_SKILLS_PATH,
+    ChemGraphSkillsMiddleware, local_skill_workspace, prepare_skill_backend,
+)
 
 
 # Bump when approval semantics change, including removal of reviewed tools.
@@ -39,6 +44,10 @@ _REGISTRY_REVIEW_TOOLS = {
 
 _DEFAULT_INTERRUPT_POLICY = object()
 _WORKSPACE_MOUNT = "/workspace/"
+# Deep Agents file tools reject drive-letter paths, so Windows keeps the virtual mount.
+_CLI_VIRTUAL_MODE = os.name == "nt"
+# Checkpoint storage for Deep Agents' offloaded tool results and summarized history.
+_CLI_STATE_PREFIX = "/chemgraph-state/"
 
 
 class _CLIWorkspaceBackend(LocalShellBackend):
@@ -46,14 +55,31 @@ class _CLIWorkspaceBackend(LocalShellBackend):
 
     def __init__(self, root):
         environment = host_shell_environment()
-        super().__init__(root_dir=root, virtual_mode=True, env=environment, inherit_env=False)
+        super().__init__(root_dir=root, virtual_mode=_CLI_VIRTUAL_MODE, env=environment, inherit_env=False)
         self._cli_environment = dict(environment)
         self._cli_descriptor = {
             "type": "cli-local-shell-v1", "workspace": str(self.cwd.resolve()),
-            "virtual_mode": True, "timeout": self._default_timeout,
+            "virtual_mode": self.virtual_mode, "timeout": self._default_timeout,
             "max_output_bytes": self._max_output_bytes,
             "environment_policy": list(DEEPAGENT_ENV_ALLOWLIST),
         }
+
+    def delete(self, file_path):
+        """Refuse to recursively delete the filesystem root, the workspace, or its ancestors."""
+        if not self.virtual_mode:
+            try:
+                target = self._resolve_path(file_path)
+                # Compare identities: /tmp/x and /private/tmp/x name the same directory.
+                protected = not target.is_symlink() and target.is_dir() and any(
+                    os.path.samefile(target, path) for path in (self.cwd, *self.cwd.parents)
+                )
+            except (OSError, RuntimeError, ValueError):
+                protected = False
+            if protected:
+                return DeleteResult(
+                    error=f"Error: refusing to delete '{file_path}' because it contains the workspace."
+                )
+        return super().delete(file_path)
 
     def with_artifact_directory(self, directory):
         """Copy a supported backend so sessions never share mutable shell state."""
@@ -76,7 +102,24 @@ def create_cli_workspace_backend(workspace):
     """Construct the CLI policy after the caller has handled host-access approval."""
     if workspace is None:
         raise ValueError("Workspace must be a non-empty host directory path.")
-    return _CLIWorkspaceBackend(resolve_workspace(workspace))
+    root = resolve_workspace(workspace)
+    if not _CLI_VIRTUAL_MODE:
+        _require_file_tool_path(root)
+    return _CLIWorkspaceBackend(root)
+
+
+def _require_file_tool_path(root):
+    """Reject roots that file tools would rewrite or route to a ChemGraph mount."""
+    text = root.as_posix()
+    try:
+        unchanged = validate_path(text) == text
+    except ValueError:
+        unchanged = False
+    if not unchanged:
+        raise ValueError(f"Workspace path cannot be used unchanged by file tools: {text}")
+    for prefix in (BUNDLED_SKILLS_PATH, USER_SKILLS_PATH, EXTERNAL_SKILLS_PATH, _CLI_STATE_PREFIX):
+        if (text.rstrip("/") + "/").startswith(prefix):
+            raise ValueError(f"Workspace {text} overlaps the reserved file-tool path {prefix}.")
 
 
 def cli_backend_descriptor(backend):
@@ -86,11 +129,17 @@ def cli_backend_descriptor(backend):
     descriptor = backend._cli_descriptor
     if (backend._env != backend._cli_environment
             or str(backend.cwd.resolve()) != descriptor["workspace"]
-            or backend.virtual_mode is not True
+            or backend.virtual_mode is not descriptor["virtual_mode"]
             or backend._default_timeout != descriptor["timeout"]
             or backend._max_output_bytes != descriptor["max_output_bytes"]):
         return None
     return dict(descriptor)
+
+
+def _real_path_cli(backend):
+    """Recognize the CLI backend that gives file tools real host paths."""
+    descriptor = cli_backend_descriptor(backend)
+    return descriptor is not None and descriptor["virtual_mode"] is False
 
 
 def normalize_skill_sources(skills: Sequence[str] | None) -> tuple[str, ...]:
@@ -139,8 +188,30 @@ class _WorkspaceShellBackend(StateBackend, LocalShellBackend):
         )
 
 
+def real_path_workspace_note(backend):
+    """Tell the model where a real-path CLI workspace is and how file-tool paths resolve."""
+    if not _real_path_cli(backend):
+        return ""
+    root = backend.cwd.as_posix()
+    return (
+        f"\n\nThe workspace is `{root}`, the shell's starting directory. File tools and "
+        "the shell use real host paths, except the ChemGraph mounts listed under \"Shell "
+        "paths vs. virtual paths\" (`/chemgraph-.../`), which are not host paths. Always give "
+        "file tools absolute paths; a relative file-tool path resolves from `/`. For `glob`, "
+        f"pass the directory as `path` and a relative pattern, e.g. `glob(path=\"{root}\", "
+        "pattern=\"**/*.py\")` for the project or `glob(path=\"/opt/data\", pattern=\"*.xyz\")` "
+        "elsewhere. An omitted `path`, or `path=\"/\"`, searches the workspace plus every mount.\n"
+    )
+
+
 def _normalize_backend(backend: BackendProtocol) -> BackendProtocol:
     """Mount a virtual local workspace at the path Deep Agent expects."""
+    if _real_path_cli(backend):
+        # Keep offloaded results off the host root; one route keeps their names distinct.
+        return CompositeBackend(
+            default=backend, routes={_CLI_STATE_PREFIX: StateBackend()},
+            artifacts_root=_CLI_STATE_PREFIX.rstrip("/"),
+        )
     if isinstance(backend, LocalShellBackend) and backend.virtual_mode:
         return CompositeBackend(
             default=_WorkspaceShellBackend(backend),
@@ -205,6 +276,8 @@ def prepare_workspace_runtime(
     effective_backend, sources, optional = prepare_skill_backend(
         effective_backend, skill_sources, discover_skills=discover_skills,
         user_skills_dir=user_skills_dir, skill_dirs=skill_dirs,
+        # The real-path CLI workspace is the composite's default, not a /workspace route.
+        local_workspace=local_skill_workspace(backend) if _real_path_cli(backend) else None,
     )
     middleware = [ChemGraphSkillsMiddleware(
         backend=effective_backend, sources=sources, optional=optional,

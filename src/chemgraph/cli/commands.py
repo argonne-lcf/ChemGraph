@@ -189,9 +189,16 @@ def _create_experimental_deepagent_backend(
 
     console.print(
         Panel(
-            "The workspace agent can read and modify files under "
-            f"{root} and can run arbitrary shell commands on this host. The "
-            "shell is not confined to that directory. "
+            (
+                f"The workspace agent starts its shell in {root}. Its file tools use "
+                "real host paths: they take absolute paths (a relative path is read "
+                "from /) and can read any host file without prompting. Neither the "
+                "shell nor the file tools are confined to that directory. "
+                if os.name != "nt" else
+                "The workspace agent can read and modify files under "
+                f"{root} and can run arbitrary shell commands on this host. The "
+                "shell is not confined to that directory. "
+            )
             + (
                 "Every shell command and file mutation will require approval."
                 if require_confirmation

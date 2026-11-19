@@ -55,7 +55,7 @@ ones with the same skill name:
 | --- | --- | --- |
 | Bundled | Installed ChemGraph package | `/chemgraph-skills/` |
 | Personal | `~/.chemgraph/skills/` | `/chemgraph-user-skills/` |
-| Project | `<workspace>/.agents/skills/` | `/workspace/.agents/skills/` with the CLI backend |
+| Project | `<workspace>/.agents/skills/` | The real path on macOS/Linux with the CLI backend; `/workspace/.agents/skills/` on Windows |
 | Explicit host | CLI directories or Python `skill_dirs` | `/chemgraph-external-skills/<stable-id>/` |
 | Explicit backend | Python `skills` | Paths supplied by the caller |
 
@@ -107,7 +107,16 @@ AtomisticSkills, the Widom insertion skill is `chem-sorption-widom`.
 **CLI migration:** `/workspace/...` is now a literal host path when passed to
 `--deepagent-skill`. Replace older virtual-path examples with the actual host
 path or a path relative to your invocation directory. Agent file tools still
-use `/workspace/...` for project files.
+use real host paths for project files on macOS and Linux, and `/workspace/...`
+on Windows.
+
+With the macOS/Linux CLI backend, project discovery reads
+`<workspace>/.agents/skills/` at its real path and follows directory links,
+including links shipped in a checkout, so their skills can override bundled
+skills of the same name. A `SKILL.md` that is itself a symlink is not loaded.
+Disable automatic discovery with `--no-discover-skills` for `main_agent` and its
+registry `deep_agent` worker, or `--no-deepagent-discover-skills` for
+standalone `-w deep_agent` and the legacy `--deepagent` worker.
 
 ## Python and other filesystems
 
@@ -182,8 +191,9 @@ The initial bundles contain text instructions and a PBS template. To execute a
 future helper stored in the catalog, first copy it into the executor's filesystem.
 For example, read the PBS template at
 `/chemgraph-skills/pbs-hpc/assets/job.pbs.template`, fill its placeholders, and
-write it to `/workspace/job.pbs`. With the CLI's local backend, execute commands
-using the host workspace path supplied in the system prompt. With a sandbox,
+write it to `<workspace>/job.pbs` with the macOS/Linux CLI backend, or
+`/workspace/job.pbs` with a virtual workspace mount. Execute commands using the
+host workspace path supplied in the system prompt. With a sandbox,
 write/upload to a path that actually exists in that sandbox before execution.
 Virtual skill/state/store paths are not shell mounts, and MCP servers can have
 different filesystems again.
