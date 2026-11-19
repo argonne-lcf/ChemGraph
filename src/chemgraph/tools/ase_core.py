@@ -26,7 +26,7 @@ from chemgraph.schemas.ase_input import ASEInputSchema, ASEOutputSchema
 from chemgraph.schemas.calculators.mace_calc import MaceCalc
 from chemgraph.utils.artifacts import artifact_directory
 from chemgraph.runtime.context import (
-    current_context, register_artifact, scoped_path, standalone_log_record,
+    current_workspace, register_artifact, scoped_path, standalone_log_record,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ def _ensure_ase_core_file_log() -> None:
     handlers = [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
     for handler in handlers:
         handler.addFilter(standalone_log_record)
-    if handlers or current_context() is not None:
+    if handlers or current_workspace() is not None:
         return
     log_dir = artifact_directory() or os.path.join(os.getcwd(), "cg_logs")
     os.makedirs(log_dir, exist_ok=True)
